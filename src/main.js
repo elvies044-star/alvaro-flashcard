@@ -1,11 +1,11 @@
 import './style.css';
 import IMG from './data/images.json';
 import MW from './data/mw.json';
-import { makeSupabaseApi } from './api/supabase.js';
+import { makeHttpApi } from './api/http.js';
 import { makeDemoApi } from './api/demo.js';
 import { hbars, lineChart } from './charts.js';
 
-const api = import.meta.env.VITE_SUPABASE_URL ? makeSupabaseApi() : makeDemoApi();
+const api = import.meta.env.DEV || import.meta.env.VITE_DEMO === '1' ? makeDemoApi() : makeHttpApi();
 const BUILD = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev';
 
 /* ================= helpers ================= */
@@ -95,8 +95,8 @@ const effMode = () => (SET.student_can_choose && SET.modes.includes(S.mode) ? S.
 
 /* ---- gambar kartu (hanya sumber yang diizinkan) ---- */
 function safeImgUrl(p) {
-  if (api.demo) return /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(p) ? p : '';
-  return p.startsWith(api.publicImagePrefix) && /^[A-Za-z0-9:/._\-%]+$/.test(p) ? p : '';
+  if (api.demo && /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(p)) return p;
+  return /^\/api\/img\/[a-f0-9]{32}$/.test(p) ? p : '';
 }
 function picHTML(c) {
   const p = c.pic || '';
@@ -132,13 +132,39 @@ function renderLogin(msg = '') {
     <label class="field" for="lp">Password<input id="lp" name="password" type="password" autocomplete="current-password" maxlength="72" required></label>
     <div class="err" id="lerr" role="alert">${esc(msg)}</div>
     <button class="btn" type="submit" id="lbtn">${ic('lock')} Masuk</button>
-    ${api.demo ? '<div class="demo"><b>Mode demo</b> (belum tersambung ke Supabase). Guru: <b>guru</b> / <b>guru123</b> · Murid: <b>budi</b> / <b>budi123</b></div>' : '<p class="note">Akun dibuatkan oleh gurumu. Lupa password? Minta guru untuk menggantinya.</p>'}
+    ${api.demo ? '<div class="demo"><b>Mode demo</b> (hanya untuk uji di komputer, bukan versi online). Guru: <b>guru</b> / <b>guru123</b> · Murid: <b>budi</b> / <b>budi123</b></div>' : '<p class="note">Akun dibuatkan oleh gurumu. Lupa password? Minta guru membuatkan password baru.</p>'}
   </form></div>`;
   $('#loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = $('#lbtn'); btn.disabled = true; $('#lerr').textContent = '';
     try { ME = await api.login($('#lu').value, $('#lp').value); $('.top').hidden = false; await loadAll(); go(isTeacher() ? (S.view === 'teach' ? 'teach' : 'learn') : 'learn'); }
     catch (err) { $('#lerr').textContent = err.message; btn.disabled = false; $('#lp').value = ''; $('#lp').focus(); }
+  });
+}
+function renderSetup(configured) {
+  $('#topin').innerHTML = ''; $('.top').hidden = true; $('#selbar').hidden = true;
+  $('#view').innerHTML = `<div class="login"><form class="panel" id="setupForm" novalidate>
+    <img class="logo-big" src="/logo.jpg" alt="Alvaro Education Centre">
+    <h1>Buat akun guru</h1>
+    <p class="note">Langkah ini hanya sekali. Masukkan <b>SETUP_CODE</b> yang kamu isi di Cloudflare.</p>
+    ${configured ? '' : '<div class="demo">SETUP_CODE belum diatur di Cloudflare. Ikuti langkah 5 di panduan, lalu deploy ulang.</div>'}
+    <label class="field" for="xc">Kode setup<input id="xc" type="password" autocomplete="off" maxlength="128"></label>
+    <label class="field" for="xn">Nama guru<input id="xn" maxlength="40" placeholder="Laoshi Elvies"></label>
+    <label class="field" for="xu">Username guru<input id="xu" maxlength="24" autocapitalize="none" spellcheck="false" placeholder="guru"></label>
+    <label class="field" for="xp">Password (min. 10 karakter)<input id="xp" type="password" autocomplete="new-password" maxlength="128"></label>
+    <label class="field" for="xp2">Ulangi password<input id="xp2" type="password" autocomplete="new-password" maxlength="128"></label>
+    <div class="err" id="xerr" role="alert"></div>
+    <button class="btn" type="submit" id="xbtn">${ic('lock')} Buat akun guru</button>
+  </form></div>`;
+  $('#setupForm').addEventListener('submit', async (e) => {
+    e.preventDefault(); const err = $('#xerr'); err.textContent = '';
+    if ($('#xp').value !== $('#xp2').value) { err.textContent = 'Kedua password tidak sama.'; return; }
+    if ($('#xp').value.length < 10) { err.textContent = 'Password minimal 10 karakter.'; return; }
+    const btn = $('#xbtn'); btn.disabled = true;
+    try {
+      ME = await api.setup({ code: $('#xc').value, display_name: $('#xn').value, username: $('#xu').value, password: $('#xp').value });
+      $('.top').hidden = false; await loadAll(); S.ttab = 'students'; go('teach'); toast('Akun guru dibuat. Selamat datang!');
+    } catch (ex) { err.textContent = ex.message; btn.disabled = false; }
   });
 }
 async function loadAll() {
@@ -348,8 +374,10 @@ async function renderTeach() {
   $('#view').innerHTML = `<h2 class="h2">Panel guru</h2><p class="sub">Perubahan pengaturan dan kartu langsung berlaku untuk semua murid.</p>
     <div class="tabs">${tabs.map(([k, i, l]) => `<button class="chip" data-ttab="${k}" aria-pressed="${S.ttab === k}">${ic(i)} ${l}</button>`).join('')}</div><div id="tview"><p class="note">Memuat…</p></div>`;
   armed = null;
+  const tab = S.ttab, draw = () => ({ students: tStudents, scores: tScores, time: tTime, settings: tSettings, cards: tCards })[tab]();
+  if (tab === 'settings' || tab === 'cards') { draw(); return; }
   try { STUDENTS = await api.students(); } catch (e) { toast(e.message); }
-  ({ students: tStudents, scores: tScores, time: tTime, settings: tSettings, cards: tCards })[S.ttab]();
+  if (S.view === 'teach' && S.ttab === tab) draw();
 }
 const classes = () => [...new Set(STUDENTS.map((s) => s.class_name).filter(Boolean))].sort();
 const sName = (id) => STUDENTS.find((s) => s.id === id)?.display_name || 'Murid terhapus';
@@ -450,7 +478,17 @@ function tSettings() {
       <div class="checks" style="margin-top:10px"><button class="chip" data-cfgtog="student_can_choose" aria-pressed="${DRAFT.student_can_choose}">Murid boleh mengganti</button><button class="chip" data-cfgtog="quiz_enabled" aria-pressed="${DRAFT.quiz_enabled}">Aktifkan mode tebak</button></div></div>
     <div class="panel"><h3 style="margin:0 0 8px">Kategori untuk murid</h3><p class="note">Matikan kategori yang belum diajarkan.</p>
       <div class="checks" style="margin-top:10px">${DECKS.map((d) => `<button class="chip" data-cfgdeck="${esc(d.id)}" aria-pressed="${!DRAFT.hidden_decks.includes(d.id)}"><span class="han">${esc(d.zh)}</span> ${esc(d.idn)}</button>`).join('')}</div></div>
-  </div><div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn" data-act="savecfg">${ic('check')} Simpan pengaturan</button><span class="note" id="cfgnote"></span></div>`;
+  </div><div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn" data-act="savecfg">${ic('check')} Simpan pengaturan</button><span class="note" id="cfgnote"></span></div>
+  <form class="panel" id="pwForm" style="margin-top:18px;max-width:520px" novalidate><h3 style="margin:0 0 10px">Ganti password guru</h3>
+    <div class="formgrid"><label class="field" for="po">Password lama<input id="po" type="password" autocomplete="current-password" maxlength="128"></label>
+    <label class="field" for="pn">Password baru (min. 10)<input id="pn" type="password" autocomplete="new-password" maxlength="128"></label></div>
+    <button class="btn ghost" style="margin-top:10px" type="submit">${ic('key')} Ganti password</button><p class="note" id="pwnote"></p></form>`;
+  $('#pwForm').addEventListener('submit', async (e) => {
+    e.preventDefault(); const n = $('#pwnote');
+    if ($('#pn').value.length < 10) { n.textContent = 'Password baru minimal 10 karakter.'; return; }
+    try { await api.changePassword($('#po').value, $('#pn').value); n.textContent = 'Password diganti. Perangkat lain otomatis keluar.'; $('#po').value = ''; $('#pn').value = ''; }
+    catch (err) { n.textContent = err.message; }
+  });
 }
 
 /* ---- Kartu ---- */
@@ -595,7 +633,10 @@ setInterval(() => { checkVersion(); refreshContent(); }, 5 * 60 * 1000);
 (async function boot() {
   $('#view').innerHTML = '<div class="loading">Memuat…</div>';
   try { ME = await api.profile(); } catch (_) { ME = null; }
-  if (!ME) { renderLogin(); return; }
+  if (!ME) {
+    try { const st = await api.setupStatus(); if (st && st.needsSetup) { renderSetup(st.configured); return; } } catch (_) { /* tampilkan login */ }
+    renderLogin(); return;
+  }
   try { await loadAll(); } catch (e) { renderLogin(e.message); return; }
   go(S.view === 'study' || S.view === 'done' ? 'learn' : S.view);
   checkVersion();

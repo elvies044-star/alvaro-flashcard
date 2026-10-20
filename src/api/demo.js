@@ -39,6 +39,9 @@ export function makeDemoApi() {
       db.me = u.id; save(); return pub(u);
     },
     async logout() { db.me = null; save(); },
+    async setupStatus() { return { needsSetup: false, configured: true }; },
+    async setup() { throw new Error('Tidak dipakai di mode demo.'); },
+    async changePassword(o, n) { const u = need('teacher'); if (u.pw !== o) throw new Error('Password lama salah.'); u.pw = n; save(); },
     async profile() { const u = me(); return u ? pub(u) : null; },
     async content() { need(); await wait(); return { settings: db.settings, decks: allDecks(), cards: allCards() }; },
     async srs() { const u = need(); return db.srs[u.id] || {}; },
