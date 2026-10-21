@@ -88,7 +88,7 @@ Murid juga melihat peringatan setiap kali kembali dari aplikasi lain: *"Kamu bar
 
 ## Keamanan yang sudah dipasang
 
-Diuji dengan **132 percobaan** di `tests/test_keamanan.py`, dan semuanya lulus.
+Diuji dengan **137 percobaan** di `tests/test_keamanan.py`, dan semuanya lulus.
 
 - **Skor tidak bisa diubah murid.** Murid hanya mengirim jawaban. Server memeriksa tebakan dan menghitung skor sendiri. Tidak ada jalan bagi murid untuk menulis, mengubah, atau menghapus skor.
 - **Kunci jawaban tebakan tidak dikirim ke browser.** Pilihan jawaban memakai kode acak sekali pakai.
