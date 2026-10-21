@@ -175,7 +175,7 @@ function cleanSettings(s) {
   const modes = Array.isArray(s.modes) ? FRONT_MODES.filter((m) => s.modes.includes(m)) : FRONT_MODES.slice();
   const ms = modes.length ? modes : ['pic'];
   const hidden = Array.isArray(s.hidden_decks) ? [...new Set(s.hidden_decks.filter((x) => typeof x === 'string' && /^[a-z0-9_]{2,32}$/.test(x)))].slice(0, 300) : [];
-  return { modes: ms, default_mode: ms.includes(s.default_mode) ? s.default_mode : ms[0], student_can_choose: s.student_can_choose !== false, quiz_enabled: s.quiz_enabled !== false, mw_quiz: s.mw_quiz !== false, all_can_create: s.all_can_create === true, hidden_decks: hidden };
+  return { modes: ms, default_mode: ms.includes(s.default_mode) ? s.default_mode : ms[0], student_can_choose: s.student_can_choose !== false, quiz_enabled: s.quiz_enabled !== false, mw_quiz: s.mw_quiz !== false, all_can_create: s.all_can_create !== false, hidden_decks: hidden };
 }
 async function getSettings(db) {
   const row = await db.prepare('SELECT data FROM settings WHERE id = 1').first('data');
@@ -617,7 +617,7 @@ export async function onRequest(ctx) {
     }
     if (path === '/t/settings' && method === 'POST') {
       needTeacher();
-      const s = cleanSettings(await body());
+      const b = await body(); const s = cleanSettings({ ...(await getSettings(db)), ...(b && typeof b === 'object' ? b : {}) }); // kunci yang tidak dikirim tetap
       await db.prepare('UPDATE settings SET data = ?1 WHERE id = 1').bind(JSON.stringify(s)).run();
       return json(s);
     }
@@ -668,6 +668,7 @@ export async function onRequest(ctx) {
     if (path === '/deck/submit' && method === 'POST') {
       const b = await body(); const d = await editableDeck(b.id);
       if (teacher) fail(400, 'Kategori guru langsung tampil untuk murid.');
+      if (b.public === false) { await db.prepare("UPDATE decks SET status = 'private' WHERE id = ?1").bind(d.id).run(); return json({ ok: true }); }
       if ((await db.prepare('SELECT COUNT(*) AS n FROM cards WHERE deck_id = ?1').bind(d.id).first('n')) < 1) fail(400, 'Tambahkan minimal 1 kartu sebelum minta persetujuan.');
       await db.prepare("UPDATE decks SET status = 'pending' WHERE id = ?1").bind(d.id).run();
       return json({ ok: true });

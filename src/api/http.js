@@ -66,7 +66,7 @@ export const api = {
   createDeck: (d) => call('POST', '/deck', d),
   updateDeck: (d) => call('POST', '/deck/update', d),
   deleteDeck: (id) => call('POST', '/deck/delete', { id }),
-  submitDeck: (id) => call('POST', '/deck/submit', { id }),
+  submitDeck: (id, pub = true) => call('POST', '/deck/submit', { id, public: pub }),
   bulkCards: (deck_id, cards) => call('POST', '/cards/bulk', { deck_id, cards }),
   updateCard: (c) => call('POST', '/card/update', c),
   deleteCard: (id) => call('POST', '/card/delete', { id }),

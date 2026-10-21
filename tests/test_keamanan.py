@@ -32,6 +32,9 @@ T = Client(); S1 = Client(); S2 = Client(); X = Client()
 check('Status awal: perlu setup', T.req('GET', '/api/setup')[1].get('needsSetup') is True)
 check('Kode setup salah ditolak', T.req('POST', '/api/setup', {'code': 'salah', 'username': 'guru', 'display_name': 'G', 'password': 'passwordguru1'})[0] == 403)
 st, me, _ = T.req('POST', '/api/setup', {'code': SETUP, 'username': 'guru', 'display_name': 'Laoshi', 'password': 'passwordguru1'})
+_cfg0 = T.req('GET', '/api/content')[1]['settings']
+check('Default: semua murid boleh buat kartu', _cfg0.get('all_can_create') is True, _cfg0)
+T.req('POST', '/api/t/settings', {**_cfg0, 'all_can_create': False})
 check('Guru dibuat dengan kode benar', st == 200 and me.get('role') == 'teacher', me)
 check('Setup kedua kali ditolak', X.req('POST', '/api/setup', {'code': SETUP, 'username': 'hacker', 'display_name': 'H', 'password': 'passwordhack1'})[0] == 409)
 # ---- akun murid ----
@@ -149,9 +152,15 @@ cfg = T.req('GET', '/api/content')[1]['settings']
 check('Tanpa izin: murid tak bisa buat kategori', S3.req('POST', '/api/deck', {'zh': '测试'})[0] == 403)
 check('Murid tak bisa menyalakan izin global', S3.req('POST', '/api/t/settings', {**cfg, 'all_can_create': True})[0] == 403)
 T.req('POST', '/api/t/settings', {**cfg, 'all_can_create': True})
+
 st, r, _ = S3.req('POST', '/api/deck', {'zh': '测试'})
 check('Izin global: murid bisa buat kategori pribadi', st == 200 and S3.req('GET', '/api/me')[1]['can_create'] is True)
 check('Kategori baru murid tetap pribadi', not any(d['id'] == r['id'] for d in S4.req('GET', '/api/content')[1]['decks']))
+check('Guru bisa melihat kategori privat murid', any(d['id'] == r['id'] for d in T.req('GET', '/api/content')[1]['decks']))
+_pd = r['id']; S3.req('POST', '/api/cards/bulk', {'deck_id': _pd, 'cards': [{'h': '我', 'm': 'saya'}]})
+check('Murid membuat kategorinya publik (minta persetujuan)', S3.req('POST', '/api/deck/submit', {'id': _pd})[0] == 200)
+check('Murid menarik kembali jadi privat', S3.req('POST', '/api/deck/submit', {'id': _pd, 'public': False})[0] == 200 and [d for d in S3.req('GET', '/api/content')[1]['decks'] if d['id'] == _pd][0]['status'] == 'private')
+check('Murid lain tak bisa mengubah privat/publik kategori orang', S4.req('POST', '/api/deck/submit', {'id': _pd, 'public': False})[0] in (403, 404))
 T.req('POST', '/api/t/settings', {**cfg, 'all_can_create': False})
 check('Izin global dimatikan: tak bisa lagi', S3.req('POST', '/api/deck', {'zh': '测试二'})[0] == 403)
 # ---- kiriman kartu ----
