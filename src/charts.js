@@ -27,7 +27,7 @@ export function lineChart(points, { height = 180, color = 'var(--brand)' } = {})
     ${grid}
     <path d="${area}" fill="${color}" opacity=".10"/>
     <path d="${d}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
-    ${points.map((p) => `<circle cx="${X(p.x).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="3.2" fill="var(--paper)" stroke="${color}" stroke-width="2"><title>${fmtD(p.x)}: ${p.y}</title></circle>`).join('')}
+    ${points.map((p) => `<circle cx="${X(p.x).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="3.2" fill="var(--surface)" stroke="${color}" stroke-width="2"><title>${fmtD(p.x)}: ${p.y}</title></circle>`).join('')}
     <circle cx="${X(last.x).toFixed(1)}" cy="${Y(last.y).toFixed(1)}" r="5" fill="${color}"/>
     <text x="${L}" y="${H - 6}" font-size="11" fill="var(--muted)">${fmtD(x0)}</text>
     <text x="${W - R}" y="${H - 6}" font-size="11" fill="var(--muted)" text-anchor="end">${fmtD(x1)}</text>

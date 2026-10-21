@@ -1,10 +1,11 @@
-# Flashcard Alvaro — panduan pasang (Cloudflare, gratis)
+# Alvaro Mandarin Flashcard Tamer — panduan pasang (Cloudflare, gratis)
 
 Web app flashcard Mandarin untuk Alvaro Education Centre:
 - Akun murid dibuat guru, lalu muncul sapaan "Halo, nama murid!".
-- Skor dihitung oleh server.
-- Ada grafik waktu belajar.
-- Kartu bisa ditambah langsung oleh guru.
+- Skor dihitung oleh server, dan ada grafik waktu belajar.
+- Kartu ditulis **satu kata per baris** (hanzi atau bahasa Indonesia). Pinyin, arti, dan 量词 terisi otomatis, bisa diedit, dan emoji atau foto opsional.
+- **Pantau langsung**: guru melihat siapa yang sedang belajar dan siapa yang **keluar dari aplikasi**.
+- Murid yang diberi izin bisa membuat kategori sendiri. Kategorinya baru tampil untuk murid lain setelah **disetujui guru**.
 
 **Butuh:** akun **GitHub** dan **Cloudflare** (gratis, tanpa kartu kredit). Waktu ± 15 menit. Tidak perlu menulis SQL sama sekali.
 
@@ -44,7 +45,13 @@ Buka proyek Pages → **Settings**:
    - Name: `SETUP_CODE`
    - Value: kode rahasia buatanmu, minimal 8 karakter, misalnya `AlvaroSetup!2026`
    - Save
-3. Buka **Deployments** → titik tiga pada deployment terakhir → **Retry deployment**. Pengaturan baru hanya berlaku setelah deploy ulang.
+3. *(Opsional, disarankan)* Pasang terjemahan otomatis (AI) untuk kata di luar kamus:
+   - Kembali ke **Bindings → Add → Workers AI**
+   - Variable name: `AI`
+   - Save
+
+   Ini gratis sampai 10.000 "neuron" per hari, kira-kira ribuan kata. Tanpa AI, terjemahan tetap jalan untuk 568 kartu bawaan dan ±250 kata dasar (setara HSK 1–2). Kata lain cukup diisi artinya manual, sedangkan pinyin selalu otomatis.
+4. Buka **Deployments** → titik tiga pada deployment terakhir → **Retry deployment**. Pengaturan baru hanya berlaku setelah deploy ulang.
 
 ## 6. Buat akun guru (sekali saja)
 1. Buka alamat web kamu, misalnya `https://alvaro-flashcard.pages.dev`.
@@ -56,16 +63,28 @@ Buka proyek Pages → **Settings**:
 
 ---
 
+## Fitur guru (menu **Guru**)
+- **Pantau langsung**:
+  - Kartu tiap murid yang sedang belajar, diperbarui otomatis tiap 5 detik.
+  - Kalau murid pindah aplikasi atau tab, kartunya berubah merah **"Keluar aplikasi · 0:42"**.
+  - Jumlah keluar dan lama keluar tersimpan di skor tiap sesi.
+- **Murid**: buat akun, password baru, nonaktifkan, dan izin **"Boleh buat kartu"**.
+- **Skor** & **Grafik waktu**: per murid, per kelas, per periode.
+- **Persetujuan**: kategori buatan murid yang minta ditampilkan. Kalau murid mengubah kategori yang sudah disetujui, kategori itu perlu disetujui lagi.
+- **Pengaturan**: sisi depan kartu (Gambar / 汉字 / Arti / Campur), mode tebak, kategori yang tampil, ganti password.
+
+Murid juga melihat peringatan setiap kali kembali dari aplikasi lain: *"Kamu baru saja keluar dari aplikasi… gurumu bisa melihatnya."*
+
 ## Cara memperbarui
 
 | Ingin mengubah | Caranya | Murid dapat perubahan |
 |---|---|---|
 | Kartu, kategori, pengaturan | Panel **Guru** di app | Langsung (saat membuka app atau kembali ke tab) |
-| Tampilan atau fitur app | Ganti file di GitHub (atau minta Claude), Cloudflare otomatis deploy ulang | Otomatis. App yang sedang terbuka menampilkan **"Versi baru aplikasi tersedia → Muat ulang"** |
+| Tampilan atau fitur app | Timpa file di GitHub dengan versi baru (**Add file → Upload files**), Cloudflare otomatis deploy ulang | Otomatis. App yang sedang terbuka menampilkan **"Versi baru aplikasi tersedia → Muat ulang"** |
 
 ## Keamanan yang sudah dipasang
 
-Diuji dengan **60 percobaan** di `tests/test_keamanan.py`, dan semuanya lulus.
+Diuji dengan **91 percobaan** di `tests/test_keamanan.py`, dan semuanya lulus.
 
 - **Skor tidak bisa diubah murid.** Murid hanya mengirim jawaban. Server memeriksa tebakan dan menghitung skor sendiri. Tidak ada jalan bagi murid untuk menulis, mengubah, atau menghapus skor.
 - **Kunci jawaban tebakan tidak dikirim ke browser.** Pilihan jawaban memakai kode acak sekali pakai.
@@ -77,6 +96,8 @@ Diuji dengan **60 percobaan** di `tests/test_keamanan.py`, dan semuanya lulus.
 - **Hak akses dicek di server:**
   - murid hanya melihat datanya sendiri;
   - kartu, kategori, pengaturan, dan akun hanya bisa diubah guru;
+  - murid yang diberi izin hanya bisa mengubah kategori miliknya sendiri, dan tidak bisa menyetujuinya sendiri;
+  - status keluar aplikasi hanya bisa dikirim oleh pemilik sesi;
   - kategori yang disembunyikan guru tidak pernah dikirim ke murid.
 - **Akun guru tunggal**, dilindungi `SETUP_CODE`. Pendaftaran umum tidak ada.
 - **Mengganti password atau menonaktifkan murid** langsung mengeluarkannya dari semua perangkat.
@@ -93,11 +114,10 @@ Diuji dengan **60 percobaan** di `tests/test_keamanan.py`, dan semuanya lulus.
 - Tidak ada "tidur" otomatis seperti Supabase gratis.
 
 ## Untuk pengembang
-- `npm run dev` → mode demo tanpa server (guru: `guru` / `guru123`, murid: `budi` / `budi123`).
 - Uji dengan server lokal:
   ```
   npm run build
   npx wrangler pages dev dist --d1 DB=alvaro-test --binding SETUP_CODE=rahasia-setup-123
   python3 tests/test_keamanan.py
   ```
-- Kode server: `functions/api/[[path]].js`. Kode app: `src/main.js`.
+- Kode server: `functions/api/[[path]].js` dan `server/` (terjemahan + kamus dasar). Kode app: `src/main.js`, tampilan: `src/style.css`.

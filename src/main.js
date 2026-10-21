@@ -1,11 +1,10 @@
 import './style.css';
 import IMG from './data/images.json';
 import MW from './data/mw.json';
-import { makeHttpApi } from './api/http.js';
-import { makeDemoApi } from './api/demo.js';
+import { api } from './api/http.js';
 import { hbars, lineChart } from './charts.js';
 
-const api = import.meta.env.DEV || import.meta.env.VITE_DEMO === '1' ? makeDemoApi() : makeHttpApi();
+const APP = 'Alvaro Mandarin Flashcard Tamer';
 const BUILD = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev';
 
 /* ================= helpers ================= */
@@ -15,29 +14,40 @@ const shuffle = (a) => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) {
 const yi = (m) => (MW[m] && MW[m][1] === 4 ? 'yí' : 'yì');
 const fmtDate = (t, o = { dateStyle: 'medium', timeStyle: 'short' }) => new Date(t).toLocaleString('id-ID', o);
 const secs = (ms) => (ms / 1000).toFixed(ms < 10000 ? 1 : 0) + ' dtk';
-const store = { get(k, d) { try { const v = localStorage.getItem('afw_' + k); return v === null ? d : JSON.parse(v); } catch (_) { return d; } }, set(k, v) { try { localStorage.setItem('afw_' + k, JSON.stringify(v)); } catch (_) { /* abaikan */ } } };
+const dur = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return s < 60 ? `${s} dtk` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+const store = { get(k, d) { try { const v = localStorage.getItem('aft_' + k); return v === null ? d : JSON.parse(v); } catch (_) { return d; } }, set(k, v) { try { localStorage.setItem('aft_' + k, JSON.stringify(v)); } catch (_) { /* abaikan */ } } };
 const SVGSRC = {};
 const svgSrc = (k) => SVGSRC[k] || (SVGSRC[k] = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(IMG[k]));
+const scoreCls = (v) => (v >= 75 ? 'g' : v >= 50 ? 'w' : 'b');
+const scoreTag = (v) => `<span class="score ${scoreCls(v ?? 0)}">${v ?? 0}</span>`;
+const initial = (n) => esc(([...(n || '?')][0] || '?').toUpperCase());
 
 const ICON = {
   learn: '<rect x="3" y="5" width="13" height="16" rx="2"/><path d="M8 3h11a2 2 0 0 1 2 2v13"/>',
   hist: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>',
+  edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
   teach: '<path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><circle cx="9" cy="8" r="4"/><path d="M17 11l2 2 4-4"/>',
   out: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
-  back: '<path d="M15 18l-6-6 6-6"/>', check: '<path d="M5 12l5 5L20 7"/>', plus: '<path d="M12 5v14M5 12h14"/>',
+  back: '<path d="M15 18l-6-6 6-6"/>', check: '<path d="M5 12l5 5L20 7"/>', x: '<path d="M18 6L6 18M6 6l12 12"/>', plus: '<path d="M12 5v14M5 12h14"/>',
   trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>', copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
   play: '<path d="M7 4l13 8-13 8z"/>', flip: '<path d="M4 12a8 8 0 0 1 14-5.3L20 9"/><path d="M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15"/><path d="M4 20v-5h5"/>',
   sound: '<path d="M11 5L6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>', mute: '<path d="M11 5L6 9H3v6h3l5 4z"/><path d="M22 9l-6 6M16 9l6 6"/>',
   users: '<circle cx="9" cy="8" r="4"/><path d="M2 21v-1a6 6 0 0 1 6-6h2a6 6 0 0 1 6 6v1M16 4a4 4 0 0 1 0 8M22 21v-1a6 6 0 0 0-4-5.6"/>',
   chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>', clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
-  cards: '<rect x="3" y="7" width="13" height="14" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/>',
-  key: '<circle cx="7.5" cy="15.5" r="4.5"/><path d="M11 12l9-9M17 6l3 3"/>', lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1z"/>',
+  key: '<circle cx="7.5" cy="15.5" r="4.5"/><path d="M11 12l9-9M17 6l3 3"/>',
+  alert: '<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
+  smile: '<circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/>', send: '<path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/>',
+  image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>', sparkle: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>',
+  list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
 };
 const ic = (n) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICON[n]}</svg>`;
 let toastT;
-function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2600); }
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2800); }
 async function copyText(txt) { try { await navigator.clipboard.writeText(txt); toast('Disalin'); } catch (_) { toast('Tidak bisa menyalin otomatis. Pilih teksnya lalu salin manual.'); } }
+const logoHTML = () => '<span class="logo-wrap"><img class="logo" src="/logo.png" alt="Alvaro Education Centre"></span>';
 
 /* ---- suara ---- */
 let AC = null;
@@ -45,7 +55,7 @@ function tone(seq) {
   if (!S.sfx) return;
   try {
     AC = AC || new (window.AudioContext || window.webkitAudioContext)(); const t0 = AC.currentTime;
-    seq.forEach(([f, d, st, type]) => { const o = AC.createOscillator(), g = AC.createGain(); o.type = type || 'sine'; o.frequency.value = f; g.gain.setValueAtTime(0.0001, t0 + st); g.gain.exponentialRampToValueAtTime(0.18, t0 + st + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + st + d); o.connect(g).connect(AC.destination); o.start(t0 + st); o.stop(t0 + st + d + 0.02); });
+    seq.forEach(([f, d, st, type]) => { const o = AC.createOscillator(), g = AC.createGain(); o.type = type || 'sine'; o.frequency.value = f; g.gain.setValueAtTime(0.0001, t0 + st); g.gain.exponentialRampToValueAtTime(0.16, t0 + st + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + st + d); o.connect(g).connect(AC.destination); o.start(t0 + st); o.stop(t0 + st + d + 0.02); });
   } catch (_) { /* tanpa suara */ }
 }
 const SFX = { right: () => tone([[660, 0.14, 0], [990, 0.22, 0.11]]), wrong: () => tone([[196, 0.22, 0, 'square'], [156, 0.28, 0.12, 'square']]), r1: () => tone([[220, 0.2, 0, 'triangle']]), r2: () => tone([[392, 0.16, 0, 'triangle']]), r3: () => tone([[523, 0.12, 0], [784, 0.18, 0.09]]), r4: () => tone([[523, 0.1, 0], [659, 0.1, 0.08], [784, 0.1, 0.16], [1047, 0.25, 0.24]]), flip: () => tone([[880, 0.05, 0, 'triangle']]) };
@@ -58,169 +68,191 @@ function speak(t) { if (!t) return; try { speechSynthesis.cancel(); const u = ne
 function fx(el, cls) { if (!el) return; el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); setTimeout(() => el.classList.remove(cls), 600); }
 function burst(n = 36) {
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const b = document.createElement('div'); b.className = 'burst'; const cols = ['#ffd21f', '#2a7bd8', '#e8513f', '#1b9a5a', '#e0559b', '#7a4fd0'];
+  const b = document.createElement('div'); b.className = 'burst'; const cols = ['#1f3fbf', '#f6c933', '#16a34a', '#e8513f', '#7a4fd0', '#2fa3d6'];
   for (let i = 0; i < n; i++) { const p = document.createElement('i'); p.style.left = Math.random() * 100 + 'vw'; p.style.background = cols[i % cols.length]; p.style.setProperty('--dx', (Math.random() * 160 - 80) + 'px'); p.style.setProperty('--r', (Math.random() * 720 - 360) + 'deg'); p.style.animationDelay = Math.random() * 0.25 + 's'; b.appendChild(p); }
   document.body.appendChild(b); setTimeout(() => b.remove(), 2000);
 }
-function cheer(text, color) { const c = $('#cheer'); c.textContent = text; c.style.background = color; c.classList.remove('on'); void c.offsetWidth; c.classList.add('on'); }
+function badgeFx(ok) { const t = $('#tilt'); if (!t) return; const b = document.createElement('div'); b.className = 'badge-fx ' + (ok ? 'ok' : 'no'); b.innerHTML = ic(ok ? 'check' : 'x'); t.appendChild(b); setTimeout(() => b.remove(), 1000); }
 
 /* ================= state ================= */
 const MODES = ['pic', 'han', 'arti', 'mix'];
 const MODE_LABEL = { pic: 'Gambar', han: '汉字', arti: 'Arti', mix: 'Campur' };
-const RATE = { 1: { l: 'Susah', w: 'lagi segera', gap: 2 }, 2: { l: 'Lumayan', w: 'nanti lagi', gap: 7 }, 3: { l: 'Bisa', w: 'besok', days: 1 }, 4: { l: 'Mudah', w: '3 hari', days: 3 } };
-const COLORS = ['#e8513f', '#f08a24', '#e0b51b', '#3aa65b', '#2f9e8f', '#1f7fd1', '#3b4fc4', '#7a4fd0', '#e0559b', '#5b6789'];
-const S = Object.assign({ mode: 'pic', quiz: true, auto: true, sfx: true, all: false, sel: [], view: 'learn', ttab: 'students' }, store.get('prefs', {}));
-const savePrefs = () => store.set('prefs', { mode: S.mode, quiz: S.quiz, auto: S.auto, sfx: S.sfx, all: S.all, sel: S.sel, view: S.view === 'study' ? 'learn' : S.view, ttab: S.ttab });
+const RATE = { 1: { l: 'Susah', w: 'muncul lagi segera', gap: 2 }, 2: { l: 'Lumayan', w: 'muncul lagi nanti', gap: 7 }, 3: { l: 'Bisa', w: 'muncul besok', days: 1 }, 4: { l: 'Mudah', w: 'muncul 3 hari lagi', days: 3 } };
+const COLORS = ['#1f3fbf', '#2fa3d6', '#16a34a', '#0f9f74', '#e0b51b', '#f08a24', '#e8513f', '#e0559b', '#7a4fd0', '#5b6789'];
+const S = Object.assign({ mode: 'pic', quiz: true, auto: true, sfx: true, all: false, sel: [], view: 'learn', ttab: 'live', hints: true }, store.get('prefs', {}));
+const savePrefs = () => store.set('prefs', { mode: S.mode, quiz: S.quiz, auto: S.auto, sfx: S.sfx, all: S.all, sel: S.sel, view: ['study', 'done'].includes(S.view) ? 'learn' : S.view, ttab: S.ttab, hints: S.hints });
 let ME = null, SET = null, DECKS = [], CARDS = [], SRS = {}, Q = null, STUDENTS = [];
-const isTeacher = () => ME && ME.role === 'teacher';
+const isTeacher = () => !!ME && ME.role === 'teacher';
+const canCreate = () => !!ME && (ME.role === 'teacher' || !!ME.can_create);
 
 function cleanSettings(s) {
   s = s || {};
-  const modes = Array.isArray(s.modes) ? s.modes.filter((m) => MODES.includes(m)) : MODES.slice();
+  const modes = Array.isArray(s.modes) ? MODES.filter((m) => s.modes.includes(m)) : MODES.slice();
   const ms = modes.length ? modes : ['pic'];
   return { modes: ms, default_mode: ms.includes(s.default_mode) ? s.default_mode : ms[0], student_can_choose: s.student_can_choose !== false, quiz_enabled: s.quiz_enabled !== false, hidden_decks: Array.isArray(s.hidden_decks) ? s.hidden_decks.filter((x) => typeof x === 'string') : [] };
 }
 function applyContent(c) {
   SET = cleanSettings(c.settings);
+  if (c.me) ME = c.me;
   CARDS = (c.cards || []).filter((x) => x && typeof x.id === 'string' && typeof x.h === 'string');
   const by = {};
   for (const card of CARDS) (by[card.deck_id] ||= []).push(card);
-  DECKS = (c.decks || []).filter((d) => d && typeof d.id === 'string').map((d) => ({ ...d, color: /^#[0-9a-f]{6}$/i.test(d.color) ? d.color : '#2340b8', cards: by[d.id] || [] }));
+  DECKS = (c.decks || []).filter((d) => d && typeof d.id === 'string').map((d) => ({ ...d, color: /^#[0-9a-f]{6}$/i.test(d.color) ? d.color : '#1f3fbf', cards: by[d.id] || [] }));
 }
-const visibleDecks = () => DECKS.filter((d) => d.cards.length && (isTeacher() || !SET.hidden_decks.includes(d.id)));
+// Untuk belajar: guru tidak ikut melihat kategori pribadi murid
+const studyDecks = () => DECKS.filter((d) => d.cards.length && (!isTeacher() || !d.owner_id || d.status === 'public'));
 const deckOf = (id) => DECKS.find((d) => d.id === id);
+const pendingCount = () => (isTeacher() ? DECKS.filter((d) => d.status === 'pending').length : 0);
 const isDue = (c) => { const r = SRS[c.id]; return !r || r.due <= Date.now(); };
-const isNew = (c) => !SRS[c.id];
 const effMode = () => (SET.student_can_choose && SET.modes.includes(S.mode) ? S.mode : SET.default_mode);
 
-/* ---- gambar kartu (hanya sumber yang diizinkan) ---- */
-function safeImgUrl(p) {
-  if (api.demo && /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(p)) return p;
-  return /^\/api\/img\/[a-f0-9]{32}$/.test(p) ? p : '';
-}
 function picHTML(c) {
   const p = c.pic || '';
   if (/^i\d+$/.test(p) && IMG[p]) return `<img src="${svgSrc(p)}" alt="">`;
-  const u = safeImgUrl(p);
-  if (u) return `<img src="${esc(u)}" alt="" loading="lazy" referrerpolicy="no-referrer">`;
-  if (p && [...p].length <= 8 && !/[<>/\\]/.test(p)) return `<span class="emo">${esc(p)}</span>`;
+  if (/^\/api\/img\/[a-f0-9]{32}$/.test(p)) return `<img src="${p}" alt="" loading="lazy">`;
+  if (p && [...p].length <= 8 && /^\p{Extended_Pictographic}/u.test(p) && !/[<>/\\"'`=a-z0-9]/i.test(p)) return `<span class="emo">${esc(p)}</span>`;
   return '';
 }
 const hasPic = (c) => picHTML(c) !== '';
 
 /* ================= shell ================= */
-function shell() {
-  const nav = [['learn', 'learn', 'Belajar'], ['hist', 'hist', 'Riwayat']];
-  if (isTeacher()) nav.push(['teach', 'teach', 'Guru']);
-  $('#topin').innerHTML = `<img class="logo" src="/logo.jpg" alt="Alvaro Education Centre">
-    <nav class="nav" aria-label="Menu">${nav.map(([v, i, l]) => `<button data-nav="${v}" aria-label="${l}" ${S.view === v || (S.view === 'study' && v === 'learn') ? 'aria-current="page"' : ''}>${ic(i)}<span>${l}</span></button>`).join('')}</nav>
-    <button class="icon-btn" data-act="logout" aria-label="Keluar" title="Keluar">${ic('out')}</button>`;
+function navItems() {
+  const n = [['learn', 'learn', 'Belajar'], ['hist', 'hist', 'Riwayat']];
+  if (canCreate()) n.push(['cards', 'edit', isTeacher() ? 'Kartu' : 'Kartu saya']);
+  if (isTeacher()) n.push(['teach', 'teach', 'Guru']);
+  return n;
 }
+function shell() {
+  const cur = (v) => S.view === v || (['study', 'done'].includes(S.view) && v === 'learn');
+  const pend = pendingCount();
+  const btns = navItems().map(([v, i, l]) => `<button data-nav="${v}" ${cur(v) ? 'aria-current="page"' : ''}>${ic(i)}<span>${l}</span>${v === 'teach' && pend ? `<span class="dot">${pend}</span>` : ''}</button>`).join('');
+  $('.top').hidden = false;
+  $('#topin').innerHTML = `<div class="brand">${logoHTML()}<span class="sep"></span><span class="name">Flashcard Tamer <span>· Mandarin</span></span></div>
+    <nav class="nav" aria-label="Menu utama">${btns}</nav>
+    <button class="icon-btn" data-act="logout" aria-label="Keluar akun" title="Keluar akun">${ic('out')}</button>`;
+  const bn = $('#bottomnav'); bn.hidden = false; bn.innerHTML = btns;
+}
+function hideShell() { $('.top').hidden = true; $('#bottomnav').hidden = true; $('#actionbar').hidden = true; }
 function go(v) {
   if (v === 'teach' && !isTeacher()) v = 'learn';
+  if (v === 'cards' && !canCreate()) v = 'learn';
+  if (!['learn', 'hist', 'cards', 'teach'].includes(v)) v = 'learn';
+  stopLive();
   S.view = v; savePrefs(); shell(); window.scrollTo(0, 0);
-  ({ learn: renderLearn, hist: renderHist, teach: renderTeach })[v]();
+  ({ learn: renderLearn, hist: renderHist, cards: renderCards, teach: renderTeach })[v]();
 }
 
-/* ================= login ================= */
+/* ================= masuk ================= */
+function authCard(inner) { hideShell(); $('#view').innerHTML = `<div class="auth"><form class="auth-card" id="authForm" novalidate>${logoHTML()}${inner}</form></div>`; }
 function renderLogin(msg = '') {
-  $('#topin').innerHTML = ''; $('.top').hidden = true; $('#selbar').hidden = true;
-  $('#view').innerHTML = `<div class="login"><form class="panel" id="loginForm" autocomplete="on" novalidate>
-    <img class="logo-big" src="/logo.jpg" alt="Alvaro Education Centre">
-    <h1 class="han">闪卡 Flashcard</h1>
-    <label class="field" for="lu">Username<input id="lu" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="80" required></label>
-    <label class="field" for="lp">Password<input id="lp" name="password" type="password" autocomplete="current-password" maxlength="72" required></label>
+  authCard(`<h1>Flashcard Tamer<small>${APP}</small></h1>
+    <label class="field" for="lu">Username<input id="lu" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="64" required></label>
+    <label class="field" for="lp">Password<input id="lp" name="password" type="password" autocomplete="current-password" maxlength="128" required></label>
     <div class="err" id="lerr" role="alert">${esc(msg)}</div>
-    <button class="btn" type="submit" id="lbtn">${ic('lock')} Masuk</button>
-    ${api.demo ? '<div class="demo"><b>Mode demo</b> (hanya untuk uji di komputer, bukan versi online). Guru: <b>guru</b> / <b>guru123</b> · Murid: <b>budi</b> / <b>budi123</b></div>' : '<p class="note">Akun dibuatkan oleh gurumu. Lupa password? Minta guru membuatkan password baru.</p>'}
-  </form></div>`;
-  $('#loginForm').addEventListener('submit', async (e) => {
+    <button class="btn lg" type="submit" id="lbtn">Masuk</button>
+    <p class="note" style="text-align:center">Belum punya akun? Akun dibuat oleh gurumu.</p>`);
+  $('#authForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = $('#lbtn'); btn.disabled = true; $('#lerr').textContent = '';
-    try { ME = await api.login($('#lu').value, $('#lp').value); $('.top').hidden = false; await loadAll(); go(isTeacher() ? (S.view === 'teach' ? 'teach' : 'learn') : 'learn'); }
+    try { ME = await api.login($('#lu').value, $('#lp').value); await loadAll(); go(S.view); }
     catch (err) { $('#lerr').textContent = err.message; btn.disabled = false; $('#lp').value = ''; $('#lp').focus(); }
   });
 }
 function renderSetup(configured) {
-  $('#topin').innerHTML = ''; $('.top').hidden = true; $('#selbar').hidden = true;
-  $('#view').innerHTML = `<div class="login"><form class="panel" id="setupForm" novalidate>
-    <img class="logo-big" src="/logo.jpg" alt="Alvaro Education Centre">
-    <h1>Buat akun guru</h1>
-    <p class="note">Langkah ini hanya sekali. Masukkan <b>SETUP_CODE</b> yang kamu isi di Cloudflare.</p>
-    ${configured ? '' : '<div class="demo">SETUP_CODE belum diatur di Cloudflare. Ikuti langkah 5 di panduan, lalu deploy ulang.</div>'}
+  authCard(`<h1>Buat akun guru<small>Langkah ini hanya sekali.</small></h1>
+    ${configured ? '' : '<div class="away-banner" style="margin:0">SETUP_CODE belum diatur di Cloudflare. Ikuti langkah 5 di panduan, lalu deploy ulang.</div>'}
     <label class="field" for="xc">Kode setup<input id="xc" type="password" autocomplete="off" maxlength="128"></label>
     <label class="field" for="xn">Nama guru<input id="xn" maxlength="40" placeholder="Laoshi Elvies"></label>
     <label class="field" for="xu">Username guru<input id="xu" maxlength="24" autocapitalize="none" spellcheck="false" placeholder="guru"></label>
-    <label class="field" for="xp">Password (min. 10 karakter)<input id="xp" type="password" autocomplete="new-password" maxlength="128"></label>
+    <label class="field" for="xp">Password (minimal 10 karakter)<input id="xp" type="password" autocomplete="new-password" maxlength="128"></label>
     <label class="field" for="xp2">Ulangi password<input id="xp2" type="password" autocomplete="new-password" maxlength="128"></label>
     <div class="err" id="xerr" role="alert"></div>
-    <button class="btn" type="submit" id="xbtn">${ic('lock')} Buat akun guru</button>
-  </form></div>`;
-  $('#setupForm').addEventListener('submit', async (e) => {
+    <button class="btn lg" type="submit" id="xbtn">Buat akun guru</button>`);
+  $('#authForm').addEventListener('submit', async (e) => {
     e.preventDefault(); const err = $('#xerr'); err.textContent = '';
-    if ($('#xp').value !== $('#xp2').value) { err.textContent = 'Kedua password tidak sama.'; return; }
+    if ($('#xp').value !== $('#xp2').value) { err.textContent = 'Kedua password belum sama.'; return; }
     if ($('#xp').value.length < 10) { err.textContent = 'Password minimal 10 karakter.'; return; }
     const btn = $('#xbtn'); btn.disabled = true;
-    try {
-      ME = await api.setup({ code: $('#xc').value, display_name: $('#xn').value, username: $('#xu').value, password: $('#xp').value });
-      $('.top').hidden = false; await loadAll(); S.ttab = 'students'; go('teach'); toast('Akun guru dibuat. Selamat datang!');
-    } catch (ex) { err.textContent = ex.message; btn.disabled = false; }
+    try { ME = await api.setup({ code: $('#xc').value, display_name: $('#xn').value, username: $('#xu').value, password: $('#xp').value }); await loadAll(); S.ttab = 'students'; go('teach'); toast('Akun guru dibuat. Selamat datang!'); }
+    catch (ex) { err.textContent = ex.message; btn.disabled = false; }
   });
 }
 async function loadAll() {
   applyContent(await api.content());
   try { SRS = await api.srs(); } catch (_) { SRS = {}; }
-  if (!S.sel.length) S.sel = visibleDecks().slice(0, 1).map((d) => d.id);
+  if (!S.sel.length) S.sel = studyDecks().slice(0, 1).map((d) => d.id);
 }
+async function reloadContent() { applyContent(await api.content()); }
 
 /* ================= Belajar ================= */
-const selCards = () => visibleDecks().filter((d) => S.sel.includes(d.id)).flatMap((d) => d.cards);
+const selCards = () => studyDecks().filter((d) => S.sel.includes(d.id)).flatMap((d) => d.cards);
 function renderLearn() {
-  Q = null; document.documentElement.style.setProperty('--c', '#2340b8');
-  const ds = visibleDecks(); S.sel = S.sel.filter((id) => ds.some((d) => d.id === id));
+  Q = null; document.documentElement.style.setProperty('--c', 'var(--brand)');
+  const ds = studyDecks(); S.sel = S.sel.filter((id) => ds.some((d) => d.id === id));
   const dueAll = ds.flatMap((d) => d.cards).filter(isDue).length;
-  const first = [...(ME.display_name || ME.username)][0] || '?';
-  $('#view').innerHTML = `<div class="hello"><div class="av" aria-hidden="true">${esc(first.toUpperCase())}</div><div><h2>Halo, ${esc(ME.display_name)}!</h2><p>${dueAll ? `Ada ${dueAll} kartu yang siap kamu pelajari hari ini.` : 'Semua kartu sudah terjadwal. Hebat!'}</p></div></div>
-    <div class="head-row" style="margin-top:14px"><p class="sub">Pilih satu kategori atau lebih. Setelah kartu dibalik, nilai dirimu: <b>1</b> & <b>2</b> diulang di sesi ini, <b>3</b> muncul besok, <b>4</b> muncul 3 hari lagi.</p>
-    <button class="chip" data-act="selall">${S.sel.length === ds.length ? 'Kosongkan pilihan' : 'Pilih semua'}</button></div>
+  $('#view').innerHTML = `<div class="page-head"><div class="hello"><div class="avatar" aria-hidden="true">${initial(ME.display_name)}</div><div>
+      <h1 class="h1">Halo, ${esc(ME.display_name)}!</h1><p class="sub" style="margin-top:2px">${dueAll ? `${dueAll} kartu siap kamu pelajari hari ini.` : 'Semua kartu sudah terjadwal. Kerja bagus!'}</p></div></div>
+    ${ds.length ? `<button class="chip" data-act="selall">${S.sel.length === ds.length ? 'Kosongkan pilihan' : 'Pilih semua'}</button>` : ''}</div>
+    <p class="note" style="margin:-8px 0 16px">Pilih satu kategori atau lebih. Setelah kartu dibalik, beri nilai 1–4: nilai 1 & 2 diulang di sesi ini, 3 muncul besok, 4 muncul 3 hari lagi.</p>
     <div class="decks">${ds.map((d) => {
-      const due = d.cards.filter(isDue).length, nw = d.cards.filter(isNew).length, sched = d.cards.length - due, on = S.sel.includes(d.id);
-      const pics = d.cards.filter(hasPic).slice(0, 3).map(picHTML).join('') || `<span class="han" style="font-size:26px">${esc(d.cards[0]?.h || '')}</span>`;
-      return `<button class="deck" data-pick="${esc(d.id)}" aria-pressed="${on}" style="--dc:${d.color}"><span class="chk">${ic('check')}</span><div class="pics">${pics}</div>
-        ${!d.builtin ? '<span class="badge">Buatan guru</span>' : ''}${isTeacher() && SET.hidden_decks.includes(d.id) ? '<span class="tag-off">Disembunyikan dari murid</span>' : ''}
-        <div class="zh">${esc(d.zh)}</div><div class="id">${esc(d.idn)}</div>
+      const due = d.cards.filter(isDue).length, sched = d.cards.length - due, on = S.sel.includes(d.id);
+      const pics = d.cards.filter(hasPic).slice(0, 4).map(picHTML).join('') || `<span class="hz">${esc(d.cards[0]?.h || '')}</span>`;
+      return `<button class="deck" data-pick="${esc(d.id)}" aria-pressed="${on}" style="--dc:${d.color}"><span class="chk">${ic('check')}</span>
+        <div class="pics">${pics}</div><div class="zh">${esc(d.zh)}</div><div class="id">${esc(d.idn)}</div>
+        ${d.owner_id ? `<span class="pill mute tag">Buatan ${d.mine ? 'kamu' : esc(d.owner_name || 'murid')}</span>` : ''}
         <div class="bar"><i style="width:${(sched / d.cards.length) * 100}%"></i></div>
-        <div class="due"><b>${due}</b> siap · ${nw} baru · ${sched} terjadwal</div></button>`;
-    }).join('') || '<p class="note">Belum ada kategori yang bisa dipelajari.</p>'}</div>`;
-  renderSelbar();
+        <div class="meta"><span class="dotc"></span>${due} siap · ${d.cards.length} kartu</div></button>`;
+    }).join('') || '<div class="panel empty"><b>Belum ada kategori</b>Gurumu belum menampilkan kategori untukmu.</div>'}</div>`;
+  renderActionbar();
 }
-function renderSelbar() {
-  const bar = $('#selbar'); if (S.view !== 'learn') { bar.hidden = true; return; } bar.hidden = false;
+function renderActionbar() {
+  const bar = $('#actionbar'); if (S.view !== 'learn') { bar.hidden = true; return; } bar.hidden = false;
   const cs = selCards(), due = cs.filter(isDue).length, n = S.all ? cs.length : due;
-  bar.innerHTML = `<div class="in"><div class="info">${S.sel.length} kategori · ${n} kartu<small>${S.all ? 'Semua kartu, jadwal diabaikan' : due + ' kartu siap (baru + jatuh tempo)'}</small></div>
-    <button class="chip" data-act="togall" aria-pressed="${S.all}">Latih semua</button>
-    <button class="btn" data-act="start" ${n ? '' : 'disabled'}>${ic('play')} Mulai (acak)</button></div>`;
+  bar.innerHTML = `<div class="in"><div class="info"><b>${n} kartu</b><span>${S.sel.length} kategori · ${S.all ? 'semua kartu, jadwal diabaikan' : 'kartu baru & yang jatuh tempo'}</span></div>
+    <button class="switch" role="switch" aria-checked="${S.all}" data-act="togall"><span class="track"></span>Latih semua</button>
+    <button class="btn" data-act="start" ${n ? '' : 'disabled'}>${ic('play')} Mulai</button></div>`;
 }
 
-/* ================= sesi belajar ================= */
-let hiddenAt = 0;
+/* ================= sesi belajar + deteksi keluar aplikasi ================= */
+let hiddenAt = 0, blurT = 0, beatT = 0;
+const PRES = { state: 'active' };
+function setPresence(st) {
+  if (!Q || !Q.sid || S.view !== 'study') return;
+  if (PRES.state === st) return;
+  PRES.state = st;
+  if (st === 'away') { Q.awayCount++; Q.awayStart = Date.now(); }
+  else if (Q.awayStart) { Q.awayMs += Date.now() - Q.awayStart; Q.awayStart = 0; showAwayBanner(); }
+  api.presence(Q.sid, st);
+}
 document.addEventListener('visibilitychange', () => {
-  if (!Q || !Q.cur) return;
-  if (document.hidden) hiddenAt = performance.now();
-  else if (hiddenAt) { Q.cur.hidden += performance.now() - hiddenAt; hiddenAt = 0; }
+  if (Q && Q.cur) { if (document.hidden) hiddenAt = performance.now(); else if (hiddenAt) { Q.cur.hidden += performance.now() - hiddenAt; hiddenAt = 0; } }
+  setPresence(document.hidden ? 'away' : 'active');
 });
+window.addEventListener('blur', () => { clearTimeout(blurT); blurT = setTimeout(() => { if (!document.hasFocus()) setPresence('away'); }, 1500); });
+window.addEventListener('focus', () => { clearTimeout(blurT); setPresence('active'); });
+window.addEventListener('pagehide', () => setPresence('away'));
+function startBeat() { stopBeat(); beatT = setInterval(() => { if (Q && Q.sid && S.view === 'study' && !document.hidden) api.presence(Q.sid, PRES.state); }, 15000); }
+function stopBeat() { clearInterval(beatT); beatT = 0; }
+function showAwayBanner() {
+  const el = $('#awayBanner'); if (!el) return;
+  el.hidden = false;
+  el.innerHTML = `${ic('alert')}<span>Kamu baru saja keluar dari aplikasi. Ini sudah ${Q.awayCount} kali, dan gurumu bisa melihatnya. Yuk, fokus lagi!</span>`;
+  fx(el, 'fx-wrong');
+}
+
 async function withRetry(fn, tries = 3) {
-  for (let i = 0; ; i++) { try { return await fn(); } catch (e) { if (i >= tries - 1) throw e; await new Promise((r) => setTimeout(r, 600 * (i + 1))); } }
+  for (let i = 0; ; i++) { try { return await fn(); } catch (e) { if (i >= tries - 1 || (e.status && e.status < 500)) throw e; await new Promise((r) => setTimeout(r, 600 * (i + 1))); } }
 }
 async function startStudy() {
   let cs = selCards(); if (!S.all) cs = cs.filter(isDue); if (!cs.length) return;
   const btn = document.querySelector('[data-act="start"]'); if (btn) btn.disabled = true;
   const mode = effMode();
   let sid;
-  try { sid = await api.startSession([...new Set(cs.map((c) => c.deck_id))], mode); }
+  try { sid = await api.startSession([...new Set(cs.map((c) => c.deck_id))], mode, cs.length); }
   catch (e) { toast(e.message); if (btn) btn.disabled = false; return; }
-  Q = { sid, queue: shuffle(cs), total: cs.length, done: 0, mode, chain: Promise.resolve(), failed: 0, streak: 0, started: Date.now() };
-  S.view = 'study'; $('#selbar').hidden = true; shell(); renderStudy();
+  Q = { sid, queue: shuffle(cs), total: cs.length, done: 0, mode, chain: Promise.resolve(), failed: 0, streak: 0, awayCount: 0, awayMs: 0, awayStart: 0 };
+  PRES.state = 'active';
+  S.view = 'study'; $('#actionbar').hidden = true; shell(); startBeat(); window.scrollTo(0, 0); renderStudy();
 }
 function cardMode(c) { let m = effMode(); if (m === 'mix') m = ['pic', 'han', 'arti'][(Math.random() * 3) | 0]; if (m === 'pic' && !hasPic(c)) m = 'han'; return m; }
 function frontHTML(c, m) {
@@ -237,25 +269,26 @@ function backHTML(c) {
 const sayText = (c) => (c.mw ? c.h : c.s || c.h);
 function renderStudy() {
   if (!Q.queue.length) { renderDone(); return; }
-  const c = Q.queue[0], d = deckOf(c.deck_id) || { zh: '', color: '#2340b8', cards: [] }, m = cardMode(c);
+  const c = Q.queue[0], d = deckOf(c.deck_id) || { zh: '', color: '#1f3fbf', cards: [] }, m = cardMode(c);
   const canQuiz = SET.quiz_enabled && S.quiz && d.cards.length >= 4;
   Q.cur = { c, m, t0: performance.now(), hidden: 0, answered: !canQuiz, flipped: false, sug: 0 };
   document.documentElement.style.setProperty('--c', d.color);
-  $('#view').innerHTML = `<div class="study" style="--c:${d.color}">
-    <div class="shead"><button class="chip" data-act="quit">${ic('back')} Kategori</button><span class="n">${Q.done}/${Q.total} selesai</span></div>
-    <div class="prog"><i style="width:${(Q.done / Q.total) * 100}%"></i></div>
-    <div class="opts">
+  $('#view').innerHTML = `<div class="study">
+    <div class="study-top"><button class="btn ghost sm" data-act="quit">${ic('back')} Kategori</button><div class="progress"><i style="width:${(Q.done / Q.total) * 100}%"></i></div><span class="count">${Q.done}/${Q.total}</span></div>
+    <div id="awayBanner" class="away-banner" role="status" ${Q.awayCount ? '' : 'hidden'}>${Q.awayCount ? `${ic('alert')}<span>Kamu sudah keluar dari aplikasi ${Q.awayCount} kali di sesi ini. Gurumu bisa melihatnya.</span>` : ''}</div>
+    <div class="study-opts">
       ${SET.student_can_choose && SET.modes.length > 1 ? `<div class="seg" role="group" aria-label="Sisi depan kartu">${SET.modes.map((x) => `<button data-mode="${x}" aria-pressed="${effMode() === x}">${MODE_LABEL[x]}</button>`).join('')}</div>` : ''}
-      ${SET.quiz_enabled ? `<button class="chip" data-act="quiz" aria-pressed="${S.quiz}">Mode tebak</button>` : ''}
-      <button class="chip" data-act="auto" aria-pressed="${S.auto}">${ic('sound')} Ucapan</button>
-      <button class="chip" data-act="sfx" aria-pressed="${S.sfx}">${ic(S.sfx ? 'sound' : 'mute')} Efek</button>
+      <span class="spacer"></span>
+      ${SET.quiz_enabled ? `<button class="chip" data-act="quiz" aria-pressed="${S.quiz}">Tebak</button>` : ''}
+      <button class="chip" data-act="auto" aria-pressed="${S.auto}" aria-label="Ucapan otomatis" title="Ucapan otomatis">${ic('sound')}</button>
+      <button class="chip" data-act="sfx" aria-pressed="${S.sfx}" aria-label="Efek suara" title="Efek suara">${ic(S.sfx ? 'sparkle' : 'mute')}</button>
     </div>
     <div class="stage"><div class="tilt" id="tilt"><div class="fc" id="fc" tabindex="0" role="button" aria-label="Kartu. Ketuk untuk membalik">
-      <div class="face front"><div class="tag">${esc(d.zh)}</div>${frontHTML(c, m)}<div class="hint">${canQuiz ? 'Pilih jawaban di bawah' : 'Ketuk untuk membalik'}</div></div>
-      <div class="face bface"><div class="tag">${esc(d.zh)}</div><button class="say" data-act="say" aria-label="Dengarkan pengucapan">${ic('sound')}</button>${backHTML(c)}</div>
+      <div class="face front"><div class="tag"><span class="dotc" style="--dc:${d.color}"></span>${esc(d.zh)}</div>${frontHTML(c, m)}<div class="hint">${canQuiz ? 'Pilih jawaban di bawah' : 'Ketuk kartu untuk membalik'}</div></div>
+      <div class="face bface"><div class="tag"><span class="dotc" style="--dc:${d.color}"></span>${esc(d.zh)}</div><button class="say" data-act="say" aria-label="Dengarkan pengucapan">${ic('sound')}</button>${backHTML(c)}</div>
     </div></div></div>
-    <div id="ctrl">${canQuiz ? `<div class="quiz" aria-busy="true">${'<button class="qo" disabled><span class="t">…</span></button>'.repeat(4)}</div>` : `<button class="flipbig" data-act="flip">${ic('flip')} Balik kartu</button>`}</div>
-    <div class="keys">Keyboard: Spasi = balik · 1 2 3 4 = jawab/nilai · S = suara</div>
+    <div id="ctrl">${canQuiz ? `<div class="quiz" aria-busy="true">${'<button class="qo skeleton" disabled>…</button>'.repeat(4)}</div>` : `<button class="btn lg flipbtn" data-act="flip">${ic('flip')} Balik kartu</button>`}</div>
+    <div class="keys">Spasi: balik · 1–4: jawab atau nilai · S: dengarkan</div>
   </div>`;
   bindTilt();
   if (m === 'han' && S.auto) speak(c.h);
@@ -264,15 +297,15 @@ function renderStudy() {
 async function loadQuiz(c, m) {
   const cur = Q.cur;
   try {
-    await Q.chain; // nilai kartu sebelumnya sudah tercatat dulu
+    await Q.chain;
     const opts = await withRetry(() => api.quizOptions(Q.sid, c.id));
-    if (Q.cur !== cur) return;
+    if (!Q || Q.cur !== cur) return;
     const showArti = m === 'han';
     $('#ctrl').innerHTML = `<div class="quiz">${opts.map((o) => `<button class="qo" data-t="${esc(o.t)}">${showArti ? `<span class="t">${esc(o.m)}</span>` : `<span class="z">${esc(o.h)}</span>${o.p ? `<span class="y">${esc(o.p)}</span>` : ''}`}</button>`).join('')}</div>`;
   } catch (e) {
-    if (Q.cur !== cur) return;
+    if (!Q || Q.cur !== cur) return;
     cur.answered = true;
-    $('#ctrl').innerHTML = `<p class="note">${esc(e.message)} Mode tebak dilewati untuk kartu ini.</p><button class="flipbig" data-act="flip">${ic('flip')} Balik kartu</button>`;
+    $('#ctrl').innerHTML = `<p class="note" style="margin-top:12px">${esc(e.message)} Tebakan dilewati untuk kartu ini.</p><button class="btn lg flipbtn" data-act="flip">${ic('flip')} Balik kartu</button>`;
   }
 }
 async function answerQuiz(btn) {
@@ -284,14 +317,15 @@ async function answerQuiz(btn) {
   cur.answered = true; cur.busy = false;
   document.querySelectorAll('.qo').forEach((b) => { if (b.dataset.t === res.correct_token) b.classList.add('right'); });
   const tilt = $('#tilt');
+  badgeFx(res.correct);
   if (res.correct) {
     Q.streak++; SFX.right(); fx(tilt, 'fx-right'); tilt.classList.add('glow-good'); cur.sug = 3;
-    if (Q.streak % 5 === 0) { burst(28); cheer(`${Q.streak} benar berturut-turut!`, '#1b9a5a'); }
+    if (Q.streak % 5 === 0) { burst(28); toast(`${Q.streak} jawaban benar berturut-turut!`); }
   } else {
     Q.streak = 0; btn.classList.add('wrong'); SFX.wrong(); fx(tilt, 'fx-wrong'); tilt.classList.add('glow-bad'); cur.sug = 1;
-    try { navigator.vibrate && navigator.vibrate(120); } catch (_) { /* tidak didukung */ }
+    try { if (navigator.vibrate) navigator.vibrate(120); } catch (_) { /* tidak didukung */ }
   }
-  setTimeout(() => { if (Q && Q.cur === cur) { tilt.classList.remove('glow-good', 'glow-bad'); flip(true); } }, res.correct ? 550 : 1000);
+  setTimeout(() => { if (Q && Q.cur === cur) { tilt.classList.remove('glow-good', 'glow-bad'); flip(true); } }, res.correct ? 600 : 1050);
 }
 function flip(force) {
   const cur = Q && Q.cur; if (!cur || !$('#fc')) return;
@@ -301,7 +335,7 @@ function flip(force) {
   if (cur.flipped) {
     if (S.auto) speak(sayText(cur.c));
     $('#ctrl').innerHTML = `<div class="rate">${[1, 2, 3, 4].map((n) => `<button class="rb r${n} ${cur.sug === n ? 'sug' : ''}" data-rate="${n}"><span class="k">${n}</span><span class="l">${RATE[n].l}</span><span class="w">${RATE[n].w}</span></button>`).join('')}</div>`;
-  } else $('#ctrl').innerHTML = `<button class="flipbig" data-act="flip">${ic('flip')} Balik kartu</button>`;
+  } else $('#ctrl').innerHTML = `<button class="btn lg flipbtn" data-act="flip">${ic('flip')} Balik kartu</button>`;
 }
 function rate(n) {
   const cur = Q && Q.cur; if (!cur) return; if (!cur.flipped) { flip(); return; }
@@ -313,147 +347,370 @@ function rate(n) {
   else { SRS[c.id] = { due: Date.now() + RATE[n].days * 864e5, last: n }; Q.done++; }
   const btn = document.querySelector(`.rb[data-rate="${n}"]`); if (btn) btn.classList.add('press');
   const tilt = $('#tilt');
-  ({ 1: () => { SFX.r1(); fx(tilt, 'fx-wrong'); cheer('加油！', '#d9443a'); }, 2: () => { SFX.r2(); fx(tilt, 'fx-lift'); }, 3: () => { SFX.r3(); fx(tilt, 'fx-right'); cheer('很好！', '#24917f'); }, 4: () => { SFX.r4(); fx(tilt, 'fx-right'); burst(); cheer('太棒了！', '#2a6fd0'); } })[n]();
-  setTimeout(renderStudy, n === 1 ? 480 : 380);
+  ({ 1: () => { SFX.r1(); fx(tilt, 'fx-wrong'); }, 2: () => { SFX.r2(); fx(tilt, 'fx-lift'); }, 3: () => { SFX.r3(); fx(tilt, 'fx-right'); }, 4: () => { SFX.r4(); fx(tilt, 'fx-right'); burst(24); } })[n]();
+  setTimeout(renderStudy, n === 1 ? 460 : 360);
 }
 function bindTilt() {
-  const tilt = $('#tilt'), fc = $('#fc'); if (!tilt || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const tilt = $('#tilt'); if (!tilt || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   tilt.addEventListener('pointermove', (e) => {
     if (e.pointerType === 'touch') return;
     const r = tilt.getBoundingClientRect(), px = (e.clientX - r.left) / r.width - 0.5, py = (e.clientY - r.top) / r.height - 0.5;
-    tilt.style.transition = 'none'; tilt.style.transform = `rotateX(${(-py * 7).toFixed(2)}deg) rotateY(${(px * 7).toFixed(2)}deg)`;
-    fc.querySelectorAll('.face').forEach((f) => { f.style.setProperty('--gx', ((px + 0.5) * 100).toFixed(0) + '%'); f.style.setProperty('--gy', ((py + 0.5) * 100).toFixed(0) + '%'); });
+    tilt.style.transition = 'none'; tilt.style.transform = `rotateX(${(-py * 5).toFixed(2)}deg) rotateY(${(px * 5).toFixed(2)}deg)`;
   });
   tilt.addEventListener('pointerleave', () => { tilt.style.transition = ''; tilt.style.transform = ''; });
 }
 async function renderDone() {
-  S.view = 'done';
+  S.view = 'done'; stopBeat();
   $('#view').innerHTML = '<div class="study"><div class="panel done"><p class="note">Menyimpan hasil dan menghitung skor…</p></div></div>';
   await Q.chain;
   let s;
   try { s = await withRetry(() => api.finishSession(Q.sid)); }
-  catch (e) {
-    $('#view').innerHTML = `<div class="study"><div class="panel done"><h2 class="h2">Skor belum tersimpan</h2><p class="sub">${esc(e.message)}</p><button class="btn" data-act="retryfinish">Coba simpan lagi</button></div></div>`; return;
-  }
+  catch (e) { $('#view').innerHTML = `<div class="study"><div class="panel done"><h2 class="h2">Skor belum tersimpan</h2><p class="sub">${esc(e.message)}</p><button class="btn" data-act="retryfinish">Coba simpan lagi</button></div></div>`; return; }
   const pct = s.score ?? 0;
   if (pct >= 75) burst(48);
   const mins = Math.max(1, Math.round((s.seconds || 0) / 60));
   $('#view').innerHTML = `<div class="study"><div class="panel done">
     <div class="ring" style="--p:${pct}"><div>${pct}</div></div>
-    <h2 class="h2 han">${pct >= 85 ? '太棒了！' : pct >= 60 ? '很好！' : '加油！'} Sesi selesai</h2>
-    <p class="sub">${s.total} kartu dalam ${mins} menit${s.quiz_total ? ` · tebakan benar ${s.quiz_right}/${s.quiz_total}` : ''}. Skor dihitung oleh server dari nilai pertama tiap kartu (1=25, 2=50, 3=75, 4=100).</p>
+    <h2 class="h1"><span class="han">${pct >= 85 ? '太棒了！' : pct >= 60 ? '很好！' : '加油！'}</span> Sesi selesai</h2>
+    <p class="sub">${s.total} kartu dalam ${mins} menit${s.quiz_total ? ` · tebakan benar ${s.quiz_right}/${s.quiz_total}` : ''}. Skor dihitung dari nilai pertama tiap kartu.</p>
     <div class="stats">${[1, 2, 3, 4].map((n) => `<div class="r${n}"><b>${s['c' + n]}</b>${RATE[n].l}</div>`).join('')}</div>
-    <div class="ok-line">${ic('check')} Skor tersimpan dan bisa dilihat gurumu</div>
+    ${s.away_count ? `<span class="pill bad"><span class="d"></span>Keluar aplikasi ${s.away_count}× · ${dur(s.away_ms)}</span>` : '<span class="pill good"><span class="d"></span>Fokus penuh, tidak pernah keluar aplikasi</span>'}
+    <span class="ok-line">${ic('check')} Skor tersimpan dan bisa dilihat gurumu</span>
     ${Q.failed ? `<p class="note">${Q.failed} jawaban gagal tersimpan karena koneksi.</p>` : ''}
-    <div class="rowb"><button class="btn ghost" data-act="again">${ic('play')} Ulangi kategori ini</button><button class="btn" data-act="quit">Pilih kategori lain</button></div>
+    <div class="row" style="justify-content:center"><button class="btn secondary" data-act="again">${ic('play')} Ulangi</button><button class="btn" data-act="quit">Pilih kategori lain</button></div>
   </div></div>`;
 }
 
 /* ================= Riwayat ================= */
 async function renderHist() {
-  $('#selbar').hidden = true; document.documentElement.style.setProperty('--c', '#2340b8');
-  $('#view').innerHTML = '<h2 class="h2">Riwayat belajarmu</h2><div class="panel" style="margin-top:14px"><p class="note">Memuat…</p></div>';
+  $('#actionbar').hidden = true; document.documentElement.style.setProperty('--c', 'var(--brand)');
+  const head = (n) => `<div class="page-head"><div><p class="eyebrow">Riwayat</p><h1 class="h1">Perkembanganmu</h1>${n !== undefined ? `<p class="sub">${n} sesi selesai.</p>` : ''}</div></div>`;
+  $('#view').innerHTML = head() + '<div class="panel"><p class="note">Memuat…</p></div>';
   let rows = [];
   try { rows = await api.mySessions(); } catch (e) { toast(e.message); }
   if (S.view !== 'hist') return;
-  const nm = (id) => deckOf(id)?.zh || id;
+  const nm = (id) => deckOf(id)?.zh || 'Kategori terhapus';
   const pts = rows.slice().reverse().map((r) => ({ x: Date.parse(r.started_at), y: r.score ?? 0 }));
-  $('#view').innerHTML = `<h2 class="h2">Riwayat belajarmu</h2><p class="sub">${rows.length} sesi tersimpan.</p>
-    ${rows.length > 1 ? `<div class="panel" style="margin-top:14px"><h3 style="margin:0 0 8px">Perkembangan skor</h3>${lineChart(pts)}</div>` : ''}
-    <div class="panel" style="margin-top:14px">${rows.length ? `<div class="tablewrap"><table class="table"><thead><tr><th>Tanggal</th><th>Kategori</th><th>Kartu</th><th>Skor</th></tr></thead><tbody>
-    ${rows.map((r) => `<tr><td>${esc(fmtDate(r.started_at))}</td><td class="han">${esc(r.decks.map(nm).join('、'))}</td><td>${r.total}</td><td>${scorePill(r.score)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="note">Belum ada sesi. Pilih kategori di menu Belajar untuk mulai.</p>'}</div>`;
+  $('#view').innerHTML = `${head(rows.length)}
+    ${rows.length > 1 ? `<div class="panel"><div class="panel-head"><h2 class="h3">Skor dari waktu ke waktu</h2></div>${lineChart(pts)}</div>` : ''}
+    <div class="panel">${rows.length ? `<div class="tablewrap"><table class="table"><thead><tr><th>Tanggal</th><th>Kategori</th><th>Kartu</th><th>Keluar app</th><th>Skor</th></tr></thead><tbody>
+    ${rows.map((r) => `<tr><td>${esc(fmtDate(r.started_at))}</td><td class="han">${esc(r.decks.map(nm).join('、'))}</td><td>${r.total}</td><td>${r.away_count ? `${r.away_count}×` : '–'}</td><td>${scoreTag(r.score)}</td></tr>`).join('')}</tbody></table></div>`
+    : '<div class="empty"><b>Belum ada sesi</b>Pilih kategori di menu Belajar untuk mulai.</div>'}</div>`;
 }
-const scorePill = (v) => `<span class="pill" style="background:${v >= 75 ? 'var(--good)' : v >= 50 ? 'var(--warn)' : 'var(--bad)'}">${v ?? 0}</span>`;
+
+/* ================= Kartu (editor) ================= */
+const ED = { deck: null, tab: 'add', text: '', rows: [], cache: {}, note: '', newOpen: false, newColor: COLORS[0], list: [], armDeck: false, armCard: null, renameColor: null };
+const EMOJIS = '🍎🍌🍊🍇🍉🍓🍒🍑🥭🍍🥥🥝🥑🍋🥕🌽🥦🥬🥒🍆🍅🥔🧅🧄🍄🥜🍚🍜🍞🥟🍗🍔🍕🍟🍰🍪🍫🍬🍦🥛☕🍵🧃💧🐶🐱🐭🐰🐼🐻🐨🐯🦁🐮🐷🐵🐔🐦🐧🦆🐟🐬🐳🦋🐝🐞🐍🐢🦒🐘🦓🐴🦄📚✏️🖊️📏✂️📎🎒💻📱⌚🔑🚪🪑🛏️💡📺🚗🚌🚲✈️🚢🚀⚽🏀🎸🎹🎨🎁🎈☀️🌙⭐☁️🌧️❄️🌈🔥🌳🌸🏠🏫🏥👨👩👦👧👶👴👵🙂😄😢😠😮😴🤒😋❤️👍👋🙏👀👂👃👄✋🦶'.match(/\p{Extended_Pictographic}️?(?:‍\p{Extended_Pictographic}️?)*/gu);
+const editableDecks = () => DECKS.filter((d) => d.editable);
+function statusPill(d) {
+  if (!d.owner_id) return '<span class="pill good"><span class="d"></span>Tampil untuk murid</span>';
+  return { public: '<span class="pill good"><span class="d"></span>Disetujui · tampil untuk murid</span>', pending: '<span class="pill warn"><span class="d"></span>Menunggu persetujuan guru</span>', private: '<span class="pill mute"><span class="d"></span>Pribadi · hanya kamu</span>' }[d.status] || '';
+}
+function renderCards() {
+  $('#actionbar').hidden = true; document.documentElement.style.setProperty('--c', 'var(--brand)');
+  const ds = editableDecks();
+  if (ED.deck && !ds.some((d) => d.id === ED.deck)) ED.deck = null;
+  if (!ED.deck && ds.length && !isTeacher()) ED.deck = ds[0].id;
+  const d = deckOf(ED.deck);
+  $('#view').innerHTML = `<div class="page-head"><div><p class="eyebrow">${isTeacher() ? 'Kelola kartu' : 'Kartu saya'}</p><h1 class="h1">Buat & atur kartu</h1>
+      <p class="sub">${isTeacher() ? 'Tulis satu kata per baris, terjemahan muncul otomatis. Semuanya bisa diedit sebelum disimpan.' : 'Buat kategori sendiri. Setelah selesai, minta persetujuan guru supaya teman sekelas juga bisa memakainya.'}</p></div></div>
+  <div class="editor">
+    <aside class="panel" style="padding:12px">
+      <button class="btn sm" style="width:100%;margin-bottom:10px" data-act="newdeck">${ic('plus')} Kategori baru</button>
+      <form id="newDeckForm" class="stack" ${ED.newOpen ? '' : 'hidden'} style="padding:4px 4px 12px" novalidate>
+        <label class="field" for="ndz">Nama Mandarin<input id="ndz" maxlength="16" placeholder="学校"></label>
+        <label class="field" for="ndi">Nama Indonesia<input id="ndi" maxlength="40" placeholder="Sekolah"></label>
+        <div class="swatches">${COLORS.map((c) => `<button type="button" class="sw" data-ncolor="${c}" style="background:${c}" aria-pressed="${ED.newColor === c}" aria-label="Warna ${c}"></button>`).join('')}</div>
+        <button class="btn sm" type="submit">Buat kategori</button>
+      </form>
+      <nav class="decklist" aria-label="Kategori">${ds.map((k) => `<button data-edeck="${esc(k.id)}" aria-current="${ED.deck === k.id}" style="--dc:${k.color}"><span class="dotc"></span><span><span class="zh">${esc(k.zh)}</span> <span class="note">${esc(k.idn)}</span></span><span class="n">${k.status === 'pending' ? '<span class="pill warn" style="height:20px">menunggu</span>' : k.cards.length}</span></button>`).join('') || '<p class="note" style="padding:8px">Belum ada kategori. Buat yang pertama.</p>'}</nav>
+    </aside>
+    <section id="deckPane" style="min-width:0">${d ? deckPane(d) : '<div class="panel empty"><b>Pilih atau buat kategori</b>Kartu disimpan di dalam kategori.</div>'}</section>
+  </div>`;
+  if (d) bindDeckPane(d);
+  $('#newDeckForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const zh = $('#ndz').value.trim(); if (!zh) { toast('Isi nama Mandarin kategori.'); return; }
+    try { const r = await api.createDeck({ zh, idn: $('#ndi').value.trim(), color: ED.newColor }); ED.deck = r.id; ED.newOpen = false; ED.tab = 'add'; await reloadContent(); toast('Kategori dibuat. Sekarang tambahkan kartu.'); renderCards(); }
+    catch (err) { toast(err.message); }
+  });
+}
+function deckPane(d) {
+  return `<div class="panel">
+    <div class="panel-head"><div class="row"><span class="dotc" style="--dc:${d.color};width:12px;height:12px"></span><h2 class="h2 han">${esc(d.zh)}</h2><span class="note">${esc(d.idn)}</span></div>${statusPill(d)}</div>
+    <div class="row">
+      ${d.owner_id && !isTeacher() && d.status === 'private' ? `<button class="btn sm" data-act="submitdeck">${ic('send')} Minta persetujuan guru</button>` : ''}
+      ${d.owner_id && !isTeacher() && d.status !== 'private' ? '<span class="note">Setiap perubahan perlu disetujui guru lagi.</span>' : ''}
+      <span class="spacer"></span>
+      <button class="chip" data-act="renamedeck">${ic('edit')} Ubah nama</button>
+      <button class="chip danger" data-act="deldeck" data-armed="${ED.armDeck ? 1 : 0}">${ic('trash')} ${ED.armDeck ? 'Ketuk lagi untuk menghapus' : 'Hapus kategori'}</button>
+    </div>
+    <form id="renameForm" class="formgrid" hidden style="margin-top:14px" novalidate>
+      <label class="field" for="rdz">Nama Mandarin<input id="rdz" maxlength="16" value="${esc(d.zh)}"></label>
+      <label class="field" for="rdi">Nama Indonesia<input id="rdi" maxlength="40" value="${esc(d.idn)}"></label>
+      <div class="field">Warna<div class="swatches">${COLORS.map((c) => `<button type="button" class="sw" data-rcolor="${c}" style="background:${c}" aria-pressed="${(ED.renameColor || d.color) === c}" aria-label="Warna ${c}"></button>`).join('')}</div></div>
+      <div class="field" style="justify-content:flex-end"><button class="btn sm" type="submit">Simpan nama</button></div>
+    </form>
+  </div>
+  <div class="tabs" role="tablist" style="margin-top:16px">
+    <button role="tab" data-etab="add" aria-selected="${ED.tab === 'add'}">${ic('plus')} Tambah kartu</button>
+    <button role="tab" data-etab="list" aria-selected="${ED.tab === 'list'}">${ic('list')} Daftar kartu <span class="note">${d.cards.length}</span></button>
+  </div>
+  <div id="etab">${ED.tab === 'add' ? bulkHTML() : listHTML(d)}</div>`;
+}
+const HEAD = '<div class="rows-head"><span></span><span>汉字</span><span>Pinyin</span><span>Arti</span><span>量词</span><span></span></div>';
+function bulkHTML() {
+  return `<div class="bulk">
+    <div class="stack">
+      <label class="field" for="bulkText">Satu kata per baris<textarea id="bulkText" spellcheck="false" placeholder="我&#10;他&#10;你&#10;骄傲&#10;apel">${esc(ED.text)}</textarea></label>
+      <p class="note">Boleh hanzi atau bahasa Indonesia. Pinyin dan arti terisi otomatis, dan semuanya bisa kamu ubah.</p>
+      <button class="switch" role="switch" aria-checked="${S.hints}" data-act="hints"><span class="track"></span>Pakai saran gambar & emoji</button>
+    </div>
+    <div class="stack" style="min-width:0">${HEAD}
+      <div class="rows" id="rows">${rowsHTML()}</div>
+      <div class="row"><span class="note" id="bulkNote">${esc(ED.note)}</span><span class="spacer"></span><button class="btn" data-act="savebulk" ${ED.rows.length ? '' : 'disabled'}>${ic('check')} Simpan ${ED.rows.length || ''} kartu</button></div>
+    </div>
+  </div>`;
+}
+const rowPic = (r) => (r.picSet !== undefined ? r.picSet : S.hints ? r.pic || r.emoji || '' : '');
+function rowHTML(r, i, kind) {
+  const p = kind === 'new' ? rowPic(r) : r.pic || '';
+  const ph = p ? picHTML({ pic: p }) || ic('smile') : ic('smile');
+  const src = kind === 'new' ? ({ kamus: 'Dari kamus Alvaro', ai: 'Terjemahan otomatis · periksa lagi', manual: r.m ? 'Diisi manual' : 'Arti belum ditemukan, isi sendiri' }[r.from] || '') : '';
+  const armed = kind === 'old' && ED.armCard === r.id;
+  return `<div class="crow" data-row="${i}" data-kind="${kind}">
+    <button class="emo-btn" data-emo="${i}" aria-label="Pilih gambar atau emoji (opsional)" title="Gambar/emoji (opsional)">${ph}</button>
+    <input class="hz ${r.h ? '' : 'miss'}" data-f="h" value="${esc(r.h)}" maxlength="12" aria-label="Hanzi">
+    <input class="py" data-f="p" value="${esc(r.p)}" maxlength="60" aria-label="Pinyin" placeholder="pinyin">
+    <input class="mean ${r.m ? '' : 'miss'}" data-f="m" value="${esc(r.m)}" maxlength="60" aria-label="Arti" placeholder="arti">
+    <input class="mwi" data-f="mw" value="${esc(r.mw)}" maxlength="2" aria-label="Kata satuan" placeholder="–">
+    <button class="x" data-rm="${i}" aria-label="${kind === 'new' ? 'Hapus baris' : armed ? 'Ketuk lagi untuk menghapus kartu' : 'Hapus kartu'}" ${armed ? 'style="background:var(--bad);color:#fff"' : ''}>${ic(armed ? 'trash' : 'x')}</button>
+    ${src ? `<span class="src">${src}</span>` : ''}
+  </div>`;
+}
+function rowsHTML() {
+  if (!ED.rows.length) return '<div class="empty" style="border:1px dashed var(--line-2);border-radius:16px"><b>Belum ada kata</b>Ketik di kotak sebelah, satu kata per baris.</div>';
+  return ED.rows.map((r, i) => rowHTML(r, i, 'new')).join('');
+}
+function listHTML(d) {
+  ED.list = d.cards.map((c) => ({ ...c }));
+  if (!ED.list.length) return '<div class="panel empty"><b>Kategori ini masih kosong</b>Buka "Tambah kartu" untuk mulai.</div>';
+  return `<div class="stack">${HEAD}<div class="rows" id="listRows">${ED.list.map((r, i) => rowHTML(r, i, 'old')).join('')}</div><p class="note">Perubahan tersimpan otomatis saat kamu pindah kolom.</p></div>`;
+}
+let trT = 0;
+function bindDeckPane(d) {
+  const ta = $('#bulkText');
+  if (ta) ta.addEventListener('input', () => { ED.text = ta.value; clearTimeout(trT); trT = setTimeout(syncRows, 650); });
+  $('#renameForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try { await api.updateDeck({ id: d.id, zh: $('#rdz').value, idn: $('#rdi').value, color: ED.renameColor || d.color }); ED.renameColor = null; await reloadContent(); toast('Nama kategori disimpan.'); renderCards(); }
+    catch (err) { toast(err.message); }
+  });
+}
+async function syncRows() {
+  const lines = [...new Set(ED.text.split(/\r?\n/).map((s) => s.trim()).filter(Boolean))].slice(0, 100);
+  const missing = lines.filter((l) => !ED.cache[l]);
+  if (missing.length) {
+    const note = $('#bulkNote'); if (note) note.textContent = `Menerjemahkan ${missing.length} kata…`;
+    try {
+      for (let i = 0; i < missing.length; i += 60) {
+        const part = missing.slice(i, i + 60);
+        const r = await api.translate(part);
+        part.forEach((line, k) => { const it = r.items[k]; if (it) ED.cache[line] = { ...it, line }; });
+        ED.note = !r.ai && r.items.some((x) => x.from === 'manual') ? 'Terjemahan otomatis (AI) belum aktif. Kata di luar kamus perlu diisi artinya.'
+          : r.aiError ? 'Terjemahan otomatis sedang gangguan. Isi arti yang kosong secara manual.' : '';
+      }
+    } catch (e) { ED.note = e.message; }
+  }
+  ED.rows = lines.map((l) => ED.cache[l]).filter(Boolean);
+  if (S.view !== 'cards' || ED.tab !== 'add' || !$('#rows')) return;
+  $('#rows').innerHTML = rowsHTML();
+  $('#bulkNote').textContent = ED.note || '';
+  const sb = document.querySelector('[data-act="savebulk"]');
+  sb.disabled = !ED.rows.length; sb.innerHTML = `${ic('check')} Simpan ${ED.rows.length || ''} kartu`;
+}
+async function saveBulk() {
+  const bad = ED.rows.findIndex((r) => !r.h || !r.m);
+  if (bad >= 0) { toast(`Baris ${bad + 1} belum lengkap. 汉字 dan arti wajib diisi.`); const el = document.querySelector(`.crow[data-row="${bad}"] input.miss`); if (el) el.focus(); return; }
+  const btn = document.querySelector('[data-act="savebulk"]'); btn.disabled = true;
+  try {
+    let added = 0, skipped = [];
+    for (let i = 0; i < ED.rows.length; i += 100) {
+      const r = await api.bulkCards(ED.deck, ED.rows.slice(i, i + 100).map((x) => ({ h: x.h, p: x.p, m: x.m, mw: x.mw, pic: rowPic(x) })));
+      added += r.added; skipped = skipped.concat(r.skipped);
+    }
+    ED.text = ''; ED.rows = []; ED.cache = {}; ED.note = '';
+    await reloadContent(); renderCards();
+    toast(`${added} kartu tersimpan.${skipped.length ? ` ${skipped.length} dilewati karena sudah ada (${skipped.slice(0, 3).join('、')}${skipped.length > 3 ? '…' : ''}).` : ''}`);
+  } catch (err) { toast(err.message); btn.disabled = false; }
+}
+document.addEventListener('change', async (e) => {
+  const inp = e.target.closest('.crow input'); if (!inp) return;
+  const rowEl = inp.closest('.crow'), i = +rowEl.dataset.row, f = inp.dataset.f, kind = rowEl.dataset.kind;
+  const r = kind === 'new' ? ED.rows[i] : ED.list[i]; if (!r) return;
+  r[f] = inp.value.trim();
+  inp.classList.toggle('miss', (f === 'h' || f === 'm') && !r[f]);
+  if (kind === 'new') return;
+  try { await api.updateCard({ id: r.id, h: r.h, p: r.p, m: r.m, mw: r.mw, pic: r.pic || '' }); rowEl.classList.add('saved'); setTimeout(() => rowEl.classList.remove('saved'), 900); reloadContent().catch(() => {}); }
+  catch (err) { toast(err.message); }
+});
+
+/* ---- pemilih gambar/emoji (opsional) ---- */
+let EMO_TARGET = null;
+function openEmoji(btn) {
+  closeEmoji();
+  const rowEl = btn.closest('.crow'); EMO_TARGET = { i: +rowEl.dataset.row, kind: rowEl.dataset.kind };
+  const pop = document.createElement('div'); pop.className = 'emoji-pop'; pop.id = 'emojiPop'; pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', 'Pilih gambar atau emoji');
+  pop.innerHTML = `<div class="grid">${EMOJIS.map((x) => `<button type="button" data-pick-emo="${x}">${x}</button>`).join('')}</div>
+    <div class="bar2"><input id="emoIn" maxlength="8" placeholder="Emoji lain" aria-label="Emoji lain"><label class="btn sm secondary" for="emoFile" style="cursor:pointer">${ic('image')} Foto</label><input id="emoFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden><button type="button" class="btn sm ghost" data-pick-emo="">Tanpa</button></div>`;
+  document.body.appendChild(pop);
+  const r = btn.getBoundingClientRect();
+  pop.style.left = Math.max(8, Math.min(window.innerWidth - 298, r.left)) + 'px';
+  pop.style.top = (r.bottom + 266 > window.innerHeight ? Math.max(8, r.top - 266) : r.bottom + 6) + 'px';
+  $('#emoIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); setPic($('#emoIn').value.trim()); } });
+  $('#emoFile').addEventListener('change', async (e) => {
+    const f = e.target.files && e.target.files[0]; if (!f) return;
+    toast('Mengunggah foto…');
+    try { setPic(await api.uploadImage(f)); toast('Foto dipakai.'); } catch (err) { toast(err.message); }
+  });
+}
+function closeEmoji() { const p = $('#emojiPop'); if (p) p.remove(); }
+async function setPic(v) {
+  const t = EMO_TARGET; closeEmoji(); if (!t) return;
+  if (v && !/^\/api\/img\/[a-f0-9]{32}$/.test(v) && !/^\p{Extended_Pictographic}/u.test(v)) { toast('Pakai satu emoji saja.'); return; }
+  if (t.kind === 'new') { const r = ED.rows[t.i]; if (!r) return; r.picSet = v; $('#rows').innerHTML = rowsHTML(); return; }
+  const r = ED.list[t.i]; if (!r) return; r.pic = v;
+  try { await api.updateCard({ id: r.id, h: r.h, p: r.p, m: r.m, mw: r.mw, pic: v }); await reloadContent(); $('#etab').innerHTML = listHTML(deckOf(ED.deck)); toast('Gambar kartu diganti.'); }
+  catch (err) { toast(err.message); }
+}
 
 /* ================= Guru ================= */
 const TF = Object.assign({ days: 30, cls: '', student: '' }, store.get('tf', {}));
-let editDeck = null, armed = null, pendingPic = '', newColor = COLORS[5], lastCred = null, SESS = [];
+let armed = null, lastCred = null, SESS = [], liveT = 0, DRAFT = null;
+function stopLive() { clearInterval(liveT); liveT = 0; }
+const TTABS = [['live', 'eye', 'Pantau langsung'], ['students', 'users', 'Murid'], ['scores', 'chart', 'Skor'], ['time', 'clock', 'Grafik waktu'], ['approve', 'inbox', 'Persetujuan'], ['settings', 'gear', 'Pengaturan']];
 async function renderTeach() {
-  $('#selbar').hidden = true; document.documentElement.style.setProperty('--c', '#2340b8');
-  const tabs = [['students', 'users', 'Murid'], ['scores', 'chart', 'Skor'], ['time', 'clock', 'Grafik waktu'], ['settings', 'gear', 'Pengaturan'], ['cards', 'cards', 'Kartu']];
-  $('#view').innerHTML = `<h2 class="h2">Panel guru</h2><p class="sub">Perubahan pengaturan dan kartu langsung berlaku untuk semua murid.</p>
-    <div class="tabs">${tabs.map(([k, i, l]) => `<button class="chip" data-ttab="${k}" aria-pressed="${S.ttab === k}">${ic(i)} ${l}</button>`).join('')}</div><div id="tview"><p class="note">Memuat…</p></div>`;
+  $('#actionbar').hidden = true; document.documentElement.style.setProperty('--c', 'var(--brand)');
+  if (!TTABS.some(([k]) => k === S.ttab)) S.ttab = 'live';
+  const pend = pendingCount();
+  $('#view').innerHTML = `<div class="page-head"><div><p class="eyebrow">Panel guru</p><h1 class="h1">Halo, ${esc(ME.display_name)}</h1><p class="sub">Pengaturan dan kartu yang kamu ubah langsung berlaku untuk semua murid.</p></div></div>
+    <div class="tabs" role="tablist">${TTABS.map(([k, i, l]) => `<button role="tab" data-ttab="${k}" aria-selected="${S.ttab === k}">${ic(i)} ${l}${k === 'approve' && pend ? `<span class="n">${pend}</span>` : ''}</button>`).join('')}</div><div id="tview"><p class="note">Memuat…</p></div>`;
   armed = null;
-  const tab = S.ttab, draw = () => ({ students: tStudents, scores: tScores, time: tTime, settings: tSettings, cards: tCards })[tab]();
-  if (tab === 'settings' || tab === 'cards') { draw(); return; }
+  const tab = S.ttab, draw = () => ({ live: tLive, students: tStudents, scores: tScores, time: tTime, approve: tApprove, settings: tSettings })[tab]();
+  if (['settings', 'approve', 'live'].includes(tab)) { draw(); return; }
   try { STUDENTS = await api.students(); } catch (e) { toast(e.message); }
   if (S.view === 'teach' && S.ttab === tab) draw();
 }
 const classes = () => [...new Set(STUDENTS.map((s) => s.class_name).filter(Boolean))].sort();
 const sName = (id) => STUDENTS.find((s) => s.id === id)?.display_name || 'Murid terhapus';
-function filtersHTML(withStudent = true) {
-  return `<div class="filters">
-    <label class="field" for="fdays">Periode<select id="fdays">${[7, 30, 90, 365].map((d) => `<option value="${d}" ${TF.days === d ? 'selected' : ''}>${d === 365 ? '1 tahun' : d + ' hari'}</option>`).join('')}</select></label>
-    <label class="field" for="fcls">Kelas<select id="fcls"><option value="">Semua kelas</option>${classes().map((c) => `<option ${TF.cls === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
-    ${withStudent ? `<label class="field" for="fstu">Murid<select id="fstu"><option value="">Semua murid</option>${STUDENTS.filter((s) => !TF.cls || s.class_name === TF.cls).map((s) => `<option value="${esc(s.id)}" ${TF.student === s.id ? 'selected' : ''}>${esc(s.display_name)}</option>`).join('')}</select></label>` : ''}
-  </div>`;
-}
-function bindFilters(redraw) {
-  ['fdays', 'fcls', 'fstu'].forEach((id) => { const el = $('#' + id); if (el) el.addEventListener('change', () => { TF.days = +$('#fdays').value; TF.cls = $('#fcls').value; TF.student = $('#fstu') ? $('#fstu').value : ''; if (TF.student && TF.cls && STUDENTS.find((s) => s.id === TF.student)?.class_name !== TF.cls) TF.student = ''; store.set('tf', TF); redraw(); }); });
+
+/* ---- Pantau langsung ---- */
+async function tLive() {
+  const draw = async () => {
+    if (S.view !== 'teach' || S.ttab !== 'live') { stopLive(); return; }
+    let d; try { d = await api.live(); } catch (_) { return; }
+    const v = $('#tview'); if (!v || S.ttab !== 'live' || S.view !== 'teach') return;
+    const now = d.now, nm = (id) => deckOf(id)?.zh || id;
+    const active = d.runs.filter((r) => !r.finished_at), done = d.runs.filter((r) => r.finished_at);
+    const awayNow = (r) => r.state === 'away' && now - r.last_seen <= 60000;
+    const status = (r) => {
+      if (awayNow(r)) return `<span class="pill bad pulse"><span class="d"></span>Keluar aplikasi · ${dur(now - (r.state_since || now))}</span>`;
+      if (now - r.last_seen > 60000) return `<span class="pill mute"><span class="d"></span>Tidak aktif · ${dur(now - r.last_seen)}</span>`;
+      return '<span class="pill good pulse"><span class="d"></span>Sedang belajar</span>';
+    };
+    v.innerHTML = `<div class="kpis"><div class="kpi"><b>${active.length}</b><span>sesi berjalan</span></div><div class="kpi"><b style="color:${active.some(awayNow) ? 'var(--bad)' : 'inherit'}">${active.filter(awayNow).length}</b><span>keluar aplikasi sekarang</span></div><div class="kpi"><b>${done.length}</b><span>selesai 30 menit terakhir</span></div></div>
+      <div class="panel-head"><h2 class="h3">Sesi berjalan</h2><span class="note">Diperbarui ${new Date(now).toLocaleTimeString('id-ID')} · otomatis tiap 5 detik</span></div>
+      ${active.length ? `<div class="live">${active.map((r) => `<div class="lv ${awayNow(r) ? 'away' : ''}">
+        <div class="who"><div class="avatar">${initial(r.name)}</div><div><b>${esc(r.name)}</b><span>${esc(r.class_name || 'Tanpa kelas')} · <span class="han">${esc(r.decks.map(nm).join('、'))}</span></span></div></div>
+        <div>${status(r)}</div>
+        <div class="prog"><i style="width:${r.planned ? Math.min(100, (r.done / r.planned) * 100) : 0}%"></i></div>
+        <div class="foot"><span>${r.done}${r.planned ? `/${r.planned}` : ''} kartu · mulai ${new Date(r.started_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span><span style="color:${r.away_count ? 'var(--bad)' : 'inherit'}">Keluar ${r.away_count}× · ${dur(r.away_ms + (r.state === 'away' ? now - (r.state_since || now) : 0))}</span></div>
+      </div>`).join('')}</div>` : '<div class="panel empty"><b>Belum ada yang belajar</b>Sesi murid muncul di sini begitu mereka menekan Mulai.</div>'}
+      ${done.length ? `<div class="panel" style="margin-top:16px"><div class="panel-head"><h2 class="h3">Baru selesai</h2></div><div class="tablewrap"><table class="table"><thead><tr><th>Murid</th><th>Selesai</th><th>Kartu</th><th>Keluar app</th><th>Skor</th></tr></thead><tbody>
+        ${done.map((r) => `<tr><td><b>${esc(r.name)}</b></td><td>${new Date(r.finished_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</td><td>${r.total}</td><td>${r.away_count ? `<span class="pill bad">${r.away_count}× · ${dur(r.away_ms)}</span>` : '<span class="pill good">0×</span>'}</td><td>${scoreTag(r.score)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
+  };
+  stopLive(); await draw(); if (S.view === 'teach' && S.ttab === 'live') liveT = setInterval(draw, 5000);
 }
 
 /* ---- Murid ---- */
 function tStudents() {
-  const v = $('#tview');
-  v.innerHTML = `<div class="grid2">
-    <form class="panel" id="newStu" novalidate><h3 style="margin:0 0 10px">Buat akun murid</h3>
+  $('#tview').innerHTML = `<div class="grid2">
+    <form class="panel stack" id="newStu" novalidate><h2 class="h3">Buat akun murid</h2>
       <div class="formgrid">
         <label class="field" for="sn">Nama murid<input id="sn" maxlength="40" required placeholder="Budi Santoso"></label>
         <label class="field" for="su">Username<input id="su" maxlength="24" autocapitalize="none" spellcheck="false" required placeholder="budi.s"></label>
         <label class="field" for="sc">Kelas<input id="sc" maxlength="30" list="clslist" placeholder="3A"></label>
       </div><datalist id="clslist">${classes().map((c) => `<option value="${esc(c)}">`).join('')}</datalist>
-      <p class="note">Password dibuat acak oleh server dan hanya ditampilkan sekali. Catat atau salin untuk muridmu.</p>
-      <button class="btn" type="submit">${ic('plus')} Buat akun</button></form>
-    <div class="panel"><h3 style="margin:0 0 10px">Akun baru / password baru</h3><div id="credBox">${lastCred ? credHTML(lastCred) : '<p class="note">Username dan password akan muncul di sini.</p>'}</div></div>
+      <p class="note">Password dibuat acak oleh server dan hanya tampil sekali.</p>
+      <div><button class="btn" type="submit">${ic('plus')} Buat akun</button></div></form>
+    <div class="panel"><h2 class="h3" style="margin-bottom:12px">Akun baru / password baru</h2><div id="credBox">${lastCred ? credHTML(lastCred) : '<p class="note">Username dan password muncul di sini. Salin lalu kirim ke murid.</p>'}</div></div>
   </div>
-  <div class="panel" style="margin-top:14px"><h3 style="margin:0 0 10px">${STUDENTS.length} murid</h3>
-  ${STUDENTS.length ? `<div class="tablewrap"><table class="table"><thead><tr><th>Nama</th><th>Username</th><th>Kelas</th><th>Status</th><th>Aksi</th></tr></thead><tbody>
-  ${STUDENTS.map((s) => `<tr><td><b>${esc(s.display_name)}</b></td><td><code>${esc(s.username)}</code></td><td>${esc(s.class_name || '-')}</td><td>${s.active ? '<span class="pill" style="background:var(--good)">Aktif</span>' : '<span class="pill" style="background:var(--muted)">Nonaktif</span>'}</td>
-    <td><div class="actions">
+  <div class="panel"><div class="panel-head"><h2 class="h3">${STUDENTS.length} murid</h2><span class="note">"Boleh buat kartu" mengizinkan murid membuat kategori sendiri.</span></div>
+  ${STUDENTS.length ? `<div class="tablewrap"><table class="table"><thead><tr><th>Nama</th><th>Username</th><th>Kelas</th><th>Status</th><th>Boleh buat kartu</th><th>Aksi</th></tr></thead><tbody>
+  ${STUDENTS.map((s) => `<tr><td><b>${esc(s.display_name)}</b></td><td><code>${esc(s.username)}</code></td><td>${esc(s.class_name || '–')}</td>
+    <td>${s.active ? '<span class="pill good">Aktif</span>' : '<span class="pill mute">Nonaktif</span>'}</td>
+    <td><button class="switch" role="switch" aria-checked="${!!s.can_create}" data-sact="create" data-id="${esc(s.id)}" aria-label="Izinkan ${esc(s.display_name)} membuat kartu"><span class="track"></span></button></td>
+    <td><div class="row" style="flex-wrap:nowrap">
       <button class="chip" data-sact="reset" data-id="${esc(s.id)}">${ic('key')} Password baru</button>
       <button class="chip" data-sact="${s.active ? 'off' : 'on'}" data-id="${esc(s.id)}">${s.active ? 'Nonaktifkan' : 'Aktifkan'}</button>
       <button class="chip" data-sact="rename" data-id="${esc(s.id)}">Ubah</button>
-      <button class="chip danger" data-sact="delete" data-id="${esc(s.id)}" data-armed="${armed === 'del:' + s.id ? 1 : 0}">${ic('trash')} ${armed === 'del:' + s.id ? 'Yakin? Ketuk lagi' : 'Hapus'}</button>
-    </div></td></tr>`).join('')}</tbody></table></div>` : '<p class="note">Belum ada murid. Buat akun pertama di atas.</p>'}</div>`;
+      <button class="chip danger" data-sact="delete" data-id="${esc(s.id)}" data-armed="${armed === 'del:' + s.id ? 1 : 0}">${ic('trash')} ${armed === 'del:' + s.id ? 'Ketuk lagi' : 'Hapus'}</button>
+    </div></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty"><b>Belum ada murid</b>Buat akun pertama di atas.</div>'}</div>`;
   $('#sn').addEventListener('input', (e) => { const u = $('#su'); if (!u.dataset.touched) u.value = e.target.value.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '.').replace(/^\.|\.$/g, '').slice(0, 24); });
   $('#su').addEventListener('input', (e) => { e.target.dataset.touched = '1'; });
   $('#newStu').addEventListener('submit', async (e) => {
-    e.preventDefault(); const btn = e.target.querySelector('button'); btn.disabled = true;
-    try { const r = await api.manage('create', { display_name: $('#sn').value, username: $('#su').value, class_name: $('#sc').value }); lastCred = { name: $('#sn').value.trim(), username: r.username, password: r.password }; STUDENTS = await api.students(); toast('Akun dibuat'); tStudents(); }
+    e.preventDefault(); const btn = e.target.querySelector('button[type=submit]'); btn.disabled = true;
+    try { const r = await api.manage('create', { display_name: $('#sn').value, username: $('#su').value, class_name: $('#sc').value }); lastCred = { name: $('#sn').value.trim(), username: r.username, password: r.password }; STUDENTS = await api.students(); toast('Akun dibuat.'); tStudents(); }
     catch (err) { toast(err.message); btn.disabled = false; }
   });
 }
 function credHTML(c) {
-  return `<div class="cred"><div><b>${esc(c.name)}</b><div>Username: <code>${esc(c.username)}</code></div><div>Password: <code>${esc(c.password)}</code></div></div>
-    <button class="chip" data-act="copycred">${ic('copy')} Salin</button></div><p class="note" style="margin-top:8px">Password ini tidak akan ditampilkan lagi. Kalau lupa, buat password baru.</p>`;
+  return `<div class="cred"><div><b>${esc(c.name)}</b><div>Username <code>${esc(c.username)}</code></div><div style="margin-top:4px">Password <code>${esc(c.password)}</code></div></div>
+    <button class="btn sm secondary" data-act="copycred">${ic('copy')} Salin</button></div><p class="note" style="margin-top:8px">Password ini tidak akan tampil lagi. Kalau lupa, buat password baru.</p>`;
+}
+function renameStudent(s) {
+  const box = $('#credBox');
+  box.innerHTML = `<form id="renForm" class="stack" novalidate><div class="formgrid"><label class="field" for="rn">Nama<input id="rn" maxlength="40" value="${esc(s.display_name)}"></label><label class="field" for="rc">Kelas<input id="rc" maxlength="30" value="${esc(s.class_name || '')}"></label></div><div><button class="btn sm" type="submit">${ic('check')} Simpan</button></div></form>`;
+  box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  $('#renForm').addEventListener('submit', async (e) => { e.preventDefault(); try { await api.manage('rename', { id: s.id, display_name: $('#rn').value, class_name: $('#rc').value }); STUDENTS = await api.students(); toast('Data murid disimpan.'); tStudents(); } catch (err) { toast(err.message); } });
+}
+
+/* ---- filter ---- */
+function filtersHTML() {
+  return `<div class="filters">
+    <label class="field" for="fdays">Periode<select id="fdays">${[7, 30, 90, 365].map((d) => `<option value="${d}" ${TF.days === d ? 'selected' : ''}>${d === 365 ? '1 tahun' : d + ' hari'}</option>`).join('')}</select></label>
+    <label class="field" for="fcls">Kelas<select id="fcls"><option value="">Semua kelas</option>${classes().map((c) => `<option ${TF.cls === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
+    <label class="field" for="fstu">Murid<select id="fstu"><option value="">Semua murid</option>${STUDENTS.filter((s) => !TF.cls || s.class_name === TF.cls).map((s) => `<option value="${esc(s.id)}" ${TF.student === s.id ? 'selected' : ''}>${esc(s.display_name)}</option>`).join('')}</select></label>
+  </div>`;
+}
+function bindFilters(redraw) {
+  ['fdays', 'fcls', 'fstu'].forEach((id) => { const el = $('#' + id); if (el) el.addEventListener('change', () => { TF.days = +$('#fdays').value; TF.cls = $('#fcls').value; TF.student = $('#fstu').value; if (TF.student && TF.cls && STUDENTS.find((s) => s.id === TF.student)?.class_name !== TF.cls) TF.student = ''; store.set('tf', TF); redraw(); }); });
 }
 
 /* ---- Skor ---- */
 async function tScores() {
-  const v = $('#tview');
-  v.innerHTML = filtersHTML() + '<div id="sbody"><p class="note">Memuat…</p></div>';
+  $('#tview').innerHTML = filtersHTML() + '<div id="sbody"><p class="note">Memuat…</p></div>';
   bindFilters(tScores);
   try { SESS = await api.sessions(TF.days); } catch (e) { toast(e.message); SESS = []; }
   const inScope = SESS.filter((s) => (!TF.student || s.student_id === TF.student) && (!TF.cls || STUDENTS.find((x) => x.id === s.student_id)?.class_name === TF.cls));
   const avg = (a) => (a.length ? Math.round(a.reduce((t, s) => t + (s.score || 0), 0) / a.length) : 0);
   const per = {};
   for (const s of inScope) (per[s.student_id] ||= []).push(s);
-  const rows = Object.entries(per).map(([id, list]) => ({ id, list, avg: avg(list), last: list[0] })).sort((a, b) => b.last.started_at.localeCompare(a.last.started_at));
+  const rows = Object.entries(per).map(([id, list]) => ({ id, list, avg: avg(list), last: list[0], away: list.reduce((t, s) => t + (s.away_count || 0), 0) })).sort((a, b) => b.last.started_at.localeCompare(a.last.started_at));
   const totalMin = Math.round(inScope.reduce((t, s) => t + (s.seconds || 0), 0) / 60);
   const nm = (id) => deckOf(id)?.zh || id;
   const body = $('#sbody'); if (!body) return;
   body.innerHTML = `<div class="kpis"><div class="kpi"><b>${inScope.length}</b><span>sesi selesai</span></div><div class="kpi"><b>${rows.length}</b><span>murid aktif</span></div><div class="kpi"><b>${avg(inScope)}</b><span>rata-rata skor</span></div><div class="kpi"><b>${totalMin}</b><span>menit belajar</span></div></div>
-    ${TF.student && per[TF.student] ? `<div class="panel" style="margin-bottom:14px"><h3 style="margin:0 0 8px">Perkembangan skor ${esc(sName(TF.student))}</h3>${lineChart(per[TF.student].slice().reverse().map((s) => ({ x: Date.parse(s.started_at), y: s.score || 0 })))}</div>` : ''}
-    <div class="panel"><h3 style="margin:0 0 10px">Ringkasan per murid</h3>${rows.length ? `<div class="tablewrap"><table class="table"><thead><tr><th>Murid</th><th>Sesi</th><th>Rata-rata</th><th>Terakhir</th><th>Skor terakhir</th></tr></thead><tbody>
-    ${rows.map((r) => `<tr class="clk" data-stu="${esc(r.id)}"><td><b>${esc(sName(r.id))}</b><div class="note">${esc(STUDENTS.find((s) => s.id === r.id)?.class_name || '')}</div></td><td>${r.list.length}</td><td>${r.avg}</td><td>${esc(fmtDate(r.last.started_at))}</td><td>${scorePill(r.last.score)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="note">Belum ada sesi di periode ini.</p>'}</div>
-    <div class="panel" style="margin-top:14px"><h3 style="margin:0 0 10px">Sesi terbaru</h3>${inScope.length ? `<div class="tablewrap"><table class="table"><thead><tr><th>Waktu</th><th>Murid</th><th>Kategori</th><th>Kartu</th><th>1/2/3/4</th><th>Tebak</th><th>Skor</th></tr></thead><tbody>
-    ${inScope.slice(0, 100).map((s) => `<tr><td>${esc(fmtDate(s.started_at))}</td><td>${esc(sName(s.student_id))}</td><td class="han">${esc(s.decks.map(nm).join('、'))}</td><td>${s.total}</td><td>${s.c1}/${s.c2}/${s.c3}/${s.c4}</td><td>${s.quiz_total ? `${s.quiz_right}/${s.quiz_total}` : '-'}</td><td>${scorePill(s.score)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="note">Belum ada sesi.</p>'}</div>`;
+    ${TF.student && per[TF.student] ? `<div class="panel"><div class="panel-head"><h2 class="h3">Perkembangan skor ${esc(sName(TF.student))}</h2></div>${lineChart(per[TF.student].slice().reverse().map((s) => ({ x: Date.parse(s.started_at), y: s.score || 0 })))}</div>` : ''}
+    <div class="panel"><div class="panel-head"><h2 class="h3">Ringkasan per murid</h2><span class="note">Klik baris untuk melihat grafik murid itu</span></div>${rows.length ? `<div class="tablewrap"><table class="table"><thead><tr><th>Murid</th><th>Sesi</th><th>Rata-rata</th><th>Keluar app</th><th>Terakhir</th><th>Skor terakhir</th></tr></thead><tbody>
+    ${rows.map((r) => `<tr class="clk" data-stu="${esc(r.id)}"><td><b>${esc(sName(r.id))}</b><div class="note">${esc(STUDENTS.find((s) => s.id === r.id)?.class_name || '')}</div></td><td>${r.list.length}</td><td>${r.avg}</td><td>${r.away ? `<span class="pill bad">${r.away}×</span>` : '–'}</td><td>${esc(fmtDate(r.last.started_at))}</td><td>${scoreTag(r.last.score)}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty"><b>Belum ada sesi</b>Sesi yang selesai di periode ini muncul di sini.</div>'}</div>
+    <div class="panel"><div class="panel-head"><h2 class="h3">Sesi terbaru</h2></div>${inScope.length ? `<div class="tablewrap"><table class="table"><thead><tr><th>Waktu</th><th>Murid</th><th>Kategori</th><th>Kartu</th><th>1/2/3/4</th><th>Tebak</th><th>Keluar app</th><th>Skor</th></tr></thead><tbody>
+    ${inScope.slice(0, 100).map((s) => `<tr><td>${esc(fmtDate(s.started_at))}</td><td>${esc(sName(s.student_id))}</td><td class="han">${esc(s.decks.map(nm).join('、'))}</td><td>${s.total}</td><td>${s.c1}/${s.c2}/${s.c3}/${s.c4}</td><td>${s.quiz_total ? `${s.quiz_right}/${s.quiz_total}` : '–'}</td><td>${s.away_count ? `${s.away_count}× · ${dur(s.away_ms)}` : '–'}</td><td>${scoreTag(s.score)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="note">Belum ada sesi.</p>'}</div>`;
 }
 
 /* ---- Grafik waktu ---- */
 async function tTime() {
-  const v = $('#tview');
-  v.innerHTML = filtersHTML() + '<div id="tbody"><p class="note">Memuat…</p></div>';
+  $('#tview').innerHTML = filtersHTML() + '<div id="tbody"><p class="note">Memuat…</p></div>';
   bindFilters(tTime);
   const f = { days: TF.days, cls: TF.cls || null, student: TF.student || null };
   let cards = [], decks = [];
@@ -462,27 +719,42 @@ async function tTime() {
   const who = TF.student ? esc(sName(TF.student)) : TF.cls ? 'kelas ' + esc(TF.cls) : 'semua murid';
   const deckRows = decks.map((d) => { const dk = deckOf(d.deck_id); return { label: esc(dk?.zh || d.deck_id), sub: `${esc(dk?.idn || '')} · ${d.n} jawaban`, value: Number(d.avg_ms), color: dk?.color }; });
   const cardRows = cards.slice(0, 15).map((c) => { const dk = deckOf(c.deck_id); const card = CARDS.find((x) => x.id === c.card_id); return { label: esc(c.card_h), sub: `${esc(card?.m || '')} · ${esc(dk?.zh || '')} · ${c.n}×`, value: Number(c.avg_ms), color: dk?.color, extra: Number(c.wrong_rate) > 0 ? Math.round(Number(c.wrong_rate) * 100) + '% sulit' : '' }; });
-  body.innerHTML = `<p class="sub" style="margin:0 0 12px">Rata-rata lama melihat satu kartu sebelum menilainya, untuk ${who}. Waktu saat tab disembunyikan tidak dihitung.</p>
-    <div class="grid2"><div class="panel"><h3 style="margin:0 0 10px">Kategori paling lama</h3>${hbars(deckRows, { fmt: secs, empty: 'Belum ada jawaban di periode ini.' })}</div>
-    <div class="panel"><h3 style="margin:0 0 10px">15 kartu paling lama</h3>${hbars(cardRows, { fmt: secs, empty: 'Belum ada jawaban di periode ini.' })}<p class="note" style="margin-top:8px">"% sulit" = seberapa sering kartu itu dinilai 1–2 atau tebakannya salah.</p></div></div>`;
+  body.innerHTML = `<p class="sub" style="margin:0 0 14px">Rata-rata lama melihat satu kartu sebelum menilainya, untuk ${who}. Waktu saat keluar aplikasi tidak dihitung.</p>
+    <div class="grid2"><div class="panel"><div class="panel-head"><h2 class="h3">Kategori paling lama</h2></div>${hbars(deckRows, { fmt: secs, empty: 'Belum ada jawaban di periode ini.' })}</div>
+    <div class="panel"><div class="panel-head"><h2 class="h3">15 kartu paling lama</h2></div>${hbars(cardRows, { fmt: secs, empty: 'Belum ada jawaban di periode ini.' })}<p class="note" style="margin-top:10px">"% sulit" = seberapa sering kartu itu dinilai 1–2 atau tebakannya salah.</p></div></div>`;
+}
+
+/* ---- Persetujuan ---- */
+function tApprove() {
+  const list = DECKS.filter((d) => d.status === 'pending');
+  const pub = DECKS.filter((d) => d.owner_id && d.status === 'public');
+  const card = (d, pending) => `<div class="panel approve" style="--dc:${d.color}">
+      <div class="panel-head" style="margin:0"><div class="row"><span class="dotc"></span><h3 class="h3 han">${esc(d.zh)}</h3><span class="note">${esc(d.idn)} · dibuat ${esc(d.owner_name || 'murid')} · ${d.cards.length} kartu</span></div>
+      <div class="row">${pending ? `<button class="btn sm secondary" data-approve="${esc(d.id)}" data-ok="0">Tolak</button><button class="btn sm" data-approve="${esc(d.id)}" data-ok="1">${ic('check')} Setujui & tampilkan</button>` : `<button class="btn sm secondary" data-approve="${esc(d.id)}" data-ok="0">Sembunyikan lagi</button>`}</div></div>
+      <div class="cards-mini">${d.cards.slice(0, 40).map((c) => `<span><b>${esc(c.h)}</b> ${esc(c.p)} · ${esc(c.m)}</span>`).join('')}${d.cards.length > 40 ? `<span>+${d.cards.length - 40} lagi</span>` : ''}</div>
+    </div>`;
+  $('#tview').innerHTML = `${list.length ? list.map((d) => card(d, true)).join('') : '<div class="panel empty"><b>Tidak ada yang menunggu</b>Kategori buatan murid yang minta persetujuan muncul di sini.</div>'}
+    ${pub.length ? `<h2 class="h3" style="margin:24px 0 12px">Sudah disetujui</h2>${pub.map((d) => card(d, false)).join('')}` : ''}`;
 }
 
 /* ---- Pengaturan ---- */
-let DRAFT = null;
 function tSettings() {
   DRAFT = JSON.parse(JSON.stringify(SET));
+  const shared = DECKS.filter((d) => !d.owner_id || d.status === 'public');
   $('#tview').innerHTML = `<div class="grid2">
-    <div class="panel"><h3 style="margin:0 0 8px">Sisi depan kartu</h3><p class="note">Tampilan yang boleh dipakai murid.</p>
-      <div class="checks" style="margin:10px 0">${MODES.map((m) => `<button class="chip" data-cfgmode="${m}" aria-pressed="${DRAFT.modes.includes(m)}">${MODE_LABEL[m]}</button>`).join('')}</div>
+    <div class="panel stack"><h2 class="h3">Sisi depan kartu</h2><p class="note">Tampilan yang boleh dipakai murid.</p>
+      <div class="row">${MODES.map((m) => `<button class="chip" data-cfgmode="${m}" aria-pressed="${DRAFT.modes.includes(m)}">${MODE_LABEL[m]}</button>`).join('')}</div>
       <label class="field" for="defmode">Tampilan awal<select id="defmode">${DRAFT.modes.map((m) => `<option value="${m}" ${DRAFT.default_mode === m ? 'selected' : ''}>${MODE_LABEL[m]}</option>`).join('')}</select></label>
-      <div class="checks" style="margin-top:10px"><button class="chip" data-cfgtog="student_can_choose" aria-pressed="${DRAFT.student_can_choose}">Murid boleh mengganti</button><button class="chip" data-cfgtog="quiz_enabled" aria-pressed="${DRAFT.quiz_enabled}">Aktifkan mode tebak</button></div></div>
-    <div class="panel"><h3 style="margin:0 0 8px">Kategori untuk murid</h3><p class="note">Matikan kategori yang belum diajarkan.</p>
-      <div class="checks" style="margin-top:10px">${DECKS.map((d) => `<button class="chip" data-cfgdeck="${esc(d.id)}" aria-pressed="${!DRAFT.hidden_decks.includes(d.id)}"><span class="han">${esc(d.zh)}</span> ${esc(d.idn)}</button>`).join('')}</div></div>
-  </div><div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn" data-act="savecfg">${ic('check')} Simpan pengaturan</button><span class="note" id="cfgnote"></span></div>
-  <form class="panel" id="pwForm" style="margin-top:18px;max-width:520px" novalidate><h3 style="margin:0 0 10px">Ganti password guru</h3>
+      <button class="switch" role="switch" aria-checked="${DRAFT.student_can_choose}" data-cfgtog="student_can_choose"><span class="track"></span>Murid boleh mengganti tampilan</button>
+      <button class="switch" role="switch" aria-checked="${DRAFT.quiz_enabled}" data-cfgtog="quiz_enabled"><span class="track"></span>Aktifkan mode tebak</button></div>
+    <div class="panel stack"><h2 class="h3">Kategori untuk murid</h2><p class="note">Matikan kategori yang belum diajarkan.</p>
+      <div class="row">${shared.map((d) => `<button class="chip" data-cfgdeck="${esc(d.id)}" aria-pressed="${!DRAFT.hidden_decks.includes(d.id)}"><span class="han">${esc(d.zh)}</span> ${esc(d.idn)}</button>`).join('')}</div></div>
+  </div>
+  <div class="row" style="margin-top:16px"><button class="btn" data-act="savecfg">${ic('check')} Simpan pengaturan</button><span class="note" id="cfgnote"></span></div>
+  <form class="panel stack" id="pwForm" style="margin-top:20px;max-width:560px" novalidate><h2 class="h3">Ganti password guru</h2>
     <div class="formgrid"><label class="field" for="po">Password lama<input id="po" type="password" autocomplete="current-password" maxlength="128"></label>
     <label class="field" for="pn">Password baru (min. 10)<input id="pn" type="password" autocomplete="new-password" maxlength="128"></label></div>
-    <button class="btn ghost" style="margin-top:10px" type="submit">${ic('key')} Ganti password</button><p class="note" id="pwnote"></p></form>`;
+    <div><button class="btn secondary" type="submit">${ic('key')} Ganti password</button></div><p class="note" id="pwnote"></p></form>`;
   $('#pwForm').addEventListener('submit', async (e) => {
     e.preventDefault(); const n = $('#pwnote');
     if ($('#pn').value.length < 10) { n.textContent = 'Password baru minimal 10 karakter.'; return; }
@@ -491,117 +763,74 @@ function tSettings() {
   });
 }
 
-/* ---- Kartu ---- */
-function tCards() {
-  const d = DECKS.find((x) => x.id === editDeck);
-  $('#tview').innerHTML = `<div class="grid2">
-    <div class="panel"><h3 style="margin:0 0 8px">Pilih kategori</h3>
-      <div class="checks">${DECKS.map((k) => `<button class="chip" data-deck="${esc(k.id)}" aria-pressed="${editDeck === k.id}"><span class="han">${esc(k.zh)}</span> · ${k.cards.length}</button>`).join('')}</div>
-      <form id="newDeck" style="margin-top:16px" novalidate><h3 style="margin:0 0 8px">Kategori baru</h3><div class="formgrid">
-        <label class="field" for="dzh">Nama Mandarin<input id="dzh" maxlength="16" placeholder="学校"></label>
-        <label class="field" for="didn">Nama Indonesia<input id="didn" maxlength="40" placeholder="Sekolah"></label></div>
-        <div class="field" style="margin-top:8px">Warna<div class="swatches">${COLORS.map((c) => `<button type="button" class="sw" data-color="${c}" style="background:${c}" aria-pressed="${newColor === c}" aria-label="Warna ${c}"></button>`).join('')}</div></div>
-        <button class="btn" style="margin-top:12px" type="submit">${ic('plus')} Buat kategori</button></form></div>
-    <div class="panel">${d ? `<h3 style="margin:0 0 8px">Tambah kartu ke <span class="han">${esc(d.zh)}</span></h3>
-      <form id="newCard" novalidate><div class="formgrid">
-        <label class="field" for="wh">汉字 *<input id="wh" maxlength="12" required placeholder="书包"></label>
-        <label class="field" for="wp">Pinyin<input id="wp" maxlength="60" placeholder="shūbāo"></label>
-        <label class="field" for="wm">Arti *<input id="wm" maxlength="60" required placeholder="tas sekolah"></label>
-        <label class="field" for="ww">量词<input id="ww" maxlength="2" placeholder="个"></label>
-        <label class="field" for="we">Emoji (opsional)<input id="we" maxlength="8" placeholder="🎒"></label>
-        <label class="field" for="wimg">Foto (opsional)<input id="wimg" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
-      </div><p class="note" id="imgnote">${pendingPic ? 'Foto siap dipakai.' : ''}</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" type="submit">${ic('plus')} Tambah kartu</button>
-      <button class="chip danger" type="button" data-act="deldeck" data-armed="${armed === 'deck' ? 1 : 0}">${ic('trash')} ${armed === 'deck' ? 'Yakin hapus kategori & semua kartunya? Ketuk lagi' : 'Hapus kategori'}</button></div></form>`
-      : '<p class="note">Pilih kategori di kiri untuk melihat, menambah, atau menghapus kartu.</p>'}</div>
-  </div>
-  ${d ? `<div class="panel" style="margin-top:14px"><h3 style="margin:0 0 10px">${d.cards.length} kartu</h3><div class="cards-list">${d.cards.map((c) => `<div class="ci"><div class="pic">${picHTML(c) || '<span class="note">tanpa gambar</span>'}</div><div class="h">${esc(c.h)}</div><div class="p">${esc(c.p)}</div><div class="m">${esc(c.m)}</div>
-    <button class="del ${armed === c.id ? 'arm' : ''}" data-delcard="${esc(c.id)}" aria-label="${armed === c.id ? 'Ketuk lagi untuk menghapus' : 'Hapus kartu'}">${ic('trash')}</button></div>`).join('')}</div></div>` : ''}`;
-  $('#newDeck').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const zh = $('#dzh').value.trim().slice(0, 16), idn = $('#didn').value.trim().slice(0, 40);
-    if (!zh) { toast('Isi nama Mandarin kategori'); return; }
-    const id = 'c' + Array.from(crypto.getRandomValues(new Uint8Array(6)), (x) => (x % 36).toString(36)).join('');
-    try { await api.createDeck({ id, zh, idn, color: newColor, kind: 'noun', builtin: false, sort: 100 + DECKS.length }); editDeck = id; await reloadContent(); toast('Kategori dibuat'); tCards(); }
-    catch (err) { toast(err.message); }
-  });
-  const nc = $('#newCard');
-  if (nc) {
-    $('#wimg').addEventListener('change', async (e) => {
-      const f = e.target.files && e.target.files[0]; if (!f) return;
-      $('#imgnote').textContent = 'Mengunggah foto…';
-      try { pendingPic = await api.uploadImage(f); $('#imgnote').textContent = 'Foto siap dipakai.'; }
-      catch (err) { pendingPic = ''; $('#imgnote').textContent = err.message; }
-    });
-    nc.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const h = $('#wh').value.trim(), m = $('#wm').value.trim();
-      if (!h || !m) { toast('汉字 dan arti wajib diisi'); return; }
-      const emoji = $('#we').value.trim();
-      const card = { id: `${editDeck}:${h}`.slice(0, 64), deck_id: editDeck, h: h.slice(0, 12), p: $('#wp').value.trim().slice(0, 60), m: m.slice(0, 60), mw: $('#ww').value.trim().slice(0, 2), pic: pendingPic || ([...emoji].length <= 8 ? emoji : ''), builtin: false, sort: (d.cards.length || 0) + 1 };
-      if (CARDS.some((x) => x.id === card.id)) { toast(`Kartu ${h} sudah ada di kategori ini`); return; }
-      try { await api.createCard(card); pendingPic = ''; await reloadContent(); toast('Kartu ditambahkan'); tCards(); }
-      catch (err) { toast(err.message); }
-    });
-  }
-}
-async function reloadContent() { applyContent(await api.content()); }
-
 /* ================= event klik ================= */
+let leaveArmed = 0;
+function confirmLeave() { if (Date.now() - leaveArmed < 3000) return true; leaveArmed = Date.now(); toast('Sesi belum selesai. Ketuk sekali lagi untuk keluar.'); return false; }
 document.addEventListener('click', async (e) => {
-  const b = e.target.closest('[data-nav],[data-pick],[data-act],[data-mode],[data-rate],[data-t],[data-ttab],[data-sact],[data-stu],[data-cfgmode],[data-cfgtog],[data-cfgdeck],[data-deck],[data-color],[data-delcard]');
+  if (!e.target.closest('#emojiPop') && !e.target.closest('[data-emo]')) closeEmoji();
+  const b = e.target.closest('[data-nav],[data-pick],[data-act],[data-mode],[data-rate],[data-t],[data-ttab],[data-sact],[data-stu],[data-cfgmode],[data-cfgtog],[data-cfgdeck],[data-edeck],[data-etab],[data-ncolor],[data-rcolor],[data-emo],[data-pick-emo],[data-rm],[data-approve]');
   if (!b) { const fc = e.target.closest('#fc'); if (fc && Q && Q.cur && Q.cur.answered) flip(); return; }
   const ds = b.dataset;
-  if (ds.nav) { if (S.view === 'study' && Q && Q.done < Q.total && !confirmLeave()) return; go(ds.nav); return; }
-  if (ds.pick) { const id = ds.pick; S.sel = S.sel.includes(id) ? S.sel.filter((x) => x !== id) : [...S.sel, id]; savePrefs(); b.setAttribute('aria-pressed', S.sel.includes(id)); renderSelbar(); return; }
-  if (ds.mode) { S.mode = ds.mode; savePrefs(); Q.queue.length && renderStudy(); return; }
+  if (ds.nav) { if (S.view === 'study' && Q && Q.done < Q.total && !confirmLeave()) return; stopBeat(); go(ds.nav); return; }
+  if (ds.pick) { const id = ds.pick; S.sel = S.sel.includes(id) ? S.sel.filter((x) => x !== id) : [...S.sel, id]; savePrefs(); b.setAttribute('aria-pressed', S.sel.includes(id)); renderActionbar(); return; }
+  if (ds.mode) { S.mode = ds.mode; savePrefs(); if (Q && Q.queue.length) renderStudy(); return; }
   if (ds.t !== undefined && b.classList.contains('qo')) { answerQuiz(b); return; }
   if (ds.rate) { rate(+ds.rate); return; }
-  if (ds.ttab) { S.ttab = ds.ttab; savePrefs(); renderTeach(); return; }
+  if (ds.ttab) { S.ttab = ds.ttab; savePrefs(); stopLive(); renderTeach(); return; }
   if (ds.stu) { TF.student = ds.stu; store.set('tf', TF); tScores(); return; }
   if (ds.cfgmode) { const m = ds.cfgmode; DRAFT.modes = DRAFT.modes.includes(m) ? DRAFT.modes.filter((x) => x !== m) : MODES.filter((x) => DRAFT.modes.includes(x) || x === m); if (!DRAFT.modes.length) DRAFT.modes = [m]; if (!DRAFT.modes.includes(DRAFT.default_mode)) DRAFT.default_mode = DRAFT.modes[0]; b.setAttribute('aria-pressed', DRAFT.modes.includes(m)); $('#defmode').innerHTML = DRAFT.modes.map((x) => `<option value="${x}" ${DRAFT.default_mode === x ? 'selected' : ''}>${MODE_LABEL[x]}</option>`).join(''); return; }
-  if (ds.cfgtog) { DRAFT[ds.cfgtog] = !DRAFT[ds.cfgtog]; b.setAttribute('aria-pressed', DRAFT[ds.cfgtog]); return; }
+  if (ds.cfgtog) { DRAFT[ds.cfgtog] = !DRAFT[ds.cfgtog]; b.setAttribute('aria-checked', DRAFT[ds.cfgtog]); return; }
   if (ds.cfgdeck) { const id = ds.cfgdeck; DRAFT.hidden_decks = DRAFT.hidden_decks.includes(id) ? DRAFT.hidden_decks.filter((x) => x !== id) : [...DRAFT.hidden_decks, id]; b.setAttribute('aria-pressed', !DRAFT.hidden_decks.includes(id)); return; }
-  if (ds.deck) { editDeck = ds.deck; armed = null; pendingPic = ''; tCards(); return; }
-  if (ds.color) { newColor = ds.color; document.querySelectorAll('.sw').forEach((x) => x.setAttribute('aria-pressed', x.dataset.color === newColor)); return; }
-  if (ds.delcard) { const id = ds.delcard; if (armed !== id) { armed = id; tCards(); return; } armed = null; try { await api.deleteCard(id); await reloadContent(); toast('Kartu dihapus'); } catch (err) { toast(err.message); } tCards(); return; }
+  if (ds.edeck) { ED.deck = ds.edeck; ED.armDeck = false; ED.armCard = null; ED.renameColor = null; renderCards(); return; }
+  if (ds.etab) { ED.tab = ds.etab; ED.armCard = null; renderCards(); return; }
+  if (ds.ncolor) { ED.newColor = ds.ncolor; document.querySelectorAll('[data-ncolor]').forEach((x) => x.setAttribute('aria-pressed', x.dataset.ncolor === ED.newColor)); return; }
+  if (ds.rcolor) { ED.renameColor = ds.rcolor; document.querySelectorAll('[data-rcolor]').forEach((x) => x.setAttribute('aria-pressed', x.dataset.rcolor === ED.renameColor)); return; }
+  if (ds.emo !== undefined) { if ($('#emojiPop')) closeEmoji(); else openEmoji(b); return; }
+  if (ds.pickEmo !== undefined) { setPic(ds.pickEmo); return; }
+  if (ds.rm !== undefined) {
+    const rowEl = b.closest('.crow'), i = +ds.rm;
+    if (rowEl.dataset.kind === 'new') { const r = ED.rows[i]; if (!r) return; ED.text = ED.text.split(/\r?\n/).filter((l) => l.trim() !== r.line).join('\n'); $('#bulkText').value = ED.text; syncRows(); return; }
+    const r = ED.list[i]; if (!r) return;
+    if (ED.armCard !== r.id) { ED.armCard = r.id; $('#etab').innerHTML = listHTML(deckOf(ED.deck)); return; }
+    ED.armCard = null; try { await api.deleteCard(r.id); await reloadContent(); toast(`Kartu ${r.h} dihapus.`); renderCards(); } catch (err) { toast(err.message); }
+    return;
+  }
+  if (ds.approve) { try { await api.approve(ds.approve, ds.ok === '1'); await reloadContent(); shell(); toast(ds.ok === '1' ? 'Disetujui. Kategori ini sekarang tampil untuk murid.' : 'Kategori dikembalikan ke pembuatnya.'); renderTeach(); } catch (err) { toast(err.message); } return; }
   if (ds.sact) {
     const id = ds.id, s = STUDENTS.find((x) => x.id === id); if (!s) return;
     try {
-      if (ds.sact === 'reset') { const r = await api.manage('reset_password', { id }); lastCred = { name: s.display_name, username: s.username, password: r.password }; toast('Password baru dibuat'); }
-      else if (ds.sact === 'off' || ds.sact === 'on') { await api.manage('set_active', { id, active: ds.sact === 'on' }); toast(ds.sact === 'on' ? 'Akun diaktifkan' : 'Akun dinonaktifkan'); }
+      if (ds.sact === 'reset') { const r = await api.manage('reset_password', { id }); lastCred = { name: s.display_name, username: s.username, password: r.password }; toast('Password baru dibuat.'); }
+      else if (ds.sact === 'off' || ds.sact === 'on') { await api.manage('set_active', { id, active: ds.sact === 'on' }); toast(ds.sact === 'on' ? 'Akun diaktifkan.' : 'Akun dinonaktifkan dan langsung keluar dari semua perangkat.'); }
+      else if (ds.sact === 'create') { await api.manage('set_create', { id, allow: !s.can_create }); toast(!s.can_create ? `${s.display_name} sekarang boleh membuat kartu.` : `Izin membuat kartu ${s.display_name} dicabut.`); }
       else if (ds.sact === 'rename') { renameStudent(s); return; }
-      else if (ds.sact === 'delete') { if (armed !== 'del:' + id) { armed = 'del:' + id; tStudents(); return; } armed = null; await api.manage('delete', { id }); toast('Akun dihapus'); }
+      else if (ds.sact === 'delete') { if (armed !== 'del:' + id) { armed = 'del:' + id; tStudents(); return; } armed = null; await api.manage('delete', { id }); toast('Akun dihapus.'); }
       STUDENTS = await api.students(); tStudents();
     } catch (err) { toast(err.message); }
     return;
   }
   const a = ds.act;
-  if (a === 'logout') { await api.logout(); ME = null; Q = null; renderLogin(); }
-  else if (a === 'selall') { const ds2 = visibleDecks(); S.sel = S.sel.length === ds2.length ? [] : ds2.map((d) => d.id); savePrefs(); renderLearn(); }
-  else if (a === 'togall') { S.all = !S.all; savePrefs(); renderSelbar(); }
+  if (a === 'logout') { stopBeat(); stopLive(); await api.logout(); ME = null; Q = null; renderLogin(); }
+  else if (a === 'selall') { const d2 = studyDecks(); S.sel = S.sel.length === d2.length ? [] : d2.map((d) => d.id); savePrefs(); renderLearn(); }
+  else if (a === 'togall') { S.all = !S.all; savePrefs(); renderActionbar(); }
   else if (a === 'start' || a === 'again') startStudy();
-  else if (a === 'quit') { if (S.view === 'study' && Q && Q.done < Q.total && !confirmLeave()) return; S.view = 'learn'; savePrefs(); shell(); renderLearn(); }
+  else if (a === 'quit') { if (S.view === 'study' && Q && Q.done < Q.total && !confirmLeave()) return; stopBeat(); S.view = 'learn'; savePrefs(); shell(); renderLearn(); }
   else if (a === 'flip') flip();
   else if (a === 'quiz') { S.quiz = !S.quiz; savePrefs(); renderStudy(); }
   else if (a === 'auto') { S.auto = !S.auto; savePrefs(); b.setAttribute('aria-pressed', S.auto); }
-  else if (a === 'sfx') { S.sfx = !S.sfx; savePrefs(); b.setAttribute('aria-pressed', S.sfx); b.innerHTML = `${ic(S.sfx ? 'sound' : 'mute')} Efek`; }
+  else if (a === 'sfx') { S.sfx = !S.sfx; savePrefs(); b.setAttribute('aria-pressed', S.sfx); b.innerHTML = ic(S.sfx ? 'sparkle' : 'mute'); }
   else if (a === 'say') { e.stopPropagation(); if (Q && Q.cur) speak(sayText(Q.cur.c)); }
   else if (a === 'retryfinish') renderDone();
-  else if (a === 'copycred' && lastCred) copyText(`Flashcard Alvaro\nNama: ${lastCred.name}\nUsername: ${lastCred.username}\nPassword: ${lastCred.password}\nLink: ${location.origin}`);
-  else if (a === 'savecfg') { DRAFT.default_mode = $('#defmode').value; const c = cleanSettings(DRAFT); $('#cfgnote').textContent = 'Menyimpan…'; try { await api.saveSettings(c); SET = c; $('#cfgnote').textContent = 'Tersimpan. Berlaku untuk semua murid.'; toast('Pengaturan disimpan'); } catch (err) { $('#cfgnote').textContent = err.message; } }
-  else if (a === 'deldeck') { if (armed !== 'deck') { armed = 'deck'; tCards(); return; } armed = null; try { await api.deleteDeck(editDeck); editDeck = null; await reloadContent(); toast('Kategori dihapus'); } catch (err) { toast(err.message); } tCards(); }
+  else if (a === 'copycred' && lastCred) copyText(`${APP}\nNama: ${lastCred.name}\nUsername: ${lastCred.username}\nPassword: ${lastCred.password}\nLink: ${location.origin}`);
+  else if (a === 'savecfg') { DRAFT.default_mode = $('#defmode').value; const c = cleanSettings(DRAFT); $('#cfgnote').textContent = 'Menyimpan…'; try { await api.saveSettings(c); SET = c; $('#cfgnote').textContent = 'Tersimpan. Berlaku untuk semua murid.'; toast('Pengaturan disimpan.'); } catch (err) { $('#cfgnote').textContent = err.message; } }
+  else if (a === 'newdeck') { ED.newOpen = !ED.newOpen; $('#newDeckForm').hidden = !ED.newOpen; if (ED.newOpen) $('#ndz').focus(); }
+  else if (a === 'renamedeck') { const f = $('#renameForm'); f.hidden = !f.hidden; }
+  else if (a === 'deldeck') { if (!ED.armDeck) { ED.armDeck = true; b.dataset.armed = '1'; b.innerHTML = `${ic('trash')} Ketuk lagi untuk menghapus`; return; } ED.armDeck = false; try { await api.deleteDeck(ED.deck); ED.deck = null; await reloadContent(); toast('Kategori dan semua kartunya dihapus.'); renderCards(); } catch (err) { toast(err.message); } }
+  else if (a === 'submitdeck') { try { await api.submitDeck(ED.deck); await reloadContent(); toast('Terkirim. Kategori tampil untuk teman setelah guru menyetujuinya.'); renderCards(); } catch (err) { toast(err.message); } }
+  else if (a === 'hints') { S.hints = !S.hints; savePrefs(); b.setAttribute('aria-checked', S.hints); $('#rows').innerHTML = rowsHTML(); }
+  else if (a === 'savebulk') saveBulk();
 });
-// Konfirmasi keluar sesi: dibuat di halaman sendiri (tanpa dialog browser)
-let leaveArmed = 0;
-function confirmLeave() { if (Date.now() - leaveArmed < 3000) return true; leaveArmed = Date.now(); toast('Sesi belum selesai. Ketuk sekali lagi untuk keluar.'); return false; }
-function renameStudent(s) {
-  const box = $('#credBox');
-  box.innerHTML = `<form id="renForm" novalidate><div class="formgrid"><label class="field" for="rn">Nama<input id="rn" maxlength="40" value="${esc(s.display_name)}"></label><label class="field" for="rc">Kelas<input id="rc" maxlength="30" value="${esc(s.class_name || '')}"></label></div><button class="btn" style="margin-top:10px" type="submit">${ic('check')} Simpan</button></form>`;
-  box.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  $('#renForm').addEventListener('submit', async (e) => { e.preventDefault(); try { await api.manage('rename', { id: s.id, display_name: $('#rn').value, class_name: $('#rc').value }); STUDENTS = await api.students(); toast('Data murid disimpan'); tStudents(); } catch (err) { toast(err.message); } });
-}
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeEmoji();
   if (S.view !== 'study' || !Q || !Q.cur || !$('#fc')) return;
   if (e.target.matches('input,select,textarea')) return;
   if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); if (Q.cur.answered) flip(); }
@@ -615,29 +844,31 @@ async function checkVersion() {
   try {
     const r = await fetch('/version.json?t=' + Date.now(), { cache: 'no-store' }); const j = await r.json();
     if (j.build && j.build !== BUILD && !$('#update')) {
-      const el = document.createElement('div'); el.className = 'update'; el.id = 'update'; el.setAttribute('role', 'status');
-      el.innerHTML = '<span>Versi baru aplikasi tersedia</span><button type="button">Muat ulang</button>';
+      const el = document.createElement('div'); el.className = 'toast on'; el.id = 'update'; el.setAttribute('role', 'status');
+      Object.assign(el.style, { pointerEvents: 'auto', top: 'calc(76px + env(safe-area-inset-top, 0px))', bottom: 'auto' });
+      el.innerHTML = 'Versi baru aplikasi tersedia. <button type="button" class="btn sm" style="margin-left:10px">Muat ulang</button>';
       el.querySelector('button').addEventListener('click', () => location.reload());
       document.body.appendChild(el);
     }
   } catch (_) { /* offline */ }
 }
 async function refreshContent() {
-  if (!ME || S.view === 'study' || S.view === 'done') return;
-  try { applyContent(await api.content()); if (S.view === 'learn') renderLearn(); } catch (_) { /* coba lagi nanti */ }
+  if (!ME || ['study', 'done', 'cards'].includes(S.view)) return;
+  try { await reloadContent(); shell(); if (S.view === 'learn') renderLearn(); } catch (_) { /* coba lagi nanti */ }
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { checkVersion(); refreshContent(); } });
 setInterval(() => { checkVersion(); refreshContent(); }, 5 * 60 * 1000);
 
 /* ================= mulai ================= */
 (async function boot() {
-  $('#view').innerHTML = '<div class="loading">Memuat…</div>';
+  document.title = APP;
+  $('#view').innerHTML = '<div class="auth"><p class="note">Memuat…</p></div>';
   try { ME = await api.profile(); } catch (_) { ME = null; }
   if (!ME) {
     try { const st = await api.setupStatus(); if (st && st.needsSetup) { renderSetup(st.configured); return; } } catch (_) { /* tampilkan login */ }
     renderLogin(); return;
   }
   try { await loadAll(); } catch (e) { renderLogin(e.message); return; }
-  go(S.view === 'study' || S.view === 'done' ? 'learn' : S.view);
+  go(S.view);
   checkVersion();
 })();

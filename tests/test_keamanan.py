@@ -71,9 +71,12 @@ check('Sesi selesai tak bisa ditambah', S1.req('POST', '/api/run/rate', {'sid': 
 check('Selesai dua kali ditolak', S1.req('POST', '/api/run/finish', {'sid': sid})[0] == 409)
 # ---- coba curang: endpoint guru ----
 for path, body in [('/api/t/students', {'action': 'create', 'display_name': 'X', 'username': 'xx1'}), ('/api/t/settings', {'quiz_enabled': False}),
-                   ('/api/t/card', {'deck_id': 'buah', 'h': '假', 'm': 'palsu'}), ('/api/t/card/delete', {'id': 'buah:苹果'}),
-                   ('/api/t/deck/delete', {'id': 'buah'}), ('/api/password', {'old': 'x', 'new': 'yyyyyyyyyyyy'})]:
-    check(f'Murid tidak bisa {path}', S1.req('POST', path, body)[0] == 403)
+                   ('/api/t/approve', {'id': 'buah', 'approve': True}), ('/api/password', {'old': 'x', 'new': 'yyyyyyyyyyyy'}),
+                   ('/api/deck', {'zh': '假'}), ('/api/translate', {'lines': ['我']})]:
+    check(f'Murid tanpa izin tidak bisa {path}', S1.req('POST', path, body)[0] == 403)
+for path, body in [('/api/card/delete', {'id': 'buah:苹果'}), ('/api/deck/delete', {'id': 'buah'}), ('/api/cards/bulk', {'deck_id': 'buah', 'cards': [{'h': '假', 'm': 'palsu'}]}),
+                   ('/api/card/update', {'id': 'buah:苹果', 'h': '苹果', 'm': 'HACK'})]:
+    check(f'Murid tidak bisa ubah kartu guru {path}', S1.req('POST', path, body)[0] in (403, 404))
 for path in ['/api/t/students', '/api/t/runs?days=30', '/api/t/card-time?days=30', '/api/t/deck-time?days=30']:
     check(f'Murid tidak bisa baca {path.split("?")[0]}', S1.req('GET', path)[0] == 403)
 check('Murid hanya melihat riwayatnya sendiri', len(S2.req('GET', '/api/runs/mine')[1]) == 0 and len(S1.req('GET', '/api/runs/mine')[1]) == 1)
@@ -89,14 +92,58 @@ check('Filter kelas lain kosong', T.req('GET', '/api/t/deck-time?days=30&class=3
 check('Guru sembunyikan kategori', T.req('POST', '/api/t/settings', {'hidden_decks': ['hewan']})[0] == 200)
 check('Murid tak menerima kategori tersembunyi', not any(d['id'] == 'hewan' for d in S1.req('GET', '/api/content')[1]['decks']))
 check('Murid tak bisa mulai kategori tersembunyi', S1.req('POST', '/api/run/start', {'decks': ['hewan'], 'mode': 'pic'})[0] == 400)
-check('Guru tambah kartu', T.req('POST', '/api/t/card', {'deck_id': 'buah', 'h': '榴莲糖', 'm': 'permen durian', 'mw': '颗', 'pic': '🍬'})[0] == 200)
-check('Gambar berbahaya di kartu ditolak', T.req('POST', '/api/t/card', {'deck_id': 'buah', 'h': '坏', 'm': 'x', 'pic': 'javascript:alert(1)'})[0] == 400)
+st, r1, _ = T.req('POST', '/api/cards/bulk', {'deck_id': 'buah', 'cards': [{'h': '榴莲糖', 'm': 'permen durian', 'mw': '颗', 'pic': '🍬'}, {'h': '苹果', 'm': 'dobel'}]})
+check('Guru tambah kartu massal (dobel dilewati)', st == 200 and r1['added'] == 1 and r1['skipped'] == ['苹果'], r1)
+check('Gambar berbahaya di kartu ditolak', T.req('POST', '/api/cards/bulk', {'deck_id': 'buah', 'cards': [{'h': '坏', 'm': 'x', 'pic': 'javascript:alert(1)'}]})[0] == 400)
+check('Bukan hanzi di kolom 汉字 ditolak', T.req('POST', '/api/cards/bulk', {'deck_id': 'buah', 'cards': [{'h': 'abc', 'm': 'x'}]})[0] == 400)
 png = bytes.fromhex('89504e470d0a1a0a0000000d4948445200000001000000010806000000') + b'\0' * 40
-st, up, _ = T.req('POST', '/api/t/image', raw=png, ctype='image/png'); check('Guru unggah foto', st == 200 and up['url'].startswith('/api/img/'))
-check('File bukan gambar ditolak', T.req('POST', '/api/t/image', raw=b'<script>alert(1)</script>' * 3, ctype='image/png')[0] == 415)
+st, up, _ = T.req('POST', '/api/image', raw=png, ctype='image/png'); check('Guru unggah foto', st == 200 and up['url'].startswith('/api/img/'))
+check('File bukan gambar ditolak', T.req('POST', '/api/image', raw=b'<script>alert(1)</script>' * 3, ctype='image/png')[0] == 415)
 st, _, h = S1.req('GET', up['url']); check('Foto dilayani dengan nosniff', st == 200 and h.get('X-Content-Type-Options') == 'nosniff')
 check('Foto tak bisa dibuka tanpa login', X.req('GET', up['url'])[0] == 401)
-check('Guru hapus kartu bawaan', T.req('POST', '/api/t/card/delete', {'id': 'buah:梨'})[0] == 200)
+check('Guru hapus kartu bawaan', T.req('POST', '/api/card/delete', {'id': 'buah:梨'})[0] == 200)
+# ---- izin membuat kartu & persetujuan ----
+S3 = Client(); st, c3, _ = T.req('POST', '/api/t/students', {'action': 'create', 'display_name': 'Dewi', 'username': 'dewi', 'class_name': '3A'})
+S3.req('POST', '/api/login', {'username': 'dewi', 'password': c3['password']})
+check('Murid tanpa izin tidak bisa unggah foto', S3.req('POST', '/api/image', raw=png, ctype='image/png')[0] == 403)
+check('Guru beri izin buat kartu', T.req('POST', '/api/t/students', {'action': 'set_create', 'id': c3['id'], 'allow': True})[0] == 200)
+check('Profil murid menunjukkan izin', S3.req('GET', '/api/me')[1].get('can_create') is True)
+st, tr, _ = S3.req('POST', '/api/translate', {'lines': ['我', '骄傲', 'kucing', '<b>x</b>']})
+check('Terjemahan: kamus + pinyin otomatis', st == 200 and tr['items'][1]['p'] == "jiāo'ào" and tr['items'][1]['m'] == 'sombong' and tr['items'][2]['h'] == '猫' and tr['items'][0]['p'] == 'wǒ', tr)
+check('Terjemahan membersihkan HTML', '<' not in json.dumps(tr))
+st, nd, _ = S3.req('POST', '/api/deck', {'zh': '我的词', 'idn': 'Kata saya'}); did = nd.get('id')
+check('Murid berizin buat kategori (pribadi)', st == 200 and did)
+check('Murid tambah kartu ke kategorinya', S3.req('POST', '/api/cards/bulk', {'deck_id': did, 'cards': [{'h': '我', 'p': 'wǒ', 'm': 'saya'}, {'h': '你', 'p': 'nǐ', 'm': 'kamu'}]})[1].get('added') == 2)
+see = lambda c: any(d['id'] == did for d in c.req('GET', '/api/content')[1]['decks'])
+S4 = Client(); st, c4, _ = T.req('POST', '/api/t/students', {'action': 'create', 'display_name': 'Rina', 'username': 'rina'}); S4.req('POST', '/api/login', {'username': 'rina', 'password': c4['password']})
+check('Kategori pribadi tidak terlihat murid lain', not see(S4) and see(S3))
+check('Murid lain tak bisa mulai kategori pribadi', S4.req('POST', '/api/run/start', {'decks': [did], 'mode': 'pic'})[0] == 400)
+check('Murid lain tak bisa ubah kategori itu', S4.req('POST', '/api/deck/delete', {'id': did})[0] in (403, 404))
+check('Murid tak bisa setujui kategorinya sendiri', S3.req('POST', '/api/t/approve', {'id': did, 'approve': True})[0] == 403)
+check('Murid minta persetujuan', S3.req('POST', '/api/deck/submit', {'id': did})[0] == 200)
+check('Menunggu persetujuan: masih tersembunyi', not see(S4))
+check('Guru melihat yang menunggu', any(d['id'] == did and d['status'] == 'pending' for d in T.req('GET', '/api/content')[1]['decks']))
+check('Guru menyetujui', T.req('POST', '/api/t/approve', {'id': did, 'approve': True})[0] == 200)
+check('Setelah disetujui terlihat murid lain', see(S4))
+cid = [c['id'] for c in S3.req('GET', '/api/content')[1]['cards'] if c['deck_id'] == did][0]
+check('Pembuat ubah kartu', S3.req('POST', '/api/card/update', {'id': cid, 'h': '我', 'p': 'wǒ', 'm': 'aku'})[0] == 200)
+check('Perubahan murid → perlu disetujui ulang', not see(S4))
+T.req('POST', '/api/t/approve', {'id': did, 'approve': True})
+check('Murid lain tak bisa ubah kartu buatan teman', S4.req('POST', '/api/card/update', {'id': cid, 'h': '我', 'm': 'HACK'})[0] in (403, 404))
+check('Izin dicabut → tak bisa ubah lagi', T.req('POST', '/api/t/students', {'action': 'set_create', 'id': c3['id'], 'allow': False})[0] == 200 and S3.req('POST', '/api/card/update', {'id': cid, 'h': '我', 'm': 'x'})[0] in (403, 404))
+# ---- deteksi keluar aplikasi ----
+st, r4, _ = S4.req('POST', '/api/run/start', {'decks': ['buah'], 'mode': 'pic', 'planned': 5}); sid4 = r4['id']
+check('Status keluar aplikasi tercatat', S4.req('POST', '/api/run/presence', {'sid': sid4, 'state': 'away'})[1].get('away_count') == 1)
+lv = T.req('GET', '/api/t/live')[1]; mine = [r for r in lv['runs'] if r['id'] == sid4]
+check('Guru melihat murid keluar aplikasi (live)', mine and mine[0]['state'] == 'away' and mine[0]['name'] == 'Rina' and mine[0]['planned'] == 5, lv)
+check('Keluar dua kali tidak dihitung ganda', S4.req('POST', '/api/run/presence', {'sid': sid4, 'state': 'away'})[1].get('away_count') == 1)
+time.sleep(1.1)
+S4.req('POST', '/api/run/presence', {'sid': sid4, 'state': 'active'})
+check('Murid lain tak bisa memalsukan kehadiran', S2.req('POST', '/api/run/presence', {'sid': sid4, 'state': 'active'})[1].get('ok') is False)
+S4.req('POST', '/api/run/rate', {'sid': sid4, 'card': 'buah:苹果', 'rating': 3, 'ms': 1000})
+fin4 = S4.req('POST', '/api/run/finish', {'sid': sid4})[1]
+check('Lama keluar aplikasi tersimpan di sesi', fin4['away_count'] == 1 and fin4['away_ms'] >= 1000, fin4)
+check('Murid tidak bisa baca pantauan guru', S4.req('GET', '/api/t/live')[0] == 403)
 st, _, _ = T.req('POST', '/api/t/students', {'action': 'set_active', 'id': b['id'] if 'id' in b else '', 'active': False})
 check('Guru nonaktifkan akun', st == 200)
 check('Akun nonaktif langsung keluar', S2.req('GET', '/api/me')[0] == 401)

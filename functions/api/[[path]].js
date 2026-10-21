@@ -6,9 +6,13 @@
 //   * Skor dihitung server dari jawaban yang tercatat; murid tidak bisa
 //     menulis skor, mengubah, atau menghapus jawaban.
 //   * Kunci jawaban tebakan tidak pernah dikirim ke browser.
-//   * Kartu, kategori, pengaturan, dan akun murid hanya bisa diubah guru.
+//   * Kartu, kategori, pengaturan, dan akun hanya bisa diubah guru;
+//     murid yang diberi izin hanya bisa mengubah kategori miliknya sendiri,
+//     dan kategorinya baru tampil untuk murid lain setelah disetujui guru.
+//   * Kehadiran saat belajar (keluar/kembali ke aplikasi) dicatat per sesi.
 // =====================================================================
 import builtin from '../../src/data/builtin.json';
+import { translateLines, cleanEmoji, CJK } from '../../server/translate.js';
 
 const DAY = 864e5;
 const PBKDF2_ITER = 10000; // aman untuk batas CPU paket gratis Cloudflare (10 ms). Naikkan jika pakai paket berbayar.
@@ -100,11 +104,31 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS quiz_pending (run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE, card_id TEXT NOT NULL, correct TEXT NOT NULL, tokens TEXT NOT NULL, answered INTEGER NOT NULL DEFAULT 0, result INTEGER, PRIMARY KEY (run_id, card_id))`,
   `CREATE TABLE IF NOT EXISTS images (id TEXT PRIMARY KEY, type TEXT NOT NULL, data BLOB NOT NULL, created_at INTEGER NOT NULL)`,
 ];
+const MIGRATIONS = [
+  `ALTER TABLE users ADD COLUMN can_create INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE decks ADD COLUMN owner_id TEXT`,
+  `ALTER TABLE decks ADD COLUMN status TEXT NOT NULL DEFAULT 'public'`,
+  `ALTER TABLE runs ADD COLUMN planned INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE runs ADD COLUMN away_count INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE runs ADD COLUMN away_ms INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE runs ADD COLUMN last_seen INTEGER`,
+  `ALTER TABLE runs ADD COLUMN state TEXT NOT NULL DEFAULT 'active'`,
+  `ALTER TABLE runs ADD COLUMN state_since INTEGER`,
+  `CREATE INDEX IF NOT EXISTS decks_owner ON decks(owner_id)`,
+  `CREATE INDEX IF NOT EXISTS runs_seen ON runs(last_seen)`,
+  `CREATE TABLE IF NOT EXISTS usage (k TEXT NOT NULL, ts INTEGER NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS usage_k ON usage(k, ts)`,
+];
+const SCHEMA_VERSION = '2';
 const DEFAULT_SETTINGS = { modes: ['pic', 'han', 'arti', 'mix'], default_mode: 'pic', student_can_choose: true, quiz_enabled: true, hidden_decks: [] };
 let ready = null;
 function ensureReady(db) {
   if (!ready) ready = (async () => {
     await db.batch(SCHEMA.map((s) => db.prepare(s)));
+    if ((await db.prepare("SELECT v FROM meta WHERE k = 'schema'").first('v')) !== SCHEMA_VERSION) {
+      for (const m of MIGRATIONS) { try { await db.prepare(m).run(); } catch (e) { if (!/duplicate column/i.test(String(e && e.message))) throw e; } }
+      await db.prepare("INSERT INTO meta (k, v) VALUES ('schema', ?1) ON CONFLICT(k) DO UPDATE SET v = excluded.v").bind(SCHEMA_VERSION).run();
+    }
     await db.prepare('INSERT OR IGNORE INTO settings (id, data) VALUES (1, ?)').bind(JSON.stringify(DEFAULT_SETTINGS)).run();
     const v = await db.prepare("SELECT v FROM meta WHERE k = 'builtin'").first('v');
     if (v !== BUILTIN_VERSION) await seedBuiltin(db);
@@ -145,7 +169,24 @@ async function getSettings(db) {
 }
 
 /* ---------------- auth ---------------- */
-const pubUser = (u) => ({ id: u.id, role: u.role, username: u.username, display_name: u.display_name, class_name: u.class_name, active: !!u.active });
+const pubUser = (u) => ({ id: u.id, role: u.role, username: u.username, display_name: u.display_name, class_name: u.class_name, active: !!u.active, can_create: u.role === 'teacher' || !!u.can_create });
+const isTeacher = (u) => u.role === 'teacher';
+function deckVisible(u, d, settings) {
+  if (isTeacher(u) || (d.owner_id && d.owner_id === u.id)) return true;
+  return d.status === 'public' && !settings.hidden_decks.includes(d.id);
+}
+const canEditDeck = (u, d) => isTeacher(u) || (!!u.can_create && !!d.owner_id && d.owner_id === u.id);
+async function usageOk(db, key, limit, windowMs) {
+  const n = await db.prepare('SELECT COUNT(*) AS n FROM usage WHERE k = ?1 AND ts > ?2').bind(key, now() - windowMs).first('n');
+  if (n >= limit) return false;
+  await db.prepare('INSERT INTO usage (k, ts) VALUES (?1, ?2)').bind(key, now()).run();
+  return true;
+}
+function cardFields(b, { partial = false } = {}) {
+  const h = str(b.h, 12, { required: !partial, label: '汉字' });
+  if (h && !CJK.test(h)) fail(400, `"${h}" bukan hanzi.`);
+  return { h, p: str(b.p, 60, { label: 'Pinyin' }), m: str(b.m, 60, { required: !partial, label: 'Arti' }), mw: str(b.mw, 2, { label: '量词' }), pic: picOk(b.pic) };
+}
 function readCookie(req, name) {
   const c = req.headers.get('Cookie') || '';
   for (const part of c.split(';')) { const [k, ...v] = part.trim().split('='); if (k === name) return v.join('='); }
@@ -178,7 +219,7 @@ const recordFail = (db, keys) => db.batch(keys.map((k) => db.prepare('INSERT INT
 function fmtRun(r) {
   if (!r) return null;
   let decks = []; try { decks = JSON.parse(r.decks); } catch (_) { /* rusak */ }
-  return { id: r.id, student_id: r.user_id, decks, mode: r.mode, started_at: new Date(r.started_at).toISOString(), finished_at: r.finished_at ? new Date(r.finished_at).toISOString() : null, total: r.total, score: r.score, c1: r.c1, c2: r.c2, c3: r.c3, c4: r.c4, quiz_right: r.quiz_right, quiz_total: r.quiz_total, seconds: r.seconds };
+  return { id: r.id, student_id: r.user_id, decks, mode: r.mode, started_at: new Date(r.started_at).toISOString(), finished_at: r.finished_at ? new Date(r.finished_at).toISOString() : null, total: r.total, score: r.score, c1: r.c1, c2: r.c2, c3: r.c3, c4: r.c4, quiz_right: r.quiz_right, quiz_total: r.quiz_total, seconds: r.seconds, away_count: r.away_count || 0, away_ms: r.away_ms || 0 };
 }
 async function openRun(db, user, id) {
   if (typeof id !== 'string' || !HEX32.test(id)) fail(400, 'Sesi tidak valid.');
@@ -199,7 +240,8 @@ function picOk(p) {
   if (!p) return '';
   if (typeof p !== 'string') fail(400, 'Gambar tidak valid.');
   if (/^\/api\/img\/[a-f0-9]{32}$/.test(p)) return p;
-  if ([...p].length <= 8 && !/[<>/\\"'`=]/.test(p)) return p;
+  if (/^i\d{1,4}$/.test(p)) return p;
+  if (cleanEmoji(p)) return p;
   fail(400, 'Gambar tidak valid.');
 }
 function sniffImage(b) {
@@ -298,11 +340,11 @@ export async function onRequest(ctx) {
 
     if (path === '/content' && method === 'GET') {
       const settings = await getSettings(db);
-      const hidden = teacher ? [] : settings.hidden_decks;
-      const decks = (await db.prepare('SELECT * FROM decks ORDER BY sort, created_at').all()).results.filter((d) => !hidden.includes(d.id));
+      const decks = (await db.prepare('SELECT d.*, u.display_name AS owner_name FROM decks d LEFT JOIN users u ON u.id = d.owner_id ORDER BY d.sort, d.created_at').all()).results.filter((d) => deckVisible(user, d, settings));
+      const ok = new Set(decks.map((d) => d.id));
       const cards = (await db.prepare('SELECT id, deck_id, h, p, m, mw, alt, opp, s, sp, si, pic, builtin, sort FROM cards ORDER BY deck_id, sort, created_at').all()).results
-        .filter((c) => !hidden.includes(c.deck_id)).map((c) => ({ ...c, alt: (() => { try { return JSON.parse(c.alt); } catch (_) { return []; } })(), builtin: !!c.builtin }));
-      return json({ settings, decks: decks.map((d) => ({ ...d, builtin: !!d.builtin })), cards });
+        .filter((c) => ok.has(c.deck_id)).map((c) => ({ ...c, alt: (() => { try { return JSON.parse(c.alt); } catch (_) { return []; } })(), builtin: !!c.builtin }));
+      return json({ settings, decks: decks.map((d) => ({ ...d, builtin: !!d.builtin, mine: d.owner_id === user.id, editable: canEditDeck(user, d), owner_name: d.owner_id ? d.owner_name || 'Murid' : null })), cards, me: pubUser(user) });
     }
     if (path === '/srs' && method === 'GET') {
       const rows = (await db.prepare('SELECT card_id, due, last FROM srs WHERE user_id = ?1').bind(user.id).all()).results;
@@ -317,14 +359,30 @@ export async function onRequest(ctx) {
       const decks = [...new Set(b.decks.filter((d) => typeof d === 'string'))];
       const settings = await getSettings(db);
       for (const d of decks) {
-        if (!teacher && settings.hidden_decks.includes(d)) fail(400, 'Kategori tidak tersedia.');
-        if (!(await db.prepare('SELECT 1 FROM decks WHERE id = ?1').bind(d).first())) fail(400, 'Kategori tidak tersedia.');
+        const row = await db.prepare('SELECT * FROM decks WHERE id = ?1').bind(d).first();
+        if (!row || !deckVisible(user, row, settings)) fail(400, 'Kategori tidak tersedia.');
       }
       const recent = await db.prepare('SELECT COUNT(*) AS n FROM runs WHERE user_id = ?1 AND started_at > ?2').bind(user.id, now() - 3600e3).first('n');
       if (recent >= 60) fail(429, 'Terlalu banyak sesi dalam satu jam. Istirahat dulu ya.');
       const id = randHex(16);
-      await db.prepare('INSERT INTO runs (id, user_id, decks, mode, started_at) VALUES (?1,?2,?3,?4,?5)').bind(id, user.id, JSON.stringify(decks), b.mode, now()).run();
+      const planned = Math.max(0, Math.min(5000, Math.round(Number(b.planned) || 0)));
+      await db.prepare("INSERT INTO runs (id, user_id, decks, mode, started_at, planned, last_seen, state, state_since) VALUES (?1,?2,?3,?4,?5,?6,?5,'active',?5)").bind(id, user.id, JSON.stringify(decks), b.mode, now(), planned).run();
       return json({ id });
+    }
+    if (path === '/run/presence' && method === 'POST') {
+      const b = await body(1024);
+      if (typeof b.sid !== 'string' || !HEX32.test(b.sid)) fail(400, 'Sesi tidak valid.');
+      const r = await db.prepare('SELECT * FROM runs WHERE id = ?1 AND user_id = ?2').bind(b.sid, user.id).first();
+      if (!r || r.finished_at || r.started_at < now() - 6 * 3600e3) return json({ ok: false });
+      const st = b.state === 'away' ? 'away' : 'active', t = now();
+      if (st === 'away' && r.state !== 'away' && r.away_count < 1000) {
+        await db.prepare("UPDATE runs SET state = 'away', state_since = ?2, away_count = away_count + 1, last_seen = ?2 WHERE id = ?1").bind(r.id, t).run();
+      } else if (st === 'active' && r.state === 'away') {
+        await db.prepare("UPDATE runs SET state = 'active', away_ms = away_ms + ?3, state_since = ?2, last_seen = ?2 WHERE id = ?1").bind(r.id, t, Math.min(Math.max(0, t - (r.state_since || t)), 6 * 3600e3)).run();
+      } else {
+        await db.prepare('UPDATE runs SET last_seen = ?2 WHERE id = ?1').bind(r.id, t).run();
+      }
+      return json({ ok: true, away_count: st === 'away' && r.state !== 'away' ? r.away_count + 1 : r.away_count });
     }
     if (path === '/run/quiz' && method === 'POST') {
       const b = await body();
@@ -379,7 +437,8 @@ export async function onRequest(ctx) {
           SUM(quiz_correct IS NOT NULL) AS qt, SUM(quiz_correct = 1) AS qr, AVG(rating * 25.0) AS sc FROM answers WHERE run_id = ?1 AND first_try = 1`).bind(run.id).first();
       const t = now();
       await db.batch([
-        db.prepare(`UPDATE runs SET finished_at = ?2, total = ?3, c1 = ?4, c2 = ?5, c3 = ?6, c4 = ?7, quiz_total = ?8, quiz_right = ?9, score = ?10, seconds = ?11 WHERE id = ?1 AND finished_at IS NULL`)
+        db.prepare(`UPDATE runs SET finished_at = ?2, total = ?3, c1 = ?4, c2 = ?5, c3 = ?6, c4 = ?7, quiz_total = ?8, quiz_right = ?9, score = ?10, seconds = ?11,
+            away_ms = away_ms + CASE WHEN state = 'away' THEN MIN(MAX(0, ?2 - COALESCE(state_since, ?2)), 21600000) ELSE 0 END, state = 'done', last_seen = ?2 WHERE id = ?1 AND finished_at IS NULL`)
           .bind(run.id, t, a.total || 0, a.c1 || 0, a.c2 || 0, a.c3 || 0, a.c4 || 0, a.qt || 0, a.qr || 0, a.total ? Math.round(a.sc) : null, Math.min(21600, Math.round((t - run.started_at) / 1000))),
         db.prepare('DELETE FROM quiz_pending WHERE run_id = ?1').bind(run.id),
       ]);
@@ -446,6 +505,11 @@ export async function onRequest(ctx) {
         await db.prepare('UPDATE users SET display_name = ?2, class_name = ?3 WHERE id = ?1').bind(s.id, display_name, class_name).run();
         return json({ ok: true });
       }
+      if (b.action === 'set_create') {
+        const s = await target();
+        await db.prepare('UPDATE users SET can_create = ?2 WHERE id = ?1').bind(s.id, b.allow === true ? 1 : 0).run();
+        return json({ ok: true });
+      }
       if (b.action === 'delete') { const s = await target(); await db.prepare('DELETE FROM users WHERE id = ?1').bind(s.id).run(); return json({ ok: true }); }
       fail(400, 'Aksi tidak dikenal.');
     }
@@ -476,60 +540,128 @@ export async function onRequest(ctx) {
       await db.prepare('UPDATE settings SET data = ?1 WHERE id = 1').bind(JSON.stringify(s)).run();
       return json(s);
     }
-    if (path === '/t/deck' && method === 'POST') {
-      needTeacher();
+    /* ----- pembuat kartu: guru, atau murid yang diberi izin ----- */
+    const needCreator = () => { if (!teacher && !user.can_create) fail(403, 'Kamu belum diberi izin membuat kartu. Minta izin ke gurumu.'); };
+    const editableDeck = async (id) => {
+      const d = await db.prepare('SELECT * FROM decks WHERE id = ?1').bind(String(id || '')).first();
+      if (!d || !canEditDeck(user, d)) fail(404, 'Kategori tidak ditemukan.');
+      return d;
+    };
+    // Perubahan oleh murid pada kategori yang sudah tampil harus disetujui ulang
+    const touch = (d) => (!teacher && d.status === 'public' ? [db.prepare("UPDATE decks SET status = 'pending' WHERE id = ?1").bind(d.id)] : []);
+
+    if (path === '/translate' && method === 'POST') {
+      needCreator();
+      const b = await body(16 * 1024);
+      if (!Array.isArray(b.lines)) fail(400, 'Daftar kata tidak valid.');
+      const lines = b.lines.filter((x) => typeof x === 'string' && x.trim()).slice(0, 60);
+      if (!lines.length) return json({ items: [], ai: !!env.AI });
+      if (!(await usageOk(db, 'tr:' + user.id, teacher ? 200 : 60, 3600e3))) fail(429, 'Batas terjemahan per jam tercapai. Coba lagi nanti.');
+      return json(await translateLines(env, lines));
+    }
+    if (path === '/deck' && method === 'POST') {
+      needCreator();
       const b = await body();
-      const id = String(b.id || '');
-      if (!/^[a-z0-9_]{2,32}$/.test(id)) fail(400, 'ID kategori tidak valid.');
-      const color = /^#[0-9a-fA-F]{6}$/.test(b.color || '') ? b.color : '#3b4fc4';
-      if ((await db.prepare('SELECT COUNT(*) AS n FROM decks').first('n')) >= 300) fail(400, 'Batas 300 kategori tercapai.');
-      if (await db.prepare('SELECT 1 FROM decks WHERE id = ?1').bind(id).first()) fail(409, 'Kategori sudah ada.');
-      await db.prepare("INSERT INTO decks (id, zh, py, idn, color, kind, builtin, sort, created_at) VALUES (?1,?2,'',?3,?4,'noun',0,?5,?6)")
-        .bind(id, str(b.zh, 16, { required: true, label: 'Nama Mandarin' }), str(b.idn, 40, { label: 'Nama Indonesia' }), color, int(b.sort ?? 100, 0, 100000), now()).run();
+      const color = /^#[0-9a-fA-F]{6}$/.test(b.color || '') ? b.color : '#1f3fbf';
+      if ((await db.prepare('SELECT COUNT(*) AS n FROM decks').first('n')) >= 500) fail(400, 'Batas 500 kategori tercapai.');
+      if (!teacher && (await db.prepare('SELECT COUNT(*) AS n FROM decks WHERE owner_id = ?1').bind(user.id).first('n')) >= 30) fail(400, 'Kamu sudah punya 30 kategori. Hapus yang tidak dipakai dulu.');
+      const id = 'd_' + randHex(6);
+      await db.prepare("INSERT INTO decks (id, zh, py, idn, color, kind, builtin, sort, created_at, owner_id, status) VALUES (?1,?2,'',?3,?4,'noun',0,?5,?6,?7,?8)")
+        .bind(id, str(b.zh, 16, { required: true, label: 'Nama Mandarin' }), str(b.idn, 40, { label: 'Nama Indonesia' }), color, 1000, now(), teacher ? null : user.id, teacher ? 'public' : 'private').run();
+      return json({ id });
+    }
+    if (path === '/deck/update' && method === 'POST') {
+      const b = await body(); const d = await editableDeck(b.id);
+      const color = /^#[0-9a-fA-F]{6}$/.test(b.color || '') ? b.color : d.color;
+      await db.batch([db.prepare('UPDATE decks SET zh = ?2, idn = ?3, color = ?4 WHERE id = ?1').bind(d.id, str(b.zh, 16, { required: true, label: 'Nama Mandarin' }), str(b.idn, 40, { label: 'Nama Indonesia' }), color), ...touch(d)]);
       return json({ ok: true });
     }
-    if (path === '/t/deck/delete' && method === 'POST') {
-      needTeacher();
-      const b = await body();
-      const d = await db.prepare('SELECT * FROM decks WHERE id = ?1').bind(String(b.id || '')).first();
-      if (!d) fail(404, 'Kategori tidak ditemukan.');
+    if (path === '/deck/delete' && method === 'POST') {
+      const b = await body(); const d = await editableDeck(b.id);
       const st = [db.prepare('DELETE FROM decks WHERE id = ?1').bind(d.id)];
       if (d.builtin) st.unshift(db.prepare('INSERT OR IGNORE INTO deleted_builtin (id) VALUES (?1)').bind('deck:' + d.id));
       await db.batch(st); return json({ ok: true });
     }
-    if (path === '/t/card' && method === 'POST') {
-      needTeacher();
-      const b = await body();
-      const deck = await db.prepare('SELECT id FROM decks WHERE id = ?1').bind(String(b.deck_id || '')).first();
-      if (!deck) fail(404, 'Kategori tidak ditemukan.');
-      const h = str(b.h, 12, { required: true, label: '汉字' }), m = str(b.m, 60, { required: true, label: 'Arti' });
-      const id = `${deck.id}:${h}`;
-      if ((await db.prepare('SELECT COUNT(*) AS n FROM cards').first('n')) >= 10000) fail(400, 'Batas 10.000 kartu tercapai.');
-      if (await db.prepare('SELECT 1 FROM cards WHERE id = ?1').bind(id).first()) fail(409, `Kartu ${h} sudah ada di kategori ini.`);
-      await db.prepare(`INSERT INTO cards (id, deck_id, h, p, m, mw, alt, pic, builtin, sort, created_at) VALUES (?1,?2,?3,?4,?5,?6,'[]',?7,0,?8,?9)`)
-        .bind(id, deck.id, h, str(b.p, 60, { label: 'Pinyin' }), m, str(b.mw, 2, { label: '量词' }), picOk(b.pic), int(b.sort ?? 0, 0, 100000), now()).run();
-      return json({ ok: true, id });
+    if (path === '/deck/submit' && method === 'POST') {
+      const b = await body(); const d = await editableDeck(b.id);
+      if (teacher) fail(400, 'Kategori guru langsung tampil untuk murid.');
+      if ((await db.prepare('SELECT COUNT(*) AS n FROM cards WHERE deck_id = ?1').bind(d.id).first('n')) < 1) fail(400, 'Tambahkan minimal 1 kartu sebelum minta persetujuan.');
+      await db.prepare("UPDATE decks SET status = 'pending' WHERE id = ?1").bind(d.id).run();
+      return json({ ok: true });
     }
-    if (path === '/t/card/delete' && method === 'POST') {
-      needTeacher();
+    if (path === '/cards/bulk' && method === 'POST') {
+      const b = await body(128 * 1024); const d = await editableDeck(b.deck_id);
+      if (!Array.isArray(b.cards) || !b.cards.length) fail(400, 'Belum ada kartu untuk disimpan.');
+      if (b.cards.length > 100) fail(400, 'Maksimal 100 kartu sekali simpan.');
+      const total = await db.prepare('SELECT COUNT(*) AS n FROM cards').first('n');
+      if (total + b.cards.length > 20000) fail(400, 'Batas 20.000 kartu tercapai.');
+      const have = new Set((await db.prepare('SELECT h FROM cards WHERE deck_id = ?1').bind(d.id).all()).results.map((r) => r.h));
+      const base = await db.prepare('SELECT COALESCE(MAX(sort), 0) AS m FROM cards WHERE deck_id = ?1').bind(d.id).first('m');
+      const st = [], skipped = [];
+      b.cards.forEach((raw, i) => {
+        if (!raw || typeof raw !== 'object') fail(400, `Kartu baris ${i + 1} tidak valid.`);
+        let f; try { f = cardFields(raw); } catch (e) { throw new HttpError(400, `Baris ${i + 1}: ${e.message}`); }
+        if (have.has(f.h)) { skipped.push(f.h); return; }
+        have.add(f.h);
+        st.push(db.prepare("INSERT INTO cards (id, deck_id, h, p, m, mw, alt, pic, builtin, sort, created_at) VALUES (?1,?2,?3,?4,?5,?6,'[]',?7,0,?8,?9)")
+          .bind('c_' + randHex(8), d.id, f.h, f.p, f.m, f.mw, f.pic, base + st.length + 1, now()));
+      });
+      for (let i = 0; i < st.length; i += 50) await db.batch(st.slice(i, i + 50));
+      const t2 = st.length ? touch(d) : []; if (t2.length) await db.batch(t2);
+      return json({ added: st.length, skipped });
+    }
+    if (path === '/card/update' && method === 'POST') {
       const b = await body();
       const c = await db.prepare('SELECT * FROM cards WHERE id = ?1').bind(String(b.id || '')).first();
       if (!c) fail(404, 'Kartu tidak ditemukan.');
+      const d = await editableDeck(c.deck_id);
+      const f = cardFields(b);
+      if (f.h !== c.h && (await db.prepare('SELECT 1 FROM cards WHERE deck_id = ?1 AND h = ?2').bind(d.id, f.h).first())) fail(409, `Kartu ${f.h} sudah ada di kategori ini.`);
+      await db.batch([db.prepare('UPDATE cards SET h = ?2, p = ?3, m = ?4, mw = ?5, pic = ?6 WHERE id = ?1').bind(c.id, f.h, f.p, f.m, f.mw, f.pic), ...touch(d)]);
+      return json({ ok: true });
+    }
+    if (path === '/card/delete' && method === 'POST') {
+      const b = await body();
+      const c = await db.prepare('SELECT * FROM cards WHERE id = ?1').bind(String(b.id || '')).first();
+      if (!c) fail(404, 'Kartu tidak ditemukan.');
+      await editableDeck(c.deck_id);
       const st = [db.prepare('DELETE FROM cards WHERE id = ?1').bind(c.id)];
       if (c.builtin) st.unshift(db.prepare('INSERT OR IGNORE INTO deleted_builtin (id) VALUES (?1)').bind(c.id));
       await db.batch(st); return json({ ok: true });
     }
-    if (path === '/t/image' && method === 'POST') {
-      needTeacher();
+    if (path === '/image' && method === 'POST') {
+      needCreator();
       if (len > 512 * 1024) fail(413, 'Foto maksimal 500 KB.');
+      if (!(await usageOk(db, 'img:' + user.id, teacher ? 300 : 40, DAY))) fail(429, 'Batas unggah foto hari ini tercapai.');
       const buf = new Uint8Array(await req.arrayBuffer());
       if (buf.length > 512 * 1024 || buf.length < 16) fail(413, 'Foto tidak valid atau terlalu besar.');
       const type = sniffImage(buf);
       if (!type) fail(415, 'Pakai foto PNG, JPG, WEBP, atau GIF.');
-      if ((await db.prepare('SELECT COUNT(*) AS n FROM images').first('n')) >= 3000) fail(400, 'Batas 3000 foto tercapai.');
+      if ((await db.prepare('SELECT COUNT(*) AS n FROM images').first('n')) >= 5000) fail(400, 'Batas 5000 foto tercapai.');
       const id = randHex(16);
       await db.prepare('INSERT INTO images (id, type, data, created_at) VALUES (?1,?2,?3,?4)').bind(id, type, buf, now()).run();
       return json({ url: '/api/img/' + id });
+    }
+
+    /* ----- khusus guru: persetujuan & pantauan ----- */
+    if (path === '/t/approve' && method === 'POST') {
+      needTeacher();
+      const b = await body();
+      const d = await db.prepare('SELECT * FROM decks WHERE id = ?1 AND owner_id IS NOT NULL').bind(String(b.id || '')).first();
+      if (!d) fail(404, 'Kategori tidak ditemukan.');
+      await db.prepare('UPDATE decks SET status = ?2 WHERE id = ?1').bind(d.id, b.approve === true ? 'public' : 'private').run();
+      return json({ ok: true });
+    }
+    if (path === '/t/live' && method === 'GET') {
+      needTeacher();
+      const t = now();
+      const rows = (await db.prepare(`SELECT r.*, u.display_name, u.class_name,
+          (SELECT COUNT(*) FROM answers a WHERE a.run_id = r.id AND a.first_try = 1) AS done
+        FROM runs r JOIN users u ON u.id = r.user_id
+        WHERE (r.finished_at IS NULL AND r.last_seen > ?1) OR r.finished_at > ?2
+        ORDER BY r.started_at DESC LIMIT 200`).bind(t - 15 * 60e3, t - 30 * 60e3).all()).results;
+      return json({ now: t, runs: rows.map((r) => ({ ...fmtRun(r), name: r.display_name, class_name: r.class_name, planned: r.planned, done: r.done,
+        state: r.state, state_since: r.state_since, last_seen: r.last_seen })) });
     }
 
     fail(404, 'Tidak ditemukan.');
