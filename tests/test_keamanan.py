@@ -54,7 +54,7 @@ check('Permintaan tanpa Origin ditolak', Client(origin=None).req('POST', '/api/l
 st, r, _ = S1.req('POST', '/api/run/start', {'decks': ['buah'], 'mode': 'pic'}); sid = r['id']
 check('Murid mulai sesi', st == 200)
 st, opts, _ = S1.req('POST', '/api/run/quiz', {'sid': sid, 'card': 'buah:苹果'})
-check('Pilihan tebak: 4 opsi tanpa kunci jawaban', st == 200 and len(opts) == 4 and all(set(o) == {'t', 'h', 'p', 'm'} for o in opts), opts)
+check('Pilihan tebak: 4 opsi tanpa kunci jawaban', st == 200 and len(opts) == 4 and all(set(o) == {'t', 'h', 'p', 'm', 'en'} for o in opts), opts)
 check('Token palsu ditolak', S1.req('POST', '/api/run/answer', {'sid': sid, 'card': 'buah:苹果', 'token': 'deadbeef'})[0] == 400)
 right = [o for o in opts if o['h'] == '苹果'][0]['t']
 st, ans, _ = S1.req('POST', '/api/run/answer', {'sid': sid, 'card': 'buah:苹果', 'token': right})
@@ -144,6 +144,16 @@ S4.req('POST', '/api/run/rate', {'sid': sid4, 'card': 'buah:苹果', 'rating': 3
 fin4 = S4.req('POST', '/api/run/finish', {'sid': sid4})[1]
 check('Lama keluar aplikasi tersimpan di sesi', fin4['away_count'] == 1 and fin4['away_ms'] >= 1000, fin4)
 check('Murid tidak bisa baca pantauan guru', S4.req('GET', '/api/t/live')[0] == 403)
+# ---- izin buat kartu untuk semua murid ----
+cfg = T.req('GET', '/api/content')[1]['settings']
+check('Tanpa izin: murid tak bisa buat kategori', S3.req('POST', '/api/deck', {'zh': '测试'})[0] == 403)
+check('Murid tak bisa menyalakan izin global', S3.req('POST', '/api/t/settings', {**cfg, 'all_can_create': True})[0] == 403)
+T.req('POST', '/api/t/settings', {**cfg, 'all_can_create': True})
+st, r, _ = S3.req('POST', '/api/deck', {'zh': '测试'})
+check('Izin global: murid bisa buat kategori pribadi', st == 200 and S3.req('GET', '/api/me')[1]['can_create'] is True)
+check('Kategori baru murid tetap pribadi', not any(d['id'] == r['id'] for d in S4.req('GET', '/api/content')[1]['decks']))
+T.req('POST', '/api/t/settings', {**cfg, 'all_can_create': False})
+check('Izin global dimatikan: tak bisa lagi', S3.req('POST', '/api/deck', {'zh': '测试二'})[0] == 403)
 # ---- kiriman kartu ----
 rid = [u['id'] for u in T.req('GET', '/api/t/students')[1] if u['username'] == 'rina'][0]
 dv = T.req('POST', '/api/deck', {'zh': '礼物', 'idn': 'Hadiah', 'shared': False})[1]['id']
@@ -195,6 +205,25 @@ check('Sesi yang diakhiri tidak bisa dijawab lagi', S4.req('POST', '/api/run/rat
 st, r, _ = S4.req('POST', '/api/run/start', {'decks': ['buah'], 'mode': 'pic', 'planned': 3}); sidx = r['id']
 fx = S4.req('POST', '/api/run/finish', {'sid': sidx, 'early': True})[1]
 check('Murid bisa mengakhiri sesinya sendiri', fx.get('ended_by') == 'self' and fx.get('finished_at'), fx)
+# ---- English, asal tekan, progres ----
+ct = S4.req('GET', '/api/content')[1]
+check('Kartu bawaan punya arti English', any(c['h'] == '苹果' and c['en'] == 'apple' for c in ct['cards']))
+tr = T.req('POST', '/api/translate', {'lines': ['apple', 'kucing', '骄傲']})[1]['items']
+check('Input bahasa Inggris diterjemahkan', tr[0]['h'] == '苹果' and tr[0]['m'] == 'apel' and tr[1]['en'] == 'cat' and tr[2]['en'] == 'proud', tr)
+st, r, _ = S4.req('POST', '/api/run/start', {'decks': ['buah'], 'mode': 'pic', 'planned': 3}); sr = r['id']
+time.sleep(1.3)
+r1 = S4.req('POST', '/api/run/rate', {'sid': sr, 'card': 'buah:苹果', 'rating': 3, 'ms': 2000})[1]
+r2 = S4.req('POST', '/api/run/rate', {'sid': sr, 'card': 'buah:香蕉', 'rating': 4, 'ms': 50, 'clue': True})[1]
+check('Jawaban normal tidak dianggap asal', r1.get('rush') is False, r1)
+check('Jawaban beruntun < 1,2 dtk terdeteksi asal tekan (server)', r2.get('rush') is True, r2)
+q = S4.req('POST', '/api/run/quiz', {'sid': sr, 'card': 'buah:橙子'})[1]
+qa = S4.req('POST', '/api/run/answer', {'sid': sr, 'card': 'buah:橙子', 'token': q[0]['t']})[1]
+check('Tebakan dijawab instan terdeteksi asal tekan', qa.get('rush') is True, qa)
+fr = S4.req('POST', '/api/run/finish', {'sid': sr})[1]
+check('Jumlah asal tekan & clue tersimpan di sesi', fr['rush'] == 2 and fr['clues'] == 1, fr)
+check('Murid tak bisa lihat progres kelas', S4.req('GET', '/api/t/progress')[0] == 403)
+pg = T.req('GET', '/api/t/progress')[1]
+check('Guru melihat progres murid per kategori', any(x['deck_id'] == 'buah' and x['m4'] >= 1 for x in pg['rows']), pg)
 st, _, _ = T.req('POST', '/api/t/students', {'action': 'set_active', 'id': b['id'] if 'id' in b else '', 'active': False})
 check('Guru nonaktifkan akun', st == 200)
 check('Akun nonaktif langsung keluar', S2.req('GET', '/api/me')[0] == 401)

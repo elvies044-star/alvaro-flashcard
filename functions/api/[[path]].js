@@ -12,7 +12,7 @@
 //   * Kehadiran saat belajar (keluar/kembali ke aplikasi) dicatat per sesi.
 // =====================================================================
 import builtin from '../../src/data/builtin.json';
-import { translateLines, cleanEmoji, CJK, toPinyin } from '../../server/translate.js';
+import { translateLines, cleanEmoji, CJK, toPinyin, enOf } from '../../server/translate.js';
 
 const DAY = 864e5;
 const PBKDF2_ITER = 10000; // aman untuk batas CPU paket gratis Cloudflare (10 ms). Naikkan jika pakai paket berbayar.
@@ -22,7 +22,7 @@ const FRONT_MODES = ['pic', 'han', 'arti', 'mix'];
 const COMMON_MW = ['个', '本', '支', '张', '把', '只', '条', '头', '辆', '件', '双', '块', '朵', '棵', '杯', '瓶', '碗', '台', '座', '片', '颗', '根', '匹', '架', '艘', '盏', '扇', '部', '顶', '副', '枚', '位', '家', '所'];
 const USERNAME_RE = /^[a-z0-9._]{3,24}$/;
 const HEX32 = /^[a-f0-9]{32}$/;
-const BUILTIN_VERSION = `v${builtin.decks.length}-${builtin.cards.length}-${builtin.cards.reduce((t, c) => (t + c.id.length * 7 + c.m.length) % 1e9, 0)}`;
+const BUILTIN_VERSION = `en1-v${builtin.decks.length}-${builtin.cards.length}-${builtin.cards.reduce((t, c) => (t + c.id.length * 7 + c.m.length) % 1e9, 0)}`;
 const enc = new TextEncoder();
 const now = () => Date.now();
 
@@ -117,6 +117,12 @@ const MIGRATIONS = [
   `ALTER TABLE runs ADD COLUMN state TEXT NOT NULL DEFAULT 'active'`,
   `ALTER TABLE runs ADD COLUMN state_since INTEGER`,
   `ALTER TABLE runs ADD COLUMN ended_by TEXT`,
+  `ALTER TABLE cards ADD COLUMN en TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE answers ADD COLUMN clue INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE answers ADD COLUMN rush INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE runs ADD COLUMN rush INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE runs ADD COLUMN clues INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE quiz_pending ADD COLUMN issued_at INTEGER`,
   `CREATE INDEX IF NOT EXISTS decks_owner ON decks(owner_id)`,
   `CREATE INDEX IF NOT EXISTS runs_seen ON runs(last_seen)`,
   `CREATE TABLE IF NOT EXISTS usage (k TEXT NOT NULL, ts INTEGER NOT NULL)`,
@@ -126,7 +132,8 @@ const MIGRATIONS = [
   `CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, kind TEXT NOT NULL, text TEXT NOT NULL, created_at INTEGER NOT NULL, seen_at INTEGER)`,
   `CREATE INDEX IF NOT EXISTS messages_user ON messages(user_id, seen_at)`,
 ];
-const SCHEMA_VERSION = '3';
+const SCHEMA_VERSION = '4';
+const RUSH_RATE_MS = 1200, RUSH_QUIZ_MS = 700;
 const DEFAULT_SETTINGS = { modes: ['pic', 'han', 'arti', 'mix'], default_mode: 'pic', student_can_choose: true, quiz_enabled: true, hidden_decks: [] };
 let ready = null;
 function ensureReady(db) {
@@ -154,9 +161,9 @@ async function seedBuiltin(db) {
   }
   for (const c of builtin.cards) {
     if (del.has(c.id) || del.has('deck:' + c.deck_id)) continue;
-    stmts.push(db.prepare(`INSERT INTO cards (id, deck_id, h, p, m, mw, alt, opp, s, sp, si, pic, builtin, sort, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,1,?13,?14)
-      ON CONFLICT(id) DO UPDATE SET h=excluded.h, p=excluded.p, m=excluded.m, mw=excluded.mw, alt=excluded.alt, opp=excluded.opp, s=excluded.s, sp=excluded.sp, si=excluded.si, pic=excluded.pic, sort=excluded.sort`)
-      .bind(c.id, c.deck_id, c.h, c.p, c.m, c.mw, JSON.stringify(c.alt || []), c.opp, c.s, c.sp, c.si, c.pic, c.sort, t));
+    stmts.push(db.prepare(`INSERT INTO cards (id, deck_id, h, p, m, mw, alt, opp, s, sp, si, pic, builtin, sort, created_at, en) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,1,?13,?14,?15)
+      ON CONFLICT(id) DO UPDATE SET h=excluded.h, p=excluded.p, m=excluded.m, mw=excluded.mw, alt=excluded.alt, opp=excluded.opp, s=excluded.s, sp=excluded.sp, si=excluded.si, pic=excluded.pic, sort=excluded.sort, en=excluded.en`)
+      .bind(c.id, c.deck_id, c.h, c.p, c.m, c.mw, JSON.stringify(c.alt || []), c.opp, c.s, c.sp, c.si, c.pic, c.sort, t, enOf(c.h)));
   }
   for (let i = 0; i < stmts.length; i += 50) await db.batch(stmts.slice(i, i + 50));
   await db.prepare("INSERT INTO meta (k, v) VALUES ('builtin', ?1) ON CONFLICT(k) DO UPDATE SET v = excluded.v").bind(BUILTIN_VERSION).run();
@@ -168,7 +175,7 @@ function cleanSettings(s) {
   const modes = Array.isArray(s.modes) ? FRONT_MODES.filter((m) => s.modes.includes(m)) : FRONT_MODES.slice();
   const ms = modes.length ? modes : ['pic'];
   const hidden = Array.isArray(s.hidden_decks) ? [...new Set(s.hidden_decks.filter((x) => typeof x === 'string' && /^[a-z0-9_]{2,32}$/.test(x)))].slice(0, 300) : [];
-  return { modes: ms, default_mode: ms.includes(s.default_mode) ? s.default_mode : ms[0], student_can_choose: s.student_can_choose !== false, quiz_enabled: s.quiz_enabled !== false, mw_quiz: s.mw_quiz !== false, hidden_decks: hidden };
+  return { modes: ms, default_mode: ms.includes(s.default_mode) ? s.default_mode : ms[0], student_can_choose: s.student_can_choose !== false, quiz_enabled: s.quiz_enabled !== false, mw_quiz: s.mw_quiz !== false, all_can_create: s.all_can_create === true, hidden_decks: hidden };
 }
 async function getSettings(db) {
   const row = await db.prepare('SELECT data FROM settings WHERE id = 1').first('data');
@@ -214,7 +221,7 @@ async function usageOk(db, key, limit, windowMs) {
 function cardFields(b, { partial = false } = {}) {
   const h = str(b.h, 12, { required: !partial, label: '汉字' });
   if (h && !CJK.test(h)) fail(400, `"${h}" bukan hanzi.`);
-  return { h, p: str(b.p, 60, { label: 'Pinyin' }), m: str(b.m, 60, { required: !partial, label: 'Arti' }), mw: str(b.mw, 2, { label: '量词' }), pic: picOk(b.pic) };
+  return { h, p: str(b.p, 60, { label: 'Pinyin' }), m: str(b.m, 60, { required: !partial, label: 'Arti' }), en: str(b.en, 60, { label: 'English' }), mw: str(b.mw, 2, { label: '量词' }), pic: picOk(b.pic) };
 }
 function readCookie(req, name) {
   const c = req.headers.get('Cookie') || '';
@@ -248,7 +255,7 @@ const recordFail = (db, keys) => db.batch(keys.map((k) => db.prepare('INSERT INT
 function fmtRun(r) {
   if (!r) return null;
   let decks = []; try { decks = JSON.parse(r.decks); } catch (_) { /* rusak */ }
-  return { id: r.id, student_id: r.user_id, decks, mode: r.mode, started_at: new Date(r.started_at).toISOString(), finished_at: r.finished_at ? new Date(r.finished_at).toISOString() : null, total: r.total, score: r.score, c1: r.c1, c2: r.c2, c3: r.c3, c4: r.c4, quiz_right: r.quiz_right, quiz_total: r.quiz_total, seconds: r.seconds, away_count: r.away_count || 0, away_ms: r.away_ms || 0, ended_by: r.ended_by || null };
+  return { id: r.id, student_id: r.user_id, decks, mode: r.mode, started_at: new Date(r.started_at).toISOString(), finished_at: r.finished_at ? new Date(r.finished_at).toISOString() : null, total: r.total, score: r.score, c1: r.c1, c2: r.c2, c3: r.c3, c4: r.c4, quiz_right: r.quiz_right, quiz_total: r.quiz_total, seconds: r.seconds, away_count: r.away_count || 0, away_ms: r.away_ms || 0, ended_by: r.ended_by || null, rush: r.rush || 0, clues: r.clues || 0 };
 }
 async function openRun(db, user, id) {
   if (typeof id !== 'string' || !HEX32.test(id)) fail(400, 'Sesi tidak valid.');
@@ -366,6 +373,8 @@ export async function onRequest(ctx) {
     const user = await currentUser(req, db);
     if (!user) return json({ error: 'Silakan masuk lagi.' }, 401, { 'Set-Cookie': clearCookie });
     const teacher = user.role === 'teacher';
+    // izin buat kartu: per murid, atau untuk semua murid lewat pengaturan guru
+    if (!teacher && !user.can_create && (await getSettings(db)).all_can_create) user.can_create = 1;
     const needTeacher = () => { if (!teacher) fail(403, 'Khusus guru.'); };
 
     if (path === '/me' && method === 'GET') return json(pubUser(user));
@@ -383,8 +392,8 @@ export async function onRequest(ctx) {
       const dmap = await deliveredMap(db, user);
       const decks = (await db.prepare('SELECT d.*, u.display_name AS owner_name FROM decks d LEFT JOIN users u ON u.id = d.owner_id ORDER BY d.sort, d.created_at').all()).results.filter((d) => deckVisible(user, d, settings, dmap));
       const ok = new Set(decks.map((d) => d.id));
-      const cards = (await db.prepare('SELECT id, deck_id, h, p, m, mw, alt, opp, s, sp, si, pic, builtin, sort FROM cards ORDER BY deck_id, sort, created_at').all()).results
-        .filter((c) => ok.has(c.deck_id)).map((c) => ({ ...c, alt: (() => { try { return JSON.parse(c.alt); } catch (_) { return []; } })(), builtin: !!c.builtin }));
+      const cards = (await db.prepare('SELECT id, deck_id, h, p, m, en, mw, alt, opp, s, sp, si, pic, builtin, sort FROM cards ORDER BY deck_id, sort, created_at').all()).results
+        .filter((c) => ok.has(c.deck_id)).map((c) => ({ ...c, en: c.en || enOf(c.h), alt: (() => { try { return JSON.parse(c.alt); } catch (_) { return []; } })(), builtin: !!c.builtin }));
       return json({ settings, decks: decks.map((d) => ({ ...d, builtin: !!d.builtin, mine: d.owner_id === user.id, editable: canEditDeck(user, d), owner_name: d.owner_id ? d.owner_name || 'Murid' : null, delivered_at: dmap.get(d.id) || null })), cards, me: pubUser(user) });
     }
     if (path === '/srs' && method === 'GET') {
@@ -463,12 +472,12 @@ export async function onRequest(ctx) {
         const pool = shuffleIn([...new Set([...COMMON_MW, ...used])].filter((w) => w !== c.mw && !alt.includes(w))).slice(0, 3);
         opts = shuffleIn([c.mw, ...pool]).map((w) => ({ t: randHex(9), w, y: toPinyin(w), _ok: w === c.mw }));
       } else {
-        const others = (await db.prepare('SELECT id, h, p, m FROM cards WHERE deck_id = ?1 AND id <> ?2 AND h <> ?3 AND m <> ?4 ORDER BY RANDOM() LIMIT 3').bind(c.deck_id, c.id, c.h, c.m).all()).results;
-        opts = shuffleIn([{ id: c.id, h: c.h, p: c.p, m: c.m }, ...others]).map((o) => ({ t: randHex(9), h: o.h, p: o.p, m: o.m, _ok: o.id === c.id }));
+        const others = (await db.prepare('SELECT id, h, p, m, en FROM cards WHERE deck_id = ?1 AND id <> ?2 AND h <> ?3 AND m <> ?4 ORDER BY RANDOM() LIMIT 3').bind(c.deck_id, c.id, c.h, c.m).all()).results;
+        opts = shuffleIn([{ id: c.id, h: c.h, p: c.p, m: c.m, en: c.en }, ...others]).map((o) => ({ t: randHex(9), h: o.h, p: o.p, m: o.m, en: o.en || enOf(o.h), _ok: o.id === c.id }));
       }
       const correct = opts.find((o) => o._ok).t;
-      await db.prepare(`INSERT INTO quiz_pending (run_id, card_id, correct, tokens, answered, result) VALUES (?1,?2,?3,?4,0,NULL)
-        ON CONFLICT(run_id, card_id) DO UPDATE SET correct = excluded.correct, tokens = excluded.tokens, answered = 0, result = NULL`).bind(run.id, c.id, correct, JSON.stringify(opts.map((o) => o.t))).run();
+      await db.prepare(`INSERT INTO quiz_pending (run_id, card_id, correct, tokens, answered, result, issued_at) VALUES (?1,?2,?3,?4,0,NULL,?5)
+        ON CONFLICT(run_id, card_id) DO UPDATE SET correct = excluded.correct, tokens = excluded.tokens, answered = 0, result = NULL, issued_at = excluded.issued_at`).bind(run.id, c.id, correct, JSON.stringify(opts.map((o) => o.t)), now()).run();
       return json(opts.map(({ _ok, ...o }) => o));
     }
     if (path === '/run/answer' && method === 'POST') {
@@ -481,7 +490,10 @@ export async function onRequest(ctx) {
       const ok = b.token === q.correct;
       const upd = await db.prepare('UPDATE quiz_pending SET answered = 1, result = ?3 WHERE run_id = ?1 AND card_id = ?2 AND answered = 0').bind(run.id, b.card, ok ? 1 : 0).run();
       if (!upd.meta.changes) fail(409, 'Pertanyaan sudah dijawab.');
-      return json({ correct: ok, correct_token: q.correct });
+      // dijawab kurang dari 0,7 detik setelah pilihan muncul = asal tekan
+      const rush = !!q.issued_at && now() - q.issued_at < RUSH_QUIZ_MS;
+      if (rush) await db.prepare('UPDATE runs SET rush = rush + 1 WHERE id = ?1').bind(run.id).run();
+      return json({ correct: ok, correct_token: q.correct, rush, rush_count: run.rush + (rush ? 1 : 0) });
     }
     if (path === '/run/rate' && method === 'POST') {
       const b = await body();
@@ -494,13 +506,18 @@ export async function onRequest(ctx) {
       const first = !(await db.prepare('SELECT 1 FROM answers WHERE run_id = ?1 AND card_id = ?2').bind(run.id, c.id).first());
       const q = await db.prepare('SELECT answered, result FROM quiz_pending WHERE run_id = ?1 AND card_id = ?2').bind(run.id, c.id).first();
       const due = now() + (rating === 3 ? DAY : rating === 4 ? 3 * DAY : 0);
+      // asal tekan: jarak dari jawaban sebelumnya terlalu singkat (dihitung server, tidak bisa dipalsukan)
+      const prevAt = await db.prepare('SELECT MAX(created_at) AS t FROM answers WHERE run_id = ?1').bind(run.id).first('t');
+      const rush = now() - Math.max(prevAt || 0, run.started_at) < RUSH_RATE_MS ? 1 : 0;
+      const clue = b.clue === true ? 1 : 0;
       await db.batch([
-        db.prepare('INSERT INTO answers (run_id, user_id, card_id, deck_id, card_h, rating, quiz_correct, ms, first_try, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)')
-          .bind(run.id, user.id, c.id, c.deck_id, c.h, rating, q && q.answered ? q.result : null, ms, first ? 1 : 0, now()),
+        db.prepare('INSERT INTO answers (run_id, user_id, card_id, deck_id, card_h, rating, quiz_correct, ms, first_try, created_at, clue, rush) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)')
+          .bind(run.id, user.id, c.id, c.deck_id, c.h, rating, q && q.answered ? q.result : null, ms, first ? 1 : 0, now(), clue, rush),
+        db.prepare('UPDATE runs SET rush = rush + ?2, clues = clues + ?3 WHERE id = ?1').bind(run.id, rush, clue),
         db.prepare('DELETE FROM quiz_pending WHERE run_id = ?1 AND card_id = ?2').bind(run.id, c.id),
         db.prepare('INSERT INTO srs (user_id, card_id, due, last) VALUES (?1,?2,?3,?4) ON CONFLICT(user_id, card_id) DO UPDATE SET due = excluded.due, last = excluded.last').bind(user.id, c.id, due, rating),
       ]);
-      return json({ ok: true });
+      return json({ ok: true, rush: !!rush, rush_count: (run.rush || 0) + rush });
     }
     if (path === '/run/finish' && method === 'POST') {
       const b = await body();
@@ -669,8 +686,8 @@ export async function onRequest(ctx) {
         let f; try { f = cardFields(raw); } catch (e) { throw new HttpError(400, `Baris ${i + 1}: ${e.message}`); }
         if (have.has(f.h)) { skipped.push(f.h); return; }
         have.add(f.h);
-        st.push(db.prepare("INSERT INTO cards (id, deck_id, h, p, m, mw, alt, pic, builtin, sort, created_at) VALUES (?1,?2,?3,?4,?5,?6,'[]',?7,0,?8,?9)")
-          .bind('c_' + randHex(8), d.id, f.h, f.p, f.m, f.mw, f.pic, base + st.length + 1, now()));
+        st.push(db.prepare("INSERT INTO cards (id, deck_id, h, p, m, mw, alt, pic, builtin, sort, created_at, en) VALUES (?1,?2,?3,?4,?5,?6,'[]',?7,0,?8,?9,?10)")
+          .bind('c_' + randHex(8), d.id, f.h, f.p, f.m, f.mw, f.pic, base + st.length + 1, now(), f.en || enOf(f.h)));
       });
       for (let i = 0; i < st.length; i += 50) await db.batch(st.slice(i, i + 50));
       const t2 = st.length ? touch(d) : []; if (t2.length) await db.batch(t2);
@@ -683,7 +700,7 @@ export async function onRequest(ctx) {
       const d = await editableDeck(c.deck_id);
       const f = cardFields(b);
       if (f.h !== c.h && (await db.prepare('SELECT 1 FROM cards WHERE deck_id = ?1 AND h = ?2').bind(d.id, f.h).first())) fail(409, `Kartu ${f.h} sudah ada di kategori ini.`);
-      await db.batch([db.prepare('UPDATE cards SET h = ?2, p = ?3, m = ?4, mw = ?5, pic = ?6 WHERE id = ?1').bind(c.id, f.h, f.p, f.m, f.mw, f.pic), ...touch(d)]);
+      await db.batch([db.prepare('UPDATE cards SET h = ?2, p = ?3, m = ?4, mw = ?5, pic = ?6, en = ?7 WHERE id = ?1').bind(c.id, f.h, f.p, f.m, f.mw, f.pic, b.en === undefined ? c.en : f.en), ...touch(d)]);
       return json({ ok: true });
     }
     if (path === '/card/delete' && method === 'POST') {
@@ -710,6 +727,13 @@ export async function onRequest(ctx) {
     }
 
     /* ----- khusus guru: persetujuan & pantauan ----- */
+    if (path === '/t/progress' && method === 'GET') {
+      needTeacher();
+      const rows = (await db.prepare(`SELECT s.user_id, c.deck_id, SUM(s.last = 4) AS m4, SUM(s.last = 3) AS m3, SUM(s.last <= 2) AS m12, MAX(s.due) AS due
+        FROM srs s JOIN cards c ON c.id = s.card_id JOIN users u ON u.id = s.user_id WHERE u.role = 'student' GROUP BY s.user_id, c.deck_id`).all()).results;
+      const last = (await db.prepare(`SELECT user_id, MAX(started_at) AS t FROM runs GROUP BY user_id`).all()).results;
+      return json({ rows, last: Object.fromEntries(last.map((r) => [r.user_id, r.t])) });
+    }
     if (path === '/t/end-run' && method === 'POST') {
       needTeacher();
       const b = await body(4096);

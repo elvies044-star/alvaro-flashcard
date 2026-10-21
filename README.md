@@ -8,6 +8,7 @@ Web app flashcard Mandarin untuk Alvaro Education Centre:
 - Murid yang diberi izin bisa membuat kategori sendiri. Kategorinya baru tampil untuk murid lain setelah **disetujui guru**.
 - **Kirim kartu** ke semua murid, satu kelas, atau murid tertentu. Kartu langsung muncul memenuhi layar murid dan masuk ke daftar **Pribadi** paling atas.
 - **Pesan / peringatan** layar penuh ke murid. Guru juga bisa **mengakhiri sesi** murid yang sedang berjalan.
+- **Progres** (sudah sampai mana) untuk murid dan guru, **clue** huruf depan (2 per sesi, +1 tiap 3 benar berturut-turut), arti **English**, dan **deteksi asal tekan**.
 - **Kuis 量词**, **bagi kartu** per bagian (misalnya 30 kartu jadi 3 × 10), dan **lanjutkan sesi** setelah keluar atau refresh.
 
 **Butuh:** akun **GitHub** dan **Cloudflare** (gratis, tanpa kartu kredit). Waktu ± 15 menit. Tidak perlu menulis SQL sama sekali.
@@ -87,7 +88,7 @@ Murid juga melihat peringatan setiap kali kembali dari aplikasi lain: *"Kamu bar
 
 ## Keamanan yang sudah dipasang
 
-Diuji dengan **119 percobaan** di `tests/test_keamanan.py`, dan semuanya lulus.
+Diuji dengan **132 percobaan** di `tests/test_keamanan.py`, dan semuanya lulus.
 
 - **Skor tidak bisa diubah murid.** Murid hanya mengirim jawaban. Server memeriksa tebakan dan menghitung skor sendiri. Tidak ada jalan bagi murid untuk menulis, mengubah, atau menghapus skor.
 - **Kunci jawaban tebakan tidak dikirim ke browser.** Pilihan jawaban memakai kode acak sekali pakai.

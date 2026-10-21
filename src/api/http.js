@@ -56,7 +56,8 @@ export const api = {
   inbox: () => call('GET', '/inbox'),
   inboxSeen: (messages, deliveries) => call('POST', '/inbox/seen', { messages, deliveries }),
   answerQuiz: (sid, card, token) => call('POST', '/run/answer', { sid, card, token }),
-  rateCard: (sid, card, rating, ms) => call('POST', '/run/rate', { sid, card, rating, ms: Math.round(ms) }),
+  rateCard: (sid, card, rating, ms, clue) => call('POST', '/run/rate', { sid, card, rating, ms: Math.round(ms), clue: !!clue }),
+  progress: () => call('GET', '/t/progress'),
   finishSession: (sid, early) => call('POST', '/run/finish', { sid, early: !!early }),
   mySessions: () => call('GET', '/runs/mine'),
 

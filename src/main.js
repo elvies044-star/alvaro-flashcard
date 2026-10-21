@@ -45,6 +45,8 @@ const ICON = {
   gift: '<rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18M12 8S10.5 3 8 3a2.5 2.5 0 0 0 0 5h4zM12 8s1.5-5 4-5a2.5 2.5 0 0 1 0 5h-4z"/>',
   chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
   split: '<rect x="3" y="4" width="7" height="16" rx="2"/><rect x="14" y="4" width="7" height="16" rx="2"/>',
+  bulb: '<path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2V17h6v-.3c0-.8.4-1.5 1-2A7 7 0 0 0 12 2z"/>',
+  bolt: '<path d="M13 2L3 14h9l-1 8 10-12h-9z"/>', flag: '<path d="M4 22V4M4 4h13l-2 4 2 4H4"/>',
   stop: '<rect x="5" y="5" width="14" height="14" rx="2"/>', resume: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M10 9l5 3-5 3z"/>',
 };
 const ic = (n) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICON[n]}</svg>`;
@@ -83,9 +85,9 @@ const MODES = ['pic', 'han', 'arti', 'mix'];
 const MODE_LABEL = { pic: 'Gambar', han: '汉字', arti: 'Arti', mix: 'Campur' };
 const RATE = { 1: { l: 'Susah', w: 'muncul lagi segera', gap: 2 }, 2: { l: 'Lumayan', w: 'muncul lagi nanti', gap: 7 }, 3: { l: 'Bisa', w: 'muncul besok', days: 1 }, 4: { l: 'Mudah', w: 'muncul 3 hari lagi', days: 3 } };
 const COLORS = ['#1f3fbf', '#2fa3d6', '#16a34a', '#0f9f74', '#e0b51b', '#f08a24', '#e8513f', '#e0559b', '#7a4fd0', '#5b6789'];
-const S = Object.assign({ mode: 'pic', quiz: true, auto: true, sfx: true, all: false, sel: [], view: 'learn', ttab: 'live', hints: true, kind: 'card', split: { on: false, size: 10, part: 0 } }, store.get('prefs', {}));
+const S = Object.assign({ mode: 'pic', quiz: true, auto: true, sfx: true, all: false, sel: [], view: 'learn', ttab: 'live', hints: true, kind: 'card', lang: 'id', split: { on: false, size: 10, part: 0 } }, store.get('prefs', {}));
 if (!S.split || typeof S.split !== 'object') S.split = { on: false, size: 10, part: 0 };
-const savePrefs = () => store.set('prefs', { mode: S.mode, quiz: S.quiz, auto: S.auto, sfx: S.sfx, all: S.all, sel: S.sel, view: ['study', 'done'].includes(S.view) ? 'learn' : S.view, ttab: S.ttab, hints: S.hints, kind: S.kind, split: S.split });
+const savePrefs = () => store.set('prefs', { mode: S.mode, quiz: S.quiz, auto: S.auto, sfx: S.sfx, all: S.all, sel: S.sel, view: ['study', 'done'].includes(S.view) ? 'learn' : S.view, ttab: S.ttab, hints: S.hints, kind: S.kind, split: S.split, lang: S.lang });
 let ME = null, SET = null, DECKS = [], CARDS = [], SRS = {}, Q = null, STUDENTS = [];
 const isTeacher = () => !!ME && ME.role === 'teacher';
 const canCreate = () => !!ME && (ME.role === 'teacher' || !!ME.can_create);
@@ -94,7 +96,7 @@ function cleanSettings(s) {
   s = s || {};
   const modes = Array.isArray(s.modes) ? MODES.filter((m) => s.modes.includes(m)) : MODES.slice();
   const ms = modes.length ? modes : ['pic'];
-  return { modes: ms, default_mode: ms.includes(s.default_mode) ? s.default_mode : ms[0], student_can_choose: s.student_can_choose !== false, quiz_enabled: s.quiz_enabled !== false, mw_quiz: s.mw_quiz !== false, hidden_decks: Array.isArray(s.hidden_decks) ? s.hidden_decks.filter((x) => typeof x === 'string') : [] };
+  return { modes: ms, default_mode: ms.includes(s.default_mode) ? s.default_mode : ms[0], student_can_choose: s.student_can_choose !== false, quiz_enabled: s.quiz_enabled !== false, mw_quiz: s.mw_quiz !== false, all_can_create: s.all_can_create === true, hidden_decks: Array.isArray(s.hidden_decks) ? s.hidden_decks.filter((x) => typeof x === 'string') : [] };
 }
 function applyContent(c) {
   SET = cleanSettings(c.settings);
@@ -119,6 +121,9 @@ function picHTML(c) {
   return '';
 }
 const hasPic = (c) => picHTML(c) !== '';
+const LANG_LABEL = { id: 'ID', en: 'EN', both: 'ID + EN' };
+const mean = (c) => (S.lang === 'en' ? c.en || c.m : S.lang === 'both' && c.en ? `${c.m} · ${c.en}` : c.m);
+const meanAns = (c) => (S.lang === 'en' ? c.en || c.m : c.m);
 
 /* ================= shell ================= */
 function navItems() {
@@ -247,14 +252,15 @@ function renderLearn() {
     <div id="resumeBox">${resumeHTML()}</div>
     <div class="learnbar">
       ${mwOn() ? `<div class="seg" role="group" aria-label="Jenis latihan"><button data-lkind="card" aria-pressed="${kindNow() === 'card'}">Flashcard</button><button data-lkind="mw" aria-pressed="${kindNow() === 'mw'}">Kuis 量词</button></div>` : ''}
-      <button class="chip" data-act="split" aria-pressed="${S.split.on}">${ic('split')} Bagi kartu</button>
+      <button class="chip" data-act="split" aria-pressed="${S.split.on}">${ic('split')} Atur sesi</button>
+      ${!isTeacher() && canCreate() ? `<button class="chip" data-act="mycards">${ic('plus')} Buat kartu sendiri</button>` : ''}
     </div>
     ${S.split.on ? `<div class="splitbox">
-      <label class="field" for="spSize">Kartu per bagian<input id="spSize" type="number" inputmode="numeric" min="1" max="500" value="${S.split.size}"></label>
+      <label class="field" for="spSize">Kartu per sesi<input id="spSize" type="number" inputmode="numeric" min="1" max="500" value="${S.split.size}"></label>
       <span class="x-sign">=</span>
-      <label class="field" for="spCount">Jumlah bagian<input id="spCount" type="number" inputmode="numeric" min="1" max="100" value="${Math.max(1, ps.length)}"></label>
-      <p class="note" style="flex:1;min-width:180px;padding-bottom:10px">${pool} kartu dari kategori yang dipilih. Pilih bagian yang mau dipelajari sekarang.</p>
-      <div class="parts">${ps.map((p, i) => `<button class="part ${dp.includes(i) ? 'ok' : ''}" data-part="${i}" aria-pressed="${S.split.part === i}">Bagian ${i + 1}<small>${dp.includes(i) ? '✓ selesai · ' : ''}${p.length} kartu</small></button>`).join('') || '<span class="note">Pilih kategori dulu.</span>'}</div>
+      <label class="field" for="spCount">Jumlah sesi<input id="spCount" type="number" inputmode="numeric" min="1" max="100" value="${Math.max(1, ps.length)}"></label>
+      <p class="note" style="flex:1;min-width:180px;padding-bottom:10px">${pool} kartu dari kategori yang dipilih. Pilih sesi yang mau dipelajari sekarang.</p>
+      <div class="parts">${ps.map((p, i) => `<button class="part ${dp.includes(i) ? 'ok' : ''}" data-part="${i}" aria-pressed="${S.split.part === i}">Sesi ${i + 1}<small>${dp.includes(i) ? '✓ selesai · ' : ''}${p.length} kartu</small></button>`).join('') || '<span class="note">Pilih kategori dulu.</span>'}</div>
     </div>` : `<p class="note" style="margin:-6px 0 16px">${kindNow() === 'mw' ? 'Kuis 量词: tebak kata satuan yang tepat untuk tiap benda, misalnya 一<b>本</b>书.' : 'Pilih satu kategori atau lebih. Setelah kartu dibalik, beri nilai 1–4: nilai 1 & 2 diulang di sesi ini, 3 muncul besok, 4 muncul 3 hari lagi.'}</p>`}
     ${priv.length ? `<div class="sec-title">${ic('key')} Pribadi · ${priv.length}</div><div class="decks">${priv.map(deckCard).join('')}</div>${rest.length ? '<div class="sec-title">Kategori kelas</div>' : ''}` : ''}
     <div class="decks">${rest.map(deckCard).join('') || (priv.length ? '' : '<div class="panel empty"><b>Belum ada kategori</b>Gurumu belum menampilkan kategori untukmu.</div>')}</div>`;
@@ -275,11 +281,21 @@ function renderLearn() {
 let splitT = 0;
 function renderActionbar() {
   const bar = $('#actionbar'); if (S.view !== 'learn') { bar.hidden = true; return; } bar.hidden = false;
-  const cs = planCards(), n = cs.length, ps = S.split.on ? parts() : [];
-  const info = S.split.on ? `Bagian ${ps.length ? S.split.part + 1 : 0}/${ps.length} · semua kartu di bagian ini` : `${S.sel.length} kategori · ${S.all ? 'semua kartu, jadwal diabaikan' : 'kartu baru & yang jatuh tempo'}`;
+  const cs = planCards(), n = cs.length, ps = S.split.on ? parts() : [], pool = poolCards().length;
+  const info = S.split.on ? `Sesi ${ps.length ? S.split.part + 1 : 0} dari ${ps.length}${doneParts().includes(S.split.part) ? ' · ✓ sudah selesai' : ''}` : `${S.sel.length} kategori · ${S.all ? 'semua kartu, jadwal diabaikan' : 'kartu baru & yang jatuh tempo'}`;
   bar.innerHTML = `<div class="in"><div class="info"><b>${n} kartu${kindNow() === 'mw' ? ' · 量词' : ''}</b><span>${info}</span></div>
-    ${S.split.on ? '' : `<button class="switch" role="switch" aria-checked="${S.all}" data-act="togall"><span class="track"></span>Latih semua</button>`}
-    <button class="btn" data-act="start" ${n ? '' : 'disabled'}>${ic('play')} Mulai</button></div>`;
+    <button class="switch" role="switch" aria-checked="${S.split.on}" data-act="split"><span class="track"></span>Bagi jadi sesi</button>
+    ${S.split.on ? `<div class="splitctl">
+        <label class="per" for="abSize"><input id="abSize" type="number" inputmode="numeric" min="1" max="500" value="${S.split.size}" aria-label="Kartu per sesi"><span>kartu/sesi</span></label>
+        <div class="stepper" role="group" aria-label="Pilih sesi"><button data-act="partprev" aria-label="Sesi sebelumnya" ${S.split.part > 0 ? '' : 'disabled'}>${ic('back')}</button><b>${ps.length ? S.split.part + 1 : 0}/${ps.length}</b><button data-act="partnext" aria-label="Sesi berikutnya" ${S.split.part + 1 < ps.length ? '' : 'disabled'}><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button></div>
+      </div>` : `<button class="switch" role="switch" aria-checked="${S.all}" data-act="togall"><span class="track"></span>Latih semua</button>`}
+    <button class="btn" data-act="start" ${n ? '' : 'disabled'}>${ic('play')} Mulai${S.split.on && ps.length ? ` sesi ${S.split.part + 1}` : ''}</button></div>`;
+  const inp = $('#abSize');
+  if (inp) inp.addEventListener('change', () => {
+    S.split.size = Math.max(1, Math.min(500, parseInt(inp.value, 10) || 1)); S.split.part = 0; savePrefs();
+    if (S.view === 'learn') renderLearn();
+    toast(`${pool} kartu dibagi jadi ${parts().length} sesi, masing-masing ${S.split.size} kartu.`);
+  });
 }
 
 /* ---- simpan & lanjutkan sesi (setelah keluar / refresh) ---- */
@@ -287,7 +303,7 @@ let RESUME_OK = false;
 const savedRun = () => { const r = store.get('run', null); return r && ME && r.uid === ME.id && typeof r.sid === 'string' && Array.isArray(r.ids) ? r : null; };
 function saveRun() {
   if (!Q || !Q.sid) return;
-  store.set('run', { uid: ME.id, sid: Q.sid, ids: Q.queue.map((c) => c.id), total: Q.total, done: Q.done, mode: Q.mode, kind: Q.kind, awayCount: Q.awayCount, decks: Q.decks, part: Q.part || null, partLabel: Q.part ? `Bagian ${Q.part.idx + 1}` : '', at: Date.now() });
+  store.set('run', { uid: ME.id, sid: Q.sid, ids: Q.queue.map((c) => c.id), total: Q.total, done: Q.done, mode: Q.mode, kind: Q.kind, awayCount: Q.awayCount, clues: Q.clues, streak: Q.streak, rushCount: Q.rushCount || 0, decks: Q.decks, part: Q.part || null, partLabel: Q.part ? `Sesi ${Q.part.idx + 1} dari ${Q.part.of}` : '', at: Date.now() });
 }
 const clearRun = () => { store.set('run', null); RESUME_OK = false; };
 let checkingSaved = false;
@@ -305,7 +321,7 @@ function resumeRun() {
   const byId = new Map(CARDS.map((c) => [c.id, c]));
   const queue = r.ids.map((id) => byId.get(id)).filter(Boolean);
   if (!queue.length) { toast('Kartu di sesi itu sudah tidak tersedia.'); endSaved(); return; }
-  Q = { sid: r.sid, queue, total: r.total, done: r.done, mode: r.mode, kind: r.kind === 'mw' ? 'mw' : 'card', decks: r.decks, part: r.part, chain: Promise.resolve(), failed: 0, streak: 0, awayCount: r.awayCount || 0, awayMs: 0, awayStart: 0 };
+  Q = { sid: r.sid, queue, total: r.total, done: r.done, mode: r.mode, kind: r.kind === 'mw' ? 'mw' : 'card', decks: r.decks, part: r.part, clues: r.clues ?? CLUE_START, streak: r.streak || 0, rushCount: r.rushCount || 0, chain: Promise.resolve(), failed: 0, awayCount: r.awayCount || 0, awayMs: 0, awayStart: 0 };
   PRES.state = 'away'; S.view = 'study'; $('#actionbar').hidden = true; shell(); startBeat(); window.scrollTo(0, 0);
   setPresence('active', true); renderStudy(); toast('Sesi dilanjutkan.');
 }
@@ -332,7 +348,7 @@ function onPresence(r) {
   const by = r.ended_by; stopBeat(); clearRun(); Q = null;
   S.view = 'learn'; savePrefs(); shell(); renderLearn();
   showOverlay({ cls: by === 'teacher' ? 'warn' : '', icon: 'stop', title: by === 'teacher' ? 'Sesi diakhiri oleh guru' : 'Sesi sudah berakhir',
-    body: `<p class="msg">${by === 'teacher' ? 'Gurumu mengakhiri sesi ini. Jawaban yang sudah kamu beri tetap tersimpan.' : 'Sesi ini sudah ditutup. Mulai sesi baru dari daftar kategori.'}</p>`, buttons: [['ok', 'Mengerti']] });
+    body: `<p class="msg">${by === 'teacher' ? 'Gurumu mengakhiri sesi ini. Jawaban yang sudah kamu beri tetap tersimpan.' : 'Sesi ini sudah ditutup. Mulai sesi baru dari daftar kategori.'}</p>`, buttons: [['ok', 'Mengerti']], delay: by === 'teacher' ? 2000 : 0 });
 }
 document.addEventListener('visibilitychange', () => {
   if (Q && Q.cur) { if (document.hidden) hiddenAt = performance.now(); else if (hiddenAt) { Q.cur.hidden += performance.now() - hiddenAt; hiddenAt = 0; } }
@@ -364,22 +380,22 @@ async function startStudy(cards) {
   try { sid = await api.startSession(decks, mode, cs.length); }
   catch (e) { toast(e.message); if (btn) btn.disabled = false; return; }
   const part = !cards && S.split.on ? { key: partKey(), idx: S.split.part, of: parts().length } : null;
-  Q = { sid, queue: shuffle(cs), total: cs.length, done: 0, mode, kind, decks, part, chain: Promise.resolve(), failed: 0, streak: 0, awayCount: 0, awayMs: 0, awayStart: 0 };
+  Q = { sid, queue: shuffle(cs), total: cs.length, done: 0, mode, kind, decks, part, clues: CLUE_START, rushCount: 0, chain: Promise.resolve(), failed: 0, streak: 0, awayCount: 0, awayMs: 0, awayStart: 0 };
   PRES.state = 'active'; saveRun();
   S.view = 'study'; $('#actionbar').hidden = true; shell(); startBeat(); window.scrollTo(0, 0); renderStudy();
 }
 function cardMode(c) { if (Q && Q.kind === 'mw') return 'mw'; let m = effMode(); if (m === 'mix') m = ['pic', 'han', 'arti'][(Math.random() * 3) | 0]; if (m === 'pic' && !hasPic(c)) m = 'han'; return m; }
 function frontHTML(c, m) {
-  if (m === 'mw') return `${hasPic(c) ? `<div class="big" style="width:min(40%,150px)">${picHTML(c)}</div>` : ''}<div class="mwq">一<span class="blank">个</span>${esc(c.h)}</div><div class="mwq-sub">${esc(c.p)} · ${esc(c.m)}</div><div class="q">Kata satuannya apa?</div>`;
+  if (m === 'mw') return `${hasPic(c) ? `<div class="big" style="width:min(40%,150px)">${picHTML(c)}</div>` : ''}<div class="mwq">一<span class="blank">个</span>${esc(c.h)}</div><div class="mwq-sub">${esc(c.p)} · ${esc(mean(c))}</div><div class="q">Kata satuannya apa?</div>`;
   if (m === 'han') return `<div class="bighan">${esc(c.h)}</div><div class="q">Apa artinya?</div>`;
-  if (m === 'arti') return `<div class="bigid">${esc(c.m)}</div><div class="q">Bahasa Mandarinnya apa?</div>`;
+  if (m === 'arti') return `<div class="bigid">${esc(mean(c))}</div><div class="q">Bahasa Mandarinnya apa?</div>`;
   return `<div class="big">${picHTML(c)}</div><div class="q">Ini apa dalam bahasa Mandarin?</div>`;
 }
 function backHTML(c) {
   const L = [...c.h].length; let extra = '';
   if (c.mw) { const d = MW[c.mw] || ['', 0, '']; extra = `<div class="extra"><div class="z">一<b>${esc(c.mw)}</b>${esc(c.h)}</div>${d[0] ? `<div class="y">${yi(c.mw)} ${esc(d[0])} ${esc(c.p)}</div>` : ''}${c.alt && c.alt.length ? `<div class="a">juga: ${c.alt.map((a) => '一' + esc(a) + esc(c.h)).join(' / ')}</div>` : ''}</div>`; }
   else if (c.s) extra = `<div class="extra">${c.opp ? `<div class="z">↔ <b>${esc(c.opp)}</b></div>` : ''}<div class="s">${esc(c.s)}</div><div class="y">${esc(c.sp)}</div><div class="a">${esc(c.si)}</div></div>`;
-  return `${hasPic(c) ? `<div class="sm">${picHTML(c)}</div>` : ''}<div class="h ${L >= 5 ? 'l5' : L === 4 ? 'l4' : ''}">${esc(c.h)}</div>${c.p ? `<div class="p">${esc(c.p)}</div>` : ''}<div class="m">${esc(c.m)}</div>${extra}`;
+  return `${hasPic(c) ? `<div class="sm">${picHTML(c)}</div>` : ''}<div class="h ${L >= 5 ? 'l5' : L === 4 ? 'l4' : ''}">${esc(c.h)}</div>${c.p ? `<div class="p">${esc(c.p)}</div>` : ''}<div class="m">${esc(mean(c))}</div>${extra}`;
 }
 const sayText = (c) => (c.mw ? c.h : c.s || c.h);
 function renderStudy() {
@@ -390,27 +406,81 @@ function renderStudy() {
   Q.cur = { c, m, t0: performance.now(), hidden: 0, answered: !canQuiz, flipped: false, sug: 0 };
   document.documentElement.style.setProperty('--c', d.color);
   $('#view').innerHTML = `<div class="study">
-    <div class="study-top"><button class="btn ghost sm" data-act="quit">${ic('back')} Kategori</button><div class="progress"><i style="width:${(Q.done / Q.total) * 100}%"></i></div><span class="count">${Q.part ? `Bag. ${Q.part.idx + 1} · ` : ''}${Q.done}/${Q.total}</span><button class="btn ghost sm end" data-act="endrun" title="Akhiri sesi sekarang">${ic('stop')} <span>Akhiri</span></button></div>
+    <div class="study-top"><button class="btn ghost sm" data-act="quit">${ic('back')} Kategori</button><div class="progress"><i style="width:${(Q.done / Q.total) * 100}%"></i></div><span class="count">${Q.part ? `Sesi ${Q.part.idx + 1} · ` : ''}${Q.done}/${Q.total}</span><button class="btn ghost sm end" data-act="endrun" title="Akhiri sesi sekarang">${ic('stop')} <span>Akhiri</span></button></div>
+    <div id="rushBanner" class="away-banner rush" role="status" hidden></div>
     <div id="awayBanner" class="away-banner" role="status" ${Q.awayCount ? '' : 'hidden'}>${Q.awayCount ? `${ic('alert')}<span>Kamu sudah keluar dari aplikasi ${Q.awayCount} kali di sesi ini. Gurumu bisa melihatnya.</span>` : ''}</div>
     <div class="study-opts">
       ${isMw ? '<span class="pill priv">Kuis 量词</span>' : ''}
       ${!isMw && SET.student_can_choose && SET.modes.length > 1 ? `<div class="seg" role="group" aria-label="Sisi depan kartu">${SET.modes.map((x) => `<button data-mode="${x}" aria-pressed="${effMode() === x}">${MODE_LABEL[x]}</button>`).join('')}</div>` : ''}
       <span class="spacer"></span>
+      <button class="chip clue-btn" data-act="clue" ${Q.clues > 0 ? '' : 'disabled'} title="Clue: huruf depan jawaban. Dapat clue baru tiap ${CLUE_STREAK} jawaban benar berturut-turut.">${ic('bulb')} Clue <b>${Q.clues}</b></button>
+      <button class="chip" data-act="lang" title="Bahasa arti">${LANG_LABEL[S.lang] || 'ID'}</button>
       ${SET.quiz_enabled && !isMw ? `<button class="chip" data-act="quiz" aria-pressed="${S.quiz}">Tebak</button>` : ''}
       <button class="chip" data-act="auto" aria-pressed="${S.auto}" aria-label="Ucapan otomatis" title="Ucapan otomatis">${ic('sound')}</button>
       <button class="chip" data-act="sfx" aria-pressed="${S.sfx}" aria-label="Efek suara" title="Efek suara">${ic(S.sfx ? 'sparkle' : 'mute')}</button>
     </div>
     <div class="stage"><div class="tilt" id="tilt"><div class="fc" id="fc" tabindex="0" role="button" aria-label="Kartu. Ketuk untuk membalik">
-      <div class="face front"><div class="tag"><span class="dotc" style="--dc:${d.color}"></span>${esc(d.zh)}</div>${frontHTML(c, m)}<div class="hint">${canQuiz ? 'Pilih jawaban di bawah' : 'Ketuk kartu untuk membalik'}</div></div>
+      <div class="face front"><div class="tag"><span class="dotc" style="--dc:${d.color}"></span>${esc(d.zh)}</div>${frontHTML(c, m)}<div class="clue" id="clueBox" hidden></div><div class="hint">${canQuiz ? 'Pilih jawaban di bawah' : 'Ketuk kartu untuk membalik'}</div></div>
       <div class="face bface"><div class="tag"><span class="dotc" style="--dc:${d.color}"></span>${esc(d.zh)}</div><button class="say" data-act="say" aria-label="Dengarkan pengucapan">${ic('sound')}</button>${backHTML(c)}</div>
     </div></div></div>
     <div id="ctrl">${canQuiz ? `<div class="quiz" aria-busy="true">${'<button class="qo skeleton" disabled>…</button>'.repeat(4)}</div>` : `<button class="btn lg flipbtn" data-act="flip">${ic('flip')} Balik kartu</button>`}</div>
-    <div class="keys">Spasi: balik · 1–4: jawab atau nilai · S: dengarkan</div>
+    <div class="keys">Spasi: balik · 1–4: jawab atau nilai · S: dengarkan · H: clue</div>
   </div>`;
   bindTilt();
   if (m === 'han' && S.auto) speak(c.h);
   if (canQuiz) loadQuiz(c, m);
 }
+/* ---- clue: huruf depan jawaban; jatah 2, tambah 1 tiap 3 benar berturut-turut ---- */
+const CLUE_START = 2, CLUE_STREAK = 3, CLUE_MAX = 5;
+const plain = (p) => String(p || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ü/g, 'v');
+function clueText(c, m) {
+  if (m === 'mw') { const y = plain((MW[c.mw] || [''])[0]); return { lbl: 'Kata satuannya diawali', t: (y[0] || '?').toUpperCase() + '…' }; }
+  if (m === 'han') { const w = meanAns(c); return { lbl: 'Artinya diawali huruf', t: w[0].toUpperCase() + ' ' + [...w.slice(1)].map((x) => (x === ' ' ? '  ' : '_')).join(' ') }; }
+  const syl = plain(c.p).replace(/'/g, ' ').trim().split(/\s+/);
+  const first = (syl[0] || '?')[0] || '?';
+  return { lbl: `${[...c.h].length} huruf hanzi · pinyin diawali`, t: first.toUpperCase() + '…' };
+}
+function useClue() {
+  const cur = Q && Q.cur; if (!cur || cur.flipped || cur.clue) return;
+  if (Q.clues <= 0) { toast(`Clue habis. Jawab benar ${CLUE_STREAK}× berturut-turut untuk dapat clue baru.`); return; }
+  Q.clues--; cur.clue = true; saveRun();
+  const k = clueText(cur.c, cur.m), box = $('#clueBox');
+  box.hidden = false; box.innerHTML = `${ic('bulb')}<span>${esc(k.lbl)}</span><b>${esc(k.t)}</b>`; fx(box, 'fx-lift');
+  const btn = document.querySelector('[data-act="clue"]'); if (btn) { btn.disabled = true; btn.querySelector('b').textContent = Q.clues; }
+}
+function gainStreak(ok) {
+  if (!ok) { Q.streak = 0; return; }
+  Q.streak++;
+  if (Q.streak % CLUE_STREAK === 0 && Q.clues < CLUE_MAX) {
+    Q.clues++; saveRun(); toast(`💡 +1 clue! ${Q.streak} jawaban benar berturut-turut`);
+    const btn = document.querySelector('[data-act="clue"]'); if (btn) { btn.disabled = !!(Q.cur && (Q.cur.clue || Q.cur.flipped)); btn.querySelector('b').textContent = Q.clues; fx(btn, 'fx-right'); }
+  }
+}
+/* ---- deteksi asal tekan (dinilai server dari jeda antar jawaban) ---- */
+function onRush(r) {
+  if (!r || !r.rush || !Q) return;
+  Q.rushCount = r.rush_count || (Q.rushCount || 0) + 1;
+  Q.rushRecent = (Q.rushRecent || []).filter((t) => Date.now() - t < 30000).concat(Date.now());
+  const el = $('#rushBanner');
+  if (el) { el.hidden = false; el.innerHTML = `${ic('bolt')}<span>Terlalu cepat! Baca kartunya dulu, jangan asal tekan. (${Q.rushCount}× · gurumu bisa melihatnya)</span>`; fx(el, 'fx-wrong'); }
+  try { if (navigator.vibrate) navigator.vibrate(80); } catch (_) { /* tidak didukung */ }
+  if (Q.rushRecent.length >= 3) { Q.lockUntil = Date.now() + 3000; Q.rushRecent = []; lockCtrl(); }
+}
+function lockCtrl() {
+  const ctrl = $('#ctrl'); if (!ctrl || !Q) return;
+  const tick = () => {
+    if (!Q || !$('#ctrl')) return;
+    const left = Math.ceil((Q.lockUntil - Date.now()) / 1000);
+    let o = $('#lockMask');
+    if (left <= 0) { if (o) o.remove(); return; }
+    if (!o) { o = document.createElement('div'); o.id = 'lockMask'; o.className = 'lock-mask'; $('#ctrl').appendChild(o); }
+    o.innerHTML = `${ic('bolt')} Pelan-pelan dulu… ${left}`;
+    setTimeout(tick, 250);
+  };
+  tick();
+}
+const locked = () => Q && Q.lockUntil && Date.now() < Q.lockUntil;
+
 async function loadQuiz(c, m) {
   const cur = Q.cur;
   try {
@@ -420,7 +490,7 @@ async function loadQuiz(c, m) {
     if (opts && opts.answered) { cur.answered = true; cur.sug = opts.correct ? 3 : 1; flip(true); return; } // sudah dijawab sebelum refresh
     const showArti = m === 'han';
     const optHTML = (o) => (m === 'mw' ? `<span class="z">${esc(o.w)}</span><span class="y">${esc(o.y)}</span>`
-      : showArti ? `<span class="t">${esc(o.m)}</span>` : `<span class="z">${esc(o.h)}</span>${o.p ? `<span class="y">${esc(o.p)}</span>` : ''}`);
+      : showArti ? `<span class="t">${esc(S.lang === 'en' ? o.en || o.m : S.lang === 'both' && o.en ? o.m + ' · ' + o.en : o.m)}</span>` : `<span class="z">${esc(o.h)}</span>${o.p ? `<span class="y">${esc(o.p)}</span>` : ''}`);
     $('#ctrl').innerHTML = `<div class="quiz ${m === 'mw' ? 'mw' : ''}">${opts.map((o) => `<button class="qo" data-t="${esc(o.t)}">${optHTML(o)}</button>`).join('')}</div>`;
   } catch (e) {
     if (!Q || Q.cur !== cur) return;
@@ -429,21 +499,25 @@ async function loadQuiz(c, m) {
   }
 }
 async function answerQuiz(btn) {
-  const cur = Q.cur; if (cur.answered || cur.busy) return; cur.busy = true;
+  const cur = Q.cur; if (cur.answered || cur.busy) return;
+  if (locked()) { lockCtrl(); return; }
+  cur.busy = true;
   document.querySelectorAll('.qo').forEach((b) => { b.disabled = true; });
   let res;
   try { res = await withRetry(() => api.answerQuiz(Q.sid, cur.c.id, btn.dataset.t)); }
   catch (e) { toast(e.message); cur.answered = true; cur.busy = false; flip(true); return; }
-  cur.answered = true; cur.busy = false;
+  cur.answered = true; cur.busy = false; cur.quizOk = !!res.correct;
+  onRush(res);
   document.querySelectorAll('.qo').forEach((b) => { if (b.dataset.t === res.correct_token) b.classList.add('right'); });
   const blank = document.querySelector('.mwq .blank'); if (blank) { blank.textContent = cur.c.mw; blank.style.color = res.correct ? 'var(--good)' : 'var(--bad)'; }
   const tilt = $('#tilt');
   badgeFx(res.correct);
+  gainStreak(res.correct);
   if (res.correct) {
-    Q.streak++; SFX.right(); fx(tilt, 'fx-right'); tilt.classList.add('glow-good'); cur.sug = 3;
+    SFX.right(); fx(tilt, 'fx-right'); tilt.classList.add('glow-good'); cur.sug = 3;
     if (Q.streak % 5 === 0) { burst(28); toast(`${Q.streak} jawaban benar berturut-turut!`); }
   } else {
-    Q.streak = 0; btn.classList.add('wrong'); SFX.wrong(); fx(tilt, 'fx-wrong'); tilt.classList.add('glow-bad'); cur.sug = 1;
+    btn.classList.add('wrong'); SFX.wrong(); fx(tilt, 'fx-wrong'); tilt.classList.add('glow-bad'); cur.sug = 1;
     try { if (navigator.vibrate) navigator.vibrate(120); } catch (_) { /* tidak didukung */ }
   }
   setTimeout(() => { if (Q && Q.cur === cur) { tilt.classList.remove('glow-good', 'glow-bad'); flip(true); } }, res.correct ? 600 : 1050);
@@ -453,6 +527,7 @@ function flip(force) {
   if (!cur.answered && force !== true) return;
   cur.flipped = force === true ? true : !cur.flipped;
   $('#fc').classList.toggle('flip', cur.flipped); SFX.flip();
+  { const cb = document.querySelector('[data-act="clue"]'); if (cb) cb.disabled = true; }
   if (cur.flipped) {
     if (S.auto) speak(sayText(cur.c));
     $('#ctrl').innerHTML = `<div class="rate">${[1, 2, 3, 4].map((n) => `<button class="rb r${n} ${cur.sug === n ? 'sug' : ''}" data-rate="${n}"><span class="k">${n}</span><span class="l">${RATE[n].l}</span><span class="w">${RATE[n].w}</span></button>`).join('')}</div>`;
@@ -460,10 +535,14 @@ function flip(force) {
 }
 function rate(n) {
   const cur = Q && Q.cur; if (!cur) return; if (!cur.flipped) { flip(); return; }
-  if (cur.rated) return; cur.rated = true;
+  if (cur.rated) return;
+  if (locked()) { lockCtrl(); return; }
+  cur.rated = true;
+  if (cur.quizOk === undefined) gainStreak(n >= 3); // tanpa tebakan: nilai 3–4 dihitung benar
   const ms = Math.max(0, performance.now() - cur.t0 - cur.hidden - (hiddenAt ? performance.now() - hiddenAt : 0));
   const c = Q.queue.shift(); const sid = Q.sid;
-  Q.chain = Q.chain.then(() => withRetry(() => api.rateCard(sid, c.id, n, ms))).catch(() => { Q.failed++; toast('Satu jawaban gagal tersimpan. Periksa koneksi.'); });
+  const clue = !!cur.clue;
+  Q.chain = Q.chain.then(() => withRetry(() => api.rateCard(sid, c.id, n, ms, clue))).then(onRush).catch(() => { Q.failed++; toast('Satu jawaban gagal tersimpan. Periksa koneksi.'); });
   if (n <= 2) { Q.queue.splice(Math.min(RATE[n].gap, Q.queue.length), 0, c); SRS[c.id] = { due: Date.now(), last: n }; }
   else { SRS[c.id] = { due: Date.now() + RATE[n].days * 864e5, last: n }; Q.done++; }
   saveRun();
@@ -494,14 +573,15 @@ async function renderDone(early) {
   const mins = Math.max(1, Math.round((s.seconds || 0) / 60));
   $('#view').innerHTML = `<div class="study"><div class="panel done">
     <div class="ring" style="--p:${pct}"><div>${pct}</div></div>
-    <h2 class="h1"><span class="han">${pct >= 85 ? '太棒了！' : pct >= 60 ? '很好！' : '加油！'}</span> ${Q.early ? 'Sesi diakhiri' : 'Sesi selesai'}${Q.part ? ` · Bagian ${Q.part.idx + 1}/${Q.part.of}` : ''}</h2>
+    <h2 class="h1"><span class="han">${pct >= 85 ? '太棒了！' : pct >= 60 ? '很好！' : '加油！'}</span> ${Q.early ? 'Sesi diakhiri' : 'Sesi selesai'}${Q.part ? ` · Sesi ${Q.part.idx + 1}/${Q.part.of}` : ''}</h2>
     <p class="sub">${s.total} kartu dalam ${mins} menit${s.quiz_total ? ` · tebakan benar ${s.quiz_right}/${s.quiz_total}` : ''}. Skor dihitung dari nilai pertama tiap kartu.</p>
     <div class="stats">${[1, 2, 3, 4].map((n) => `<div class="r${n}"><b>${s['c' + n]}</b>${RATE[n].l}</div>`).join('')}</div>
+    ${s.rush ? `<span class="pill warn"><span class="d"></span>Asal tekan ${s.rush}× · ${s.clues || 0} clue dipakai</span>` : s.clues ? `<span class="pill mute">${s.clues} clue dipakai</span>` : ''}
     ${s.away_count ? `<span class="pill bad"><span class="d"></span>Keluar aplikasi ${s.away_count}× · ${dur(s.away_ms)}</span>` : '<span class="pill good"><span class="d"></span>Fokus penuh, tidak pernah keluar aplikasi</span>'}
     <span class="ok-line">${ic('check')} Skor tersimpan dan bisa dilihat gurumu</span>
     ${Q.failed ? `<p class="note">${Q.failed} jawaban gagal tersimpan karena koneksi.</p>` : ''}
     <div class="row" style="justify-content:center">${Q.part && !Q.early && Q.part.idx + 1 < Q.part.of && S.split.on && partKey() === Q.part.key
-      ? `<button class="btn secondary" data-act="quit">Pilih kategori lain</button><button class="btn" data-act="nextpart">${ic('play')} Lanjut Bagian ${Q.part.idx + 2}</button>`
+      ? `<button class="btn secondary" data-act="quit">Pilih kategori lain</button><button class="btn" data-act="nextpart">${ic('play')} Lanjut sesi ${Q.part.idx + 2}</button>`
       : `<button class="btn secondary" data-act="again">${ic('play')} Ulangi</button><button class="btn" data-act="quit">Pilih kategori lain</button>`}</div>
   </div></div>`;
 }
@@ -517,9 +597,20 @@ function nextOverlay() {
   el.innerHTML = `<div class="box"><div class="big-ic">${ic(o.icon || 'chat')}</div><h2 id="ovTitle">${esc(o.title)}</h2>${o.from ? `<div class="from">${esc(o.from)}</div>` : ''}${o.body || ''}
     <div class="row">${(o.buttons || [['ok', 'Mengerti']]).map(([k, l], i, a) => `<button class="btn ${i < a.length - 1 ? 'secondary' : ''} lg" data-ov="${k}">${esc(l)}</button>`).join('')}</div></div>`;
   document.body.appendChild(el);
-  const btns = el.querySelectorAll('[data-ov]'); btns[btns.length - 1].focus();
+  const btns = [...el.querySelectorAll('[data-ov]')];
+  // pesan guru wajib dibaca: tombol baru aktif setelah jeda
+  const until = Date.now() + (o.delay || 0);
+  if (o.delay) {
+    const labels = btns.map((b) => b.textContent);
+    const tick = () => {
+      const left = Math.ceil((until - Date.now()) / 1000);
+      btns.forEach((b, i) => { b.disabled = left > 0; b.textContent = left > 0 ? `${labels[i]} (${left})` : labels[i]; });
+      if (left > 0) setTimeout(tick, 200); else btns[btns.length - 1].focus();
+    };
+    tick();
+  } else btns[btns.length - 1].focus();
   el.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-ov]'); if (!b) return;
+    const b = e.target.closest('[data-ov]'); if (!b || b.disabled || Date.now() < until) return;
     el.remove(); try { if (o.onClose) o.onClose(b.dataset.ov); } catch (_) { /* abaikan */ }
     setTimeout(nextOverlay, 150);
   });
@@ -535,7 +626,7 @@ async function pollInbox() {
     for (const m of r.messages) {
       const warn = m.kind === 'warn';
       if (warn) { SFX.wrong(); try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (_) { /* tidak didukung */ } } else SFX.flip();
-      showOverlay({ cls: warn ? 'warn' : '', icon: warn ? 'alert' : 'chat', title: warn ? 'Peringatan dari guru' : 'Pesan dari guru', from: fmtDate(m.created_at, { timeStyle: 'short' }), body: `<p class="msg">${esc(m.text)}</p>`, buttons: [['ok', warn ? 'Mengerti, aku fokus' : 'Oke']] });
+      showOverlay({ cls: warn ? 'warn' : '', icon: warn ? 'alert' : 'chat', title: warn ? 'Peringatan dari guru' : 'Pesan dari guru', from: fmtDate(m.created_at, { timeStyle: 'short' }), body: `<p class="msg">${esc(m.text)}</p>`, buttons: [['ok', warn ? 'Mengerti, aku fokus' : 'Oke']], delay: 2000 });
     }
     if (r.deliveries.length) {
       await reloadContent().catch(() => {});
@@ -554,20 +645,46 @@ async function pollInbox() {
 }
 function startInbox() { clearInterval(inboxT); if (ME && !isTeacher()) { inboxT = setInterval(pollInbox, 8000); pollInbox(); } }
 
+/* ================= Progres ================= */
+// level kartu dari nilai terakhir: baru · dipelajari (1–2) · bisa (3) · dikuasai (4)
+const LV = [['m4', 'Dikuasai', 'var(--good)'], ['m3', 'Bisa', '#2fa3d6'], ['m12', 'Masih belajar', '#e0b51b'], ['n0', 'Belum dipelajari', 'var(--line-2)']];
+function pbar(c, total) {
+  const t = Math.max(1, total);
+  return `<div class="pbar" role="img" aria-label="${LV.map(([k, l]) => `${l} ${c[k] || 0}`).join(', ')}">${LV.map(([k, l, col]) => (c[k] ? `<i style="width:${(c[k] / t) * 100}%;background:${col}" title="${l}: ${c[k]}"></i>` : '')).join('')}</div>`;
+}
+const pct = (c, total) => (total ? Math.round(((c.m4 || 0) + (c.m3 || 0)) / total * 100) : 0);
+const legend = () => `<div class="plegend">${LV.map(([, l, col]) => `<span><i style="background:${col}"></i>${l}</span>`).join('')}</div>`;
+function myProgress() {
+  const ds = studyDecks(); const rows = ds.map((d) => {
+    const c = { m4: 0, m3: 0, m12: 0, n0: 0 };
+    for (const k of d.cards) { const r = SRS[k.id]; if (!r) c.n0++; else if (r.last >= 4) c.m4++; else if (r.last === 3) c.m3++; else c.m12++; }
+    return { d, c, total: d.cards.length };
+  });
+  const tot = rows.reduce((a, r) => { for (const k of ['m4', 'm3', 'm12', 'n0']) a[k] += r.c[k]; a.total += r.total; return a; }, { m4: 0, m3: 0, m12: 0, n0: 0, total: 0 });
+  const started = rows.filter((r) => r.c.n0 < r.total).sort((a, b) => pct(b.c, b.total) - pct(a.c, a.total));
+  const fresh = rows.filter((r) => r.c.n0 === r.total);
+  return `<div class="panel"><div class="panel-head"><h2 class="h3">${ic('flag')} Sudah sampai mana?</h2><b class="bigpct">${pct(tot, tot.total)}%</b></div>
+    <p class="sub" style="margin:-6px 0 10px">${tot.m4 + tot.m3} dari ${tot.total} kartu sudah kamu bisa · ${tot.m12} masih dipelajari · ${tot.n0} belum dibuka</p>
+    ${pbar(tot, tot.total)}${legend()}
+    <div class="prows">${started.map((r) => `<div class="prow" style="--dc:${r.d.color}"><div class="pname"><span class="dotc"></span><span class="han">${esc(r.d.zh)}</span><span class="note">${esc(r.d.idn)}</span></div>${pbar(r.c, r.total)}<b>${pct(r.c, r.total)}%</b></div>`).join('') || '<p class="note">Belum ada kategori yang dimulai.</p>'}
+    ${fresh.length ? `<p class="note" style="margin-top:6px">Belum dimulai: <span class="han">${fresh.map((r) => esc(r.d.zh)).join('、')}</span></p>` : ''}</div></div>`;
+}
+
 /* ================= Riwayat ================= */
 async function renderHist() {
   $('#actionbar').hidden = true; document.documentElement.style.setProperty('--c', 'var(--brand)');
   const head = (n) => `<div class="page-head"><div><p class="eyebrow">Riwayat</p><h1 class="h1">Perkembanganmu</h1>${n !== undefined ? `<p class="sub">${n} sesi selesai.</p>` : ''}</div></div>`;
   $('#view').innerHTML = head() + '<div class="panel"><p class="note">Memuat…</p></div>';
   let rows = [];
-  try { rows = await api.mySessions(); } catch (e) { toast(e.message); }
+  try { [rows, SRS] = await Promise.all([api.mySessions(), api.srs()]); } catch (e) { toast(e.message); }
   if (S.view !== 'hist') return;
   const nm = (id) => deckOf(id)?.zh || 'Kategori terhapus';
   const pts = rows.slice().reverse().map((r) => ({ x: Date.parse(r.started_at), y: r.score ?? 0 }));
   $('#view').innerHTML = `${head(rows.length)}
+    ${myProgress()}
     ${rows.length > 1 ? `<div class="panel"><div class="panel-head"><h2 class="h3">Skor dari waktu ke waktu</h2></div>${lineChart(pts)}</div>` : ''}
     <div class="panel">${rows.length ? `<div class="tablewrap"><table class="table"><thead><tr><th>Tanggal</th><th>Kategori</th><th>Kartu</th><th>Keluar app</th><th>Skor</th></tr></thead><tbody>
-    ${rows.map((r) => `<tr><td>${esc(fmtDate(r.started_at))}</td><td class="han">${esc(r.decks.map(nm).join('、'))}</td><td>${r.total}</td><td>${r.away_count ? `${r.away_count}×` : '–'}</td><td>${scoreTag(r.score)}</td></tr>`).join('')}</tbody></table></div>`
+    ${rows.map((r) => `<tr><td>${esc(fmtDate(r.started_at))}</td><td class="han">${esc(r.decks.map(nm).join('、'))}</td><td>${r.total}</td><td>${r.away_count ? `${r.away_count}×` : '–'}${r.rush ? ` · <span class="pill warn">asal ${r.rush}×</span>` : ''}</td><td>${scoreTag(r.score)}</td></tr>`).join('')}</tbody></table></div>`
     : '<div class="empty"><b>Belum ada sesi</b>Pilih kategori di menu Belajar untuk mulai.</div>'}</div>`;
 }
 
@@ -639,12 +756,12 @@ function deckPane(d) {
   </div>
   <div id="etab">${ED.tab === 'add' ? bulkHTML() : listHTML(d)}</div>`;
 }
-const HEAD = '<div class="rows-head"><span></span><span>汉字</span><span>Pinyin</span><span>Arti</span><span>量词</span><span></span></div>';
+const HEAD = '<div class="rows-head"><span></span><span>汉字</span><span>Pinyin</span><span>Arti</span><span>English</span><span>量词</span><span></span></div>';
 function bulkHTML() {
   return `<div class="bulk">
     <div class="stack">
       <label class="field" for="bulkText">Satu kata per baris<textarea id="bulkText" spellcheck="false" placeholder="我&#10;他&#10;你&#10;骄傲&#10;apel">${esc(ED.text)}</textarea></label>
-      <p class="note">Boleh hanzi atau bahasa Indonesia. Pinyin dan arti terisi otomatis, dan semuanya bisa kamu ubah.</p>
+      <p class="note">Boleh hanzi, bahasa Indonesia, atau bahasa Inggris. Pinyin, arti, dan English terisi otomatis, dan semuanya bisa kamu ubah.</p>
       <button class="switch" role="switch" aria-checked="${S.hints}" data-act="hints"><span class="track"></span>Pakai saran gambar & emoji</button>
     </div>
     <div class="stack" style="min-width:0">${HEAD}
@@ -664,6 +781,7 @@ function rowHTML(r, i, kind) {
     <input class="hz ${r.h ? '' : 'miss'}" data-f="h" value="${esc(r.h)}" maxlength="12" aria-label="Hanzi">
     <input class="py" data-f="p" value="${esc(r.p)}" maxlength="60" aria-label="Pinyin" placeholder="pinyin">
     <input class="mean ${r.m ? '' : 'miss'}" data-f="m" value="${esc(r.m)}" maxlength="60" aria-label="Arti" placeholder="arti">
+    <input class="eni" data-f="en" value="${esc(r.en || '')}" maxlength="60" aria-label="Arti bahasa Inggris" placeholder="english">
     <input class="mwi" data-f="mw" value="${esc(r.mw)}" maxlength="2" aria-label="Kata satuan" placeholder="–">
     <button class="x" data-rm="${i}" aria-label="${kind === 'new' ? 'Hapus baris' : armed ? 'Ketuk lagi untuk menghapus kartu' : 'Hapus kartu'}" ${armed ? 'style="background:var(--bad);color:#fff"' : ''}>${ic(armed ? 'trash' : 'x')}</button>
     ${src ? `<span class="src">${src}</span>` : ''}
@@ -726,7 +844,7 @@ async function saveBulk() {
   try {
     let added = 0, skipped = [];
     for (let i = 0; i < ED.rows.length; i += 100) {
-      const r = await api.bulkCards(ED.deck, ED.rows.slice(i, i + 100).map((x) => ({ h: x.h, p: x.p, m: x.m, mw: x.mw, pic: rowPic(x) })));
+      const r = await api.bulkCards(ED.deck, ED.rows.slice(i, i + 100).map((x) => ({ h: x.h, p: x.p, m: x.m, en: x.en || '', mw: x.mw, pic: rowPic(x) })));
       added += r.added; skipped = skipped.concat(r.skipped);
     }
     ED.text = ''; ED.rows = []; ED.cache = {}; ED.note = '';
@@ -741,7 +859,7 @@ document.addEventListener('change', async (e) => {
   r[f] = inp.value.trim();
   inp.classList.toggle('miss', (f === 'h' || f === 'm') && !r[f]);
   if (kind === 'new') return;
-  try { await api.updateCard({ id: r.id, h: r.h, p: r.p, m: r.m, mw: r.mw, pic: r.pic || '' }); rowEl.classList.add('saved'); setTimeout(() => rowEl.classList.remove('saved'), 900); reloadContent().catch(() => {}); }
+  try { await api.updateCard({ id: r.id, h: r.h, p: r.p, m: r.m, en: r.en || '', mw: r.mw, pic: r.pic || '' }); rowEl.classList.add('saved'); setTimeout(() => rowEl.classList.remove('saved'), 900); reloadContent().catch(() => {}); }
   catch (err) { toast(err.message); }
 });
 
@@ -770,7 +888,7 @@ async function setPic(v) {
   if (v && !/^\/api\/img\/[a-f0-9]{32}$/.test(v) && !/^\p{Extended_Pictographic}/u.test(v)) { toast('Pakai satu emoji saja.'); return; }
   if (t.kind === 'new') { const r = ED.rows[t.i]; if (!r) return; r.picSet = v; $('#rows').innerHTML = rowsHTML(); return; }
   const r = ED.list[t.i]; if (!r) return; r.pic = v;
-  try { await api.updateCard({ id: r.id, h: r.h, p: r.p, m: r.m, mw: r.mw, pic: v }); await reloadContent(); $('#etab').innerHTML = listHTML(deckOf(ED.deck)); toast('Gambar kartu diganti.'); }
+  try { await api.updateCard({ id: r.id, h: r.h, p: r.p, m: r.m, en: r.en || '', mw: r.mw, pic: v }); await reloadContent(); $('#etab').innerHTML = listHTML(deckOf(ED.deck)); toast('Gambar kartu diganti.'); }
   catch (err) { toast(err.message); }
 }
 
@@ -778,7 +896,7 @@ async function setPic(v) {
 const TF = Object.assign({ days: 30, cls: '', student: '' }, store.get('tf', {}));
 let armed = null, lastCred = null, SESS = [], liveT = 0, DRAFT = null;
 function stopLive() { clearInterval(liveT); liveT = 0; }
-const TTABS = [['live', 'eye', 'Pantau langsung'], ['students', 'users', 'Murid'], ['scores', 'chart', 'Skor'], ['time', 'clock', 'Grafik waktu'], ['approve', 'inbox', 'Persetujuan'], ['settings', 'gear', 'Pengaturan']];
+const TTABS = [['live', 'eye', 'Pantau langsung'], ['students', 'users', 'Murid'], ['scores', 'chart', 'Skor'], ['progress', 'flag', 'Progres'], ['time', 'clock', 'Grafik waktu'], ['approve', 'inbox', 'Persetujuan'], ['settings', 'gear', 'Pengaturan']];
 async function renderTeach() {
   $('#actionbar').hidden = true; document.documentElement.style.setProperty('--c', 'var(--brand)');
   if (!TTABS.some(([k]) => k === S.ttab)) S.ttab = 'live';
@@ -786,7 +904,7 @@ async function renderTeach() {
   $('#view').innerHTML = `<div class="page-head"><div><p class="eyebrow">Panel guru</p><h1 class="h1">Halo, ${esc(ME.display_name)}</h1><p class="sub">Pengaturan dan kartu yang kamu ubah langsung berlaku untuk semua murid.</p></div></div>
     <div class="tabs" role="tablist">${TTABS.map(([k, i, l]) => `<button role="tab" data-ttab="${k}" aria-selected="${S.ttab === k}">${ic(i)} ${l}${k === 'approve' && pend ? `<span class="n">${pend}</span>` : ''}</button>`).join('')}</div><div id="tview"><p class="note">Memuat…</p></div>`;
   armed = null;
-  const tab = S.ttab, draw = () => ({ live: tLive, students: tStudents, scores: tScores, time: tTime, approve: tApprove, settings: tSettings })[tab]();
+  const tab = S.ttab, draw = () => ({ live: tLive, students: tStudents, scores: tScores, progress: tProgress, time: tTime, approve: tApprove, settings: tSettings })[tab]();
   if (['settings', 'approve'].includes(tab)) { draw(); return; }
   try { STUDENTS = await api.students(); } catch (e) { toast(e.message); }
   if (S.view === 'teach' && S.ttab === tab) draw();
@@ -861,7 +979,7 @@ async function tLive() {
         <div class="who"><div class="avatar">${initial(r.name)}</div><div><b>${esc(r.name)}</b><span>${esc(r.class_name || 'Tanpa kelas')} · <span class="han">${esc(r.decks.map(nm).join('、'))}</span>${r.mode === 'mw' ? ' · 量词' : ''}</span></div></div>
         <div>${status(r)}</div>
         <div class="prog"><i style="width:${r.planned ? Math.min(100, (r.done / r.planned) * 100) : 0}%"></i></div>
-        <div class="foot"><span>${r.done}${r.planned ? `/${r.planned}` : ''} kartu · mulai ${new Date(r.started_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span><span style="color:${r.away_count ? 'var(--bad)' : 'inherit'}">Keluar ${r.away_count}× · ${dur(r.away_ms + (r.state === 'away' ? now - (r.state_since || now) : 0))}</span></div>
+        <div class="foot"><span>${r.done}${r.planned ? `/${r.planned}` : ''} kartu · mulai ${new Date(r.started_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span><span style="color:${r.away_count ? 'var(--bad)' : 'inherit'}">Keluar ${r.away_count}× · ${dur(r.away_ms + (r.state === 'away' ? now - (r.state_since || now) : 0))}</span><span style="color:${r.rush ? 'var(--warn, #b8860b)' : 'inherit'}">Asal tekan ${r.rush}× · clue ${r.clues}</span></div>
         <div class="acts"><button class="chip" data-warn="${esc(r.student_id)}">${ic('alert')} Peringatkan</button><button class="chip" data-chatto="${esc(r.student_id)}">${ic('chat')} Pesan</button><button class="chip danger" data-endrun="${esc(r.id)}" data-armed="${LIVE_ARM === r.id ? 1 : 0}">${ic('stop')} ${LIVE_ARM === r.id ? 'Ketuk lagi' : 'Akhiri sesi'}</button></div>
         ${msgInfo(r)}
       </div>`).join('')}</div>` : '<div class="panel empty"><b>Belum ada yang belajar</b>Sesi murid muncul di sini begitu mereka menekan Mulai.</div>'}
@@ -945,8 +1063,30 @@ async function tScores() {
     ${TF.student && per[TF.student] ? `<div class="panel"><div class="panel-head"><h2 class="h3">Perkembangan skor ${esc(sName(TF.student))}</h2></div>${lineChart(per[TF.student].slice().reverse().map((s) => ({ x: Date.parse(s.started_at), y: s.score || 0 })))}</div>` : ''}
     <div class="panel"><div class="panel-head"><h2 class="h3">Ringkasan per murid</h2><span class="note">Klik baris untuk melihat grafik murid itu</span></div>${rows.length ? `<div class="tablewrap"><table class="table"><thead><tr><th>Murid</th><th>Sesi</th><th>Rata-rata</th><th>Keluar app</th><th>Terakhir</th><th>Skor terakhir</th></tr></thead><tbody>
     ${rows.map((r) => `<tr class="clk" data-stu="${esc(r.id)}"><td><b>${esc(sName(r.id))}</b><div class="note">${esc(STUDENTS.find((s) => s.id === r.id)?.class_name || '')}</div></td><td>${r.list.length}</td><td>${r.avg}</td><td>${r.away ? `<span class="pill bad">${r.away}×</span>` : '–'}</td><td>${esc(fmtDate(r.last.started_at))}</td><td>${scoreTag(r.last.score)}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty"><b>Belum ada sesi</b>Sesi yang selesai di periode ini muncul di sini.</div>'}</div>
-    <div class="panel"><div class="panel-head"><h2 class="h3">Sesi terbaru</h2></div>${inScope.length ? `<div class="tablewrap"><table class="table"><thead><tr><th>Waktu</th><th>Murid</th><th>Kategori</th><th>Kartu</th><th>1/2/3/4</th><th>Tebak</th><th>Keluar app</th><th>Skor</th></tr></thead><tbody>
-    ${inScope.slice(0, 100).map((s) => `<tr><td>${esc(fmtDate(s.started_at))}</td><td>${esc(sName(s.student_id))}</td><td class="han">${esc(s.decks.map(nm).join('、'))}</td><td>${s.total}</td><td>${s.c1}/${s.c2}/${s.c3}/${s.c4}</td><td>${s.quiz_total ? `${s.quiz_right}/${s.quiz_total}` : '–'}</td><td>${s.away_count ? `${s.away_count}× · ${dur(s.away_ms)}` : '–'}</td><td>${scoreTag(s.score)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="note">Belum ada sesi.</p>'}</div>`;
+    <div class="panel"><div class="panel-head"><h2 class="h3">Sesi terbaru</h2></div>${inScope.length ? `<div class="tablewrap"><table class="table"><thead><tr><th>Waktu</th><th>Murid</th><th>Kategori</th><th>Kartu</th><th>1/2/3/4</th><th>Tebak</th><th>Keluar app</th><th>Asal tekan</th><th>Skor</th></tr></thead><tbody>
+    ${inScope.slice(0, 100).map((s) => `<tr><td>${esc(fmtDate(s.started_at))}</td><td>${esc(sName(s.student_id))}</td><td class="han">${esc(s.decks.map(nm).join('、'))}</td><td>${s.total}</td><td>${s.c1}/${s.c2}/${s.c3}/${s.c4}</td><td>${s.quiz_total ? `${s.quiz_right}/${s.quiz_total}` : '–'}</td><td>${s.away_count ? `${s.away_count}× · ${dur(s.away_ms)}` : '–'}</td><td>${s.rush ? `<span class="pill warn">${s.rush}×</span>` : '–'}</td><td>${scoreTag(s.score)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="note">Belum ada sesi.</p>'}</div>`;
+}
+
+/* ---- Progres murid ---- */
+async function tProgress() {
+  $('#tview').innerHTML = filtersHTML().replace(/<label class="field" for="fdays">[\s\S]*?<\/label>/, '') + '<div id="pbody"><p class="note">Memuat…</p></div>';
+  bindFilters(tProgress);
+  let d; try { d = await api.progress(); } catch (e) { toast(e.message); return; }
+  const body = $('#pbody'); if (!body) return;
+  const ds = DECKS.filter((x) => x.cards.length && !x.owner_id && x.status !== 'private' && !SET.hidden_decks.includes(x.id));
+  const deckTotal = Object.fromEntries(ds.map((x) => [x.id, x.cards.length])), allTotal = ds.reduce((t, x) => t + x.cards.length, 0);
+  const per = {};
+  for (const r of d.rows) { if (!deckTotal[r.deck_id]) continue; const u = (per[r.user_id] ||= {}); u[r.deck_id] = { m4: r.m4 || 0, m3: r.m3 || 0, m12: r.m12 || 0 }; }
+  const sum = (u) => { const c = { m4: 0, m3: 0, m12: 0 }; for (const v of Object.values(u || {})) { c.m4 += v.m4; c.m3 += v.m3; c.m12 += v.m12; } c.n0 = Math.max(0, allTotal - c.m4 - c.m3 - c.m12); return c; };
+  const list = STUDENTS.filter((x) => (!TF.cls || x.class_name === TF.cls) && (!TF.student || x.id === TF.student)).map((x) => ({ x, c: sum(per[x.id]) })).sort((a, b) => pct(b.c, allTotal) - pct(a.c, allTotal));
+  const one = TF.student && STUDENTS.find((x) => x.id === TF.student);
+  body.innerHTML = `${one ? (() => {
+      const u = per[one.id] || {};
+      return `<div class="panel"><div class="panel-head"><h2 class="h3">Progres ${esc(one.display_name)} per kategori</h2><b class="bigpct">${pct(sum(u), allTotal)}%</b></div>${legend()}
+        <div class="prows">${ds.map((k) => { const c = { m4: 0, m3: 0, m12: 0, ...(u[k.id] || {}) }; c.n0 = k.cards.length - c.m4 - c.m3 - c.m12; return { k, c }; }).sort((a, b) => pct(b.c, b.k.cards.length) - pct(a.c, a.k.cards.length)).map(({ k, c }) => `<div class="prow" style="--dc:${k.color}"><div class="pname"><span class="dotc"></span><span class="han">${esc(k.zh)}</span><span class="note">${esc(k.idn)}</span></div>${pbar(c, k.cards.length)}<b>${pct(c, k.cards.length)}%</b></div>`).join('')}</div></div>`;
+    })() : ''}
+    <div class="panel"><div class="panel-head"><h2 class="h3">Sudah sampai mana tiap murid?</h2><span class="note">Dari ${allTotal} kartu kelas · klik nama untuk rincian</span></div>${legend()}
+    ${list.length ? `<div class="prows">${list.map(({ x, c }) => `<div class="prow clk" data-pstu="${esc(x.id)}"><div class="pname"><b>${esc(x.display_name)}</b><span class="note">${esc(x.class_name || '')}${d.last[x.id] ? ' · terakhir ' + esc(fmtDate(d.last[x.id], { dateStyle: 'short' })) : ' · belum pernah belajar'}</span></div>${pbar(c, allTotal)}<b>${pct(c, allTotal)}%</b></div>`).join('')}</div>` : '<div class="empty"><b>Belum ada murid</b></div>'}</div>`;
 }
 
 /* ---- Grafik waktu ---- */
@@ -988,7 +1128,9 @@ function tSettings() {
       <label class="field" for="defmode">Tampilan awal<select id="defmode">${DRAFT.modes.map((m) => `<option value="${m}" ${DRAFT.default_mode === m ? 'selected' : ''}>${MODE_LABEL[m]}</option>`).join('')}</select></label>
       <button class="switch" role="switch" aria-checked="${DRAFT.student_can_choose}" data-cfgtog="student_can_choose"><span class="track"></span>Murid boleh mengganti tampilan</button>
       <button class="switch" role="switch" aria-checked="${DRAFT.quiz_enabled}" data-cfgtog="quiz_enabled"><span class="track"></span>Aktifkan mode tebak</button>
-      <button class="switch" role="switch" aria-checked="${DRAFT.mw_quiz}" data-cfgtog="mw_quiz"><span class="track"></span>Aktifkan kuis kata satuan (量词)</button></div>
+      <button class="switch" role="switch" aria-checked="${DRAFT.mw_quiz}" data-cfgtog="mw_quiz"><span class="track"></span>Aktifkan kuis kata satuan (量词)</button>
+      <button class="switch" role="switch" aria-checked="${DRAFT.all_can_create}" data-cfgtog="all_can_create"><span class="track"></span>Semua murid boleh membuat kartu sendiri</button>
+      <p class="note">Kartu buatan murid hanya terlihat oleh pembuatnya, sampai kamu setujui di menu Persetujuan. Izin per murid tetap bisa diatur di menu Murid.</p></div>
     <div class="panel stack"><h2 class="h3">Kategori untuk murid</h2><p class="note">Matikan kategori yang belum diajarkan.</p>
       <div class="row">${shared.map((d) => `<button class="chip" data-cfgdeck="${esc(d.id)}" aria-pressed="${!DRAFT.hidden_decks.includes(d.id)}"><span class="han">${esc(d.zh)}</span> ${esc(d.idn)}</button>`).join('')}</div></div>
   </div>
@@ -1014,10 +1156,11 @@ function leaveStudy() {
 let endArmed = 0;
 document.addEventListener('click', async (e) => {
   if (!e.target.closest('#emojiPop') && !e.target.closest('[data-emo]')) closeEmoji();
-  const b = e.target.closest('[data-lkind],[data-part],[data-pickstu],[data-mkind],[data-warn],[data-chatto],[data-endrun],[data-endall],[data-nav],[data-pick],[data-act],[data-mode],[data-rate],[data-t],[data-ttab],[data-sact],[data-stu],[data-cfgmode],[data-cfgtog],[data-cfgdeck],[data-edeck],[data-etab],[data-ncolor],[data-rcolor],[data-emo],[data-pick-emo],[data-rm],[data-approve]');
+  const b = e.target.closest('[data-pstu],[data-lkind],[data-part],[data-pickstu],[data-mkind],[data-warn],[data-chatto],[data-endrun],[data-endall],[data-nav],[data-pick],[data-act],[data-mode],[data-rate],[data-t],[data-ttab],[data-sact],[data-stu],[data-cfgmode],[data-cfgtog],[data-cfgdeck],[data-edeck],[data-etab],[data-ncolor],[data-rcolor],[data-emo],[data-pick-emo],[data-rm],[data-approve]');
   if (!b) { const fc = e.target.closest('#fc'); if (fc && Q && Q.cur && Q.cur.answered) flip(); return; }
   const ds = b.dataset;
   if (ds.nav) { leaveStudy(); go(ds.nav); return; }
+  if (ds.pstu) { TF.student = ds.pstu; store.set('tf', TF); tProgress(); return; }
   if (ds.lkind) { S.kind = ds.lkind; S.split.part = 0; savePrefs(); renderLearn(); return; }
   if (ds.part !== undefined) { S.split.part = +ds.part; savePrefs(); document.querySelectorAll('[data-part]').forEach((x) => x.setAttribute('aria-pressed', x.dataset.part === ds.part)); renderActionbar(); return; }
   if (ds.pickstu) { const id = ds.pickstu; PICK.ids = PICK.ids.includes(id) ? PICK.ids.filter((x) => x !== id) : [...PICK.ids, id]; b.setAttribute('aria-pressed', PICK.ids.includes(id)); return; }
@@ -1083,8 +1226,12 @@ document.addEventListener('click', async (e) => {
     endArmed = 0; renderDone(true);
   }
   else if (a === 'resume') resumeRun();
+  else if (a === 'clue') useClue();
+  else if (a === 'lang') { S.lang = { id: 'en', en: 'both', both: 'id' }[S.lang] || 'id'; savePrefs(); b.textContent = LANG_LABEL[S.lang]; if (Q && Q.cur) { const cur = Q.cur; const f = document.querySelector('.face.front'), bk = document.querySelector('.face.bface'); if (bk) { bk.querySelectorAll('.m').forEach((x) => { x.textContent = mean(cur.c); }); } if (f && cur.m === 'arti') { const bi = f.querySelector('.bigid'); if (bi) bi.textContent = mean(cur.c); } } toast('Arti: ' + { id: 'bahasa Indonesia', en: 'English', both: 'Indonesia + English' }[S.lang]); }
+  else if (a === 'mycards') { ED.newOpen = !editableDecks().length; go('cards'); }
   else if (a === 'endsaved') { await endSaved(); toast('Sesi lama diakhiri.'); }
   else if (a === 'nextpart') { S.split.part = Q.part.idx + 1; savePrefs(); S.view = 'learn'; shell(); renderLearn(); startStudy(); }
+  else if (a === 'partprev' || a === 'partnext') { const ps = parts(); S.split.part = Math.max(0, Math.min(ps.length - 1, S.split.part + (a === 'partnext' ? 1 : -1))); savePrefs(); document.querySelectorAll('[data-part]').forEach((x) => x.setAttribute('aria-pressed', +x.dataset.part === S.split.part)); renderActionbar(); }
   else if (a === 'split') { S.split.on = !S.split.on; S.split.part = 0; savePrefs(); renderLearn(); }
   else if (a === 'preset') { $('#msgText').value = WARN_PRESET; document.querySelector('[data-mkind="warn"]').click(); }
   else if (a === 'newshared') { ED.shared = !ED.shared; b.setAttribute('aria-checked', ED.shared); }
@@ -1115,7 +1262,16 @@ document.addEventListener('keydown', (e) => {
   if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); if (Q.cur.answered) flip(); }
   else if (/^[1-4]$/.test(e.key)) { if (Q.cur.flipped) rate(+e.key); else if (!Q.cur.answered) { const o = document.querySelectorAll('.qo:not([disabled])')[+e.key - 1]; if (o) answerQuiz(o); } }
   else if (e.key.toLowerCase() === 's') speak(sayText(Q.cur.c));
+  else if (e.key.toLowerCase() === 'h') useClue();
 });
+
+/* ---- efek sentuh di HP (sama seperti hover di PC) ---- */
+document.addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'mouse') return;
+  const el = e.target.closest('.deck, .btn, .qo, .rb, .lv, .chip, .part'); if (!el || el.disabled) return;
+  el.classList.remove('tap'); void el.offsetWidth; el.classList.add('tap');
+  clearTimeout(el._tapT); el._tapT = setTimeout(() => el.classList.remove('tap'), 900);
+}, { passive: true });
 
 /* ================= pembaruan otomatis ================= */
 async function checkVersion() {
