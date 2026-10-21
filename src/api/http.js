@@ -48,13 +48,16 @@ export const api = {
   startSession: async (decks, mode, planned) => (await call('POST', '/run/start', { decks, mode, planned })).id,
   presence(sid, state) {
     try {
-      return fetch('/api/run/presence', { method: 'POST', keepalive: true, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sid, state }) }).catch(() => {});
-    } catch (_) { return Promise.resolve(); }
+      return fetch('/api/run/presence', { method: 'POST', keepalive: true, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sid, state }) }).then((r) => r.json()).catch(() => null);
+    } catch (_) { return Promise.resolve(null); }
   },
-  quizOptions: (sid, card) => call('POST', '/run/quiz', { sid, card }),
+  quizOptions: (sid, card, kind) => call('POST', '/run/quiz', { sid, card, kind }),
+  runStatus: (sid) => call('GET', `/run/status?sid=${encodeURIComponent(sid)}`),
+  inbox: () => call('GET', '/inbox'),
+  inboxSeen: (messages, deliveries) => call('POST', '/inbox/seen', { messages, deliveries }),
   answerQuiz: (sid, card, token) => call('POST', '/run/answer', { sid, card, token }),
   rateCard: (sid, card, rating, ms) => call('POST', '/run/rate', { sid, card, rating, ms: Math.round(ms) }),
-  finishSession: (sid) => call('POST', '/run/finish', { sid }),
+  finishSession: (sid, early) => call('POST', '/run/finish', { sid, early: !!early }),
   mySessions: () => call('GET', '/runs/mine'),
 
   // pembuat kartu (guru atau murid yang diizinkan)
@@ -78,4 +81,7 @@ export const api = {
   saveSettings: (s) => call('POST', '/t/settings', s),
   approve: (id, approve) => call('POST', '/t/approve', { id, approve }),
   live: () => call('GET', '/t/live'),
+  endRun: (p) => call('POST', '/t/end-run', p),
+  deliver: (deck_id, to) => call('POST', '/t/deliver', { deck_id, to }),
+  message: (text, kind, to) => call('POST', '/t/message', { text, kind, to }),
 };

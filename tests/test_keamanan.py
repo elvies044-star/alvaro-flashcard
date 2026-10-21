@@ -144,6 +144,57 @@ S4.req('POST', '/api/run/rate', {'sid': sid4, 'card': 'buah:苹果', 'rating': 3
 fin4 = S4.req('POST', '/api/run/finish', {'sid': sid4})[1]
 check('Lama keluar aplikasi tersimpan di sesi', fin4['away_count'] == 1 and fin4['away_ms'] >= 1000, fin4)
 check('Murid tidak bisa baca pantauan guru', S4.req('GET', '/api/t/live')[0] == 403)
+# ---- kiriman kartu ----
+rid = [u['id'] for u in T.req('GET', '/api/t/students')[1] if u['username'] == 'rina'][0]
+dv = T.req('POST', '/api/deck', {'zh': '礼物', 'idn': 'Hadiah', 'shared': False})[1]['id']
+T.req('POST', '/api/cards/bulk', {'deck_id': dv, 'cards': [{'h': '书', 'p': 'shū', 'm': 'buku', 'mw': '本'}, {'h': '笔', 'p': 'bǐ', 'm': 'pena', 'mw': '支'}]})
+seeD = lambda S: any(d['id'] == dv for d in S.req('GET', '/api/content')[1]['decks'])
+check('Kategori khusus kiriman tersembunyi sebelum dikirim', not seeD(S4) and not seeD(S3))
+check('Murid tak bisa mengirim kartu', S4.req('POST', '/api/t/deliver', {'deck_id': dv, 'to': {'all': True}})[0] == 403)
+check('Murid tak bisa mengirim pesan', S4.req('POST', '/api/t/message', {'text': 'hai', 'to': {'all': True}})[0] == 403)
+check('Murid tak bisa mengakhiri sesi orang', S4.req('POST', '/api/t/end-run', {'all': True})[0] == 403)
+st, r, _ = T.req('POST', '/api/t/deliver', {'deck_id': dv, 'to': {'users': [rid]}})
+check('Guru mengirim kategori ke satu murid', st == 200 and r['sent'] == 1, r)
+check('Penerima melihat kategori kiriman', seeD(S4))
+check('Murid lain tidak melihat kiriman itu', not seeD(S3))
+ib = S4.req('GET', '/api/inbox')[1]
+check('Kiriman muncul di kotak masuk murid', len(ib['deliveries']) == 1 and ib['deliveries'][0]['deck_id'] == dv, ib)
+check('Murid lain tak bisa menandai kiriman orang', S3.req('POST', '/api/inbox/seen', {'deliveries': [ib['deliveries'][0]['id']]})[0] == 200 and len(S4.req('GET', '/api/inbox')[1]['deliveries']) == 1)
+S4.req('POST', '/api/inbox/seen', {'deliveries': [ib['deliveries'][0]['id']]})
+check('Setelah dibaca tidak muncul lagi', len(S4.req('GET', '/api/inbox')[1]['deliveries']) == 0)
+check('Penerima bisa belajar kategori kiriman', S4.req('POST', '/api/run/start', {'decks': [dv], 'mode': 'pic'})[0] == 200)
+check('Bukan penerima tak bisa belajar kategori kiriman', S3.req('POST', '/api/run/start', {'decks': [dv], 'mode': 'pic'})[0] == 400)
+check('Kirim ke ID asing ditolak', T.req('POST', '/api/t/deliver', {'deck_id': dv, 'to': {'users': ['x' * 32]}})[0] == 400)
+# ---- pesan / peringatan ----
+st, r, _ = T.req('POST', '/api/t/message', {'text': 'Jangan keluar-keluar <b>aplikasi</b>', 'kind': 'warn', 'to': {'users': [rid]}})
+check('Guru mengirim peringatan', st == 200 and r['sent'] == 1)
+m = S4.req('GET', '/api/inbox')[1]['messages']
+check('Peringatan sampai ke murid', len(m) == 1 and m[0]['kind'] == 'warn' and m[0]['text'].startswith('Jangan'), m)
+check('Pesan tidak bocor ke murid lain', len(S3.req('GET', '/api/inbox')[1]['messages']) == 0)
+check('Pesan kosong ditolak', T.req('POST', '/api/t/message', {'text': '  ', 'to': {'all': True}})[0] == 400)
+check('Pesan terlalu panjang ditolak', T.req('POST', '/api/t/message', {'text': 'a' * 301, 'to': {'all': True}})[0] == 400)
+S4.req('POST', '/api/inbox/seen', {'messages': [m[0]['id']]})
+check('Pesan yang sudah dibaca hilang', len(S4.req('GET', '/api/inbox')[1]['messages']) == 0)
+# ---- kuis 量词 ----
+st, r, _ = S4.req('POST', '/api/run/start', {'decks': [dv], 'mode': 'mw', 'planned': 2}); sidm = r['id']
+cards = [c for c in S4.req('GET', '/api/content')[1]['cards'] if c['deck_id'] == dv]
+cb = [c for c in cards if c['h'] == '书'][0]
+st, opts, _ = S4.req('POST', '/api/run/quiz', {'sid': sidm, 'card': cb['id'], 'kind': 'mw'})
+check('Kuis 量词: 4 pilihan, satu benar, tanpa kunci jawaban', st == 200 and len(opts) == 4 and sum(o['w'] == '本' for o in opts) == 1 and all(set(o) == {'t', 'w', 'y'} for o in opts), opts)
+right = [o for o in opts if o['w'] == '本'][0]['t']
+check('Jawaban 量词 dinilai server', S4.req('POST', '/api/run/answer', {'sid': sidm, 'card': cb['id'], 'token': right})[1].get('correct') is True)
+check('Setelah refresh: soal yang sudah dijawab tidak bisa diulang', S4.req('POST', '/api/run/quiz', {'sid': sidm, 'card': cb['id'], 'kind': 'mw'})[1].get('answered') is True)
+# ---- lanjutkan & akhiri sesi ----
+check('Status sesi terbuka (untuk lanjutkan)', S4.req('GET', '/api/run/status?sid=' + sidm)[1]['open'] is True)
+check('Murid lain tak bisa cek sesi orang', S3.req('GET', '/api/run/status?sid=' + sidm)[1]['open'] is False)
+st, r, _ = T.req('POST', '/api/t/end-run', {'sid': sidm})
+check('Guru mengakhiri sesi murid', st == 200 and r['ended'] == 1)
+pr = S4.req('POST', '/api/run/presence', {'sid': sidm, 'state': 'active'})[1]
+check('Murid diberi tahu sesi diakhiri guru', pr.get('ok') is False and pr.get('ended_by') == 'teacher', pr)
+check('Sesi yang diakhiri tidak bisa dijawab lagi', S4.req('POST', '/api/run/rate', {'sid': sidm, 'card': cb['id'], 'rating': 4})[0] == 409)
+st, r, _ = S4.req('POST', '/api/run/start', {'decks': ['buah'], 'mode': 'pic', 'planned': 3}); sidx = r['id']
+fx = S4.req('POST', '/api/run/finish', {'sid': sidx, 'early': True})[1]
+check('Murid bisa mengakhiri sesinya sendiri', fx.get('ended_by') == 'self' and fx.get('finished_at'), fx)
 st, _, _ = T.req('POST', '/api/t/students', {'action': 'set_active', 'id': b['id'] if 'id' in b else '', 'active': False})
 check('Guru nonaktifkan akun', st == 200)
 check('Akun nonaktif langsung keluar', S2.req('GET', '/api/me')[0] == 401)

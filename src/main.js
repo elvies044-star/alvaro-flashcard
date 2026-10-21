@@ -42,6 +42,10 @@ const ICON = {
   smile: '<circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/>', send: '<path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/>',
   image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>', sparkle: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>',
   list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+  gift: '<rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18M12 8S10.5 3 8 3a2.5 2.5 0 0 0 0 5h4zM12 8s1.5-5 4-5a2.5 2.5 0 0 1 0 5h-4z"/>',
+  chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  split: '<rect x="3" y="4" width="7" height="16" rx="2"/><rect x="14" y="4" width="7" height="16" rx="2"/>',
+  stop: '<rect x="5" y="5" width="14" height="14" rx="2"/>', resume: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M10 9l5 3-5 3z"/>',
 };
 const ic = (n) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICON[n]}</svg>`;
 let toastT;
@@ -79,8 +83,9 @@ const MODES = ['pic', 'han', 'arti', 'mix'];
 const MODE_LABEL = { pic: 'Gambar', han: '汉字', arti: 'Arti', mix: 'Campur' };
 const RATE = { 1: { l: 'Susah', w: 'muncul lagi segera', gap: 2 }, 2: { l: 'Lumayan', w: 'muncul lagi nanti', gap: 7 }, 3: { l: 'Bisa', w: 'muncul besok', days: 1 }, 4: { l: 'Mudah', w: 'muncul 3 hari lagi', days: 3 } };
 const COLORS = ['#1f3fbf', '#2fa3d6', '#16a34a', '#0f9f74', '#e0b51b', '#f08a24', '#e8513f', '#e0559b', '#7a4fd0', '#5b6789'];
-const S = Object.assign({ mode: 'pic', quiz: true, auto: true, sfx: true, all: false, sel: [], view: 'learn', ttab: 'live', hints: true }, store.get('prefs', {}));
-const savePrefs = () => store.set('prefs', { mode: S.mode, quiz: S.quiz, auto: S.auto, sfx: S.sfx, all: S.all, sel: S.sel, view: ['study', 'done'].includes(S.view) ? 'learn' : S.view, ttab: S.ttab, hints: S.hints });
+const S = Object.assign({ mode: 'pic', quiz: true, auto: true, sfx: true, all: false, sel: [], view: 'learn', ttab: 'live', hints: true, kind: 'card', split: { on: false, size: 10, part: 0 } }, store.get('prefs', {}));
+if (!S.split || typeof S.split !== 'object') S.split = { on: false, size: 10, part: 0 };
+const savePrefs = () => store.set('prefs', { mode: S.mode, quiz: S.quiz, auto: S.auto, sfx: S.sfx, all: S.all, sel: S.sel, view: ['study', 'done'].includes(S.view) ? 'learn' : S.view, ttab: S.ttab, hints: S.hints, kind: S.kind, split: S.split });
 let ME = null, SET = null, DECKS = [], CARDS = [], SRS = {}, Q = null, STUDENTS = [];
 const isTeacher = () => !!ME && ME.role === 'teacher';
 const canCreate = () => !!ME && (ME.role === 'teacher' || !!ME.can_create);
@@ -89,7 +94,7 @@ function cleanSettings(s) {
   s = s || {};
   const modes = Array.isArray(s.modes) ? MODES.filter((m) => s.modes.includes(m)) : MODES.slice();
   const ms = modes.length ? modes : ['pic'];
-  return { modes: ms, default_mode: ms.includes(s.default_mode) ? s.default_mode : ms[0], student_can_choose: s.student_can_choose !== false, quiz_enabled: s.quiz_enabled !== false, hidden_decks: Array.isArray(s.hidden_decks) ? s.hidden_decks.filter((x) => typeof x === 'string') : [] };
+  return { modes: ms, default_mode: ms.includes(s.default_mode) ? s.default_mode : ms[0], student_can_choose: s.student_can_choose !== false, quiz_enabled: s.quiz_enabled !== false, mw_quiz: s.mw_quiz !== false, hidden_decks: Array.isArray(s.hidden_decks) ? s.hidden_decks.filter((x) => typeof x === 'string') : [] };
 }
 function applyContent(c) {
   SET = cleanSettings(c.settings);
@@ -181,36 +186,133 @@ async function loadAll() {
   applyContent(await api.content());
   try { SRS = await api.srs(); } catch (_) { SRS = {}; }
   if (!S.sel.length) S.sel = studyDecks().slice(0, 1).map((d) => d.id);
+  startInbox();
 }
 async function reloadContent() { applyContent(await api.content()); }
 
 /* ================= Belajar ================= */
-const selCards = () => studyDecks().filter((d) => S.sel.includes(d.id)).flatMap((d) => d.cards);
+const mwOn = () => SET.mw_quiz !== false;
+const kindNow = () => (S.kind === 'mw' && mwOn() ? 'mw' : 'card');
+const forKind = (cs) => (kindNow() === 'mw' ? cs.filter((c) => c.mw) : cs);
+const poolCards = () => forKind(studyDecks().filter((d) => S.sel.includes(d.id)).flatMap((d) => d.cards));
+const selCards = poolCards;
+const isPriv = (d) => !isTeacher() && (d.mine || !!d.delivered_at);
+const isNewGift = (d) => !!d.delivered_at && Date.now() - d.delivered_at < 3 * 864e5 && !d.cards.some((c) => SRS[c.id]);
+// Bagi kategori: potong daftar kartu yang dipilih menjadi beberapa bagian tetap
+const partKey = () => kindNow() + ':' + S.sel.slice().sort().join(',');
+function parts() {
+  const cs = poolCards(), size = Math.max(1, Math.min(500, S.split.size | 0 || 10)), out = [];
+  for (let i = 0; i < cs.length; i += size) out.push(cs.slice(i, i + size));
+  return out;
+}
+const doneParts = () => (store.get('parts', {})[partKey()] || []);
+function markPart(key, idx) { const all = store.get('parts', {}); const l = new Set(all[key] || []); l.add(idx); all[key] = [...l]; const ks = Object.keys(all); if (ks.length > 40) delete all[ks[0]]; store.set('parts', all); }
+function planCards() {
+  if (S.split.on) { const ps = parts(); if (!ps.length) return []; if (S.split.part >= ps.length) S.split.part = 0; return ps[S.split.part]; }
+  const cs = poolCards(); return S.all ? cs : cs.filter(isDue);
+}
+function deckCard(d) {
+  const due = d.cards.filter(isDue).length, sched = d.cards.length - due, on = S.sel.includes(d.id);
+  const mwN = d.cards.filter((c) => c.mw).length;
+  const pics = d.cards.filter(hasPic).slice(0, 3).map(picHTML).join('') || `<span class="hz">${esc(d.cards[0]?.h || '')}</span>`;
+  const tags = [];
+  if (isPriv(d)) tags.push(`<span class="pill priv">${ic('key')} Pribadi</span>`);
+  if (d.delivered_at && !isTeacher()) tags.push(isNewGift(d) ? '<span class="pill new">Baru dari guru</span>' : '<span class="pill mute">Dari guru</span>');
+  else if (d.owner_id) tags.push(`<span class="pill mute">Buatan ${d.mine ? 'kamu' : esc(d.owner_name || 'murid')}</span>`);
+  if (isTeacher() && !d.owner_id && d.status === 'private') tags.push('<span class="pill priv">Hanya untuk penerima kiriman</span>');
+  return `<button class="deck ${isPriv(d) ? 'mine' : ''}" data-pick="${esc(d.id)}" aria-pressed="${on}" style="--dc:${d.color}"><span class="chk">${ic('check')}</span>
+    <div class="pics">${pics}</div><div class="zh">${esc(d.zh)}</div><div class="id">${esc(d.idn)}</div>
+    ${tags.length ? `<div class="tags">${tags.join('')}</div>` : ''}
+    <div class="bar"><i style="width:${(sched / d.cards.length) * 100}%"></i></div>
+    <div class="meta"><span class="dotc"></span>${kindNow() === 'mw' ? `${mwN} kartu ber-量词` : `${due} siap · ${d.cards.length} kartu`}</div></button>`;
+}
+function resumeHTML() {
+  const r = savedRun(); if (!r || !RESUME_OK) return '';
+  const nm = r.decks.map((id) => deckOf(id)?.zh).filter(Boolean).join('、');
+  return `<div class="resume" role="region" aria-label="Sesi yang belum selesai"><div class="ic">${ic('resume')}</div><div><b>Sesi belum selesai · ${r.done}/${r.total} kartu</b><span class="han">${esc(nm)}</span><span> · ${r.kind === 'mw' ? 'Kuis 量词' : 'Flashcard'}${r.partLabel ? ' · ' + esc(r.partLabel) : ''}</span></div>
+    <div class="row"><button class="btn sm secondary" data-act="endsaved">${ic('stop')} Akhiri</button><button class="btn sm" data-act="resume">${ic('play')} Lanjutkan</button></div></div>`;
+}
 function renderLearn() {
   Q = null; document.documentElement.style.setProperty('--c', 'var(--brand)');
   const ds = studyDecks(); S.sel = S.sel.filter((id) => ds.some((d) => d.id === id));
+  if (S.kind === 'mw' && !mwOn()) S.kind = 'card';
   const dueAll = ds.flatMap((d) => d.cards).filter(isDue).length;
+  const priv = ds.filter(isPriv).sort((a, b) => (b.delivered_at || b.created_at || 0) - (a.delivered_at || a.created_at || 0));
+  const rest = ds.filter((d) => !isPriv(d));
+  const ps = S.split.on ? parts() : [], dp = doneParts(), pool = poolCards().length;
+  if (S.split.part >= ps.length) S.split.part = 0;
   $('#view').innerHTML = `<div class="page-head"><div class="hello"><div class="avatar" aria-hidden="true">${initial(ME.display_name)}</div><div>
       <h1 class="h1">Halo, ${esc(ME.display_name)}!</h1><p class="sub" style="margin-top:2px">${dueAll ? `${dueAll} kartu siap kamu pelajari hari ini.` : 'Semua kartu sudah terjadwal. Kerja bagus!'}</p></div></div>
     ${ds.length ? `<button class="chip" data-act="selall">${S.sel.length === ds.length ? 'Kosongkan pilihan' : 'Pilih semua'}</button>` : ''}</div>
-    <p class="note" style="margin:-8px 0 16px">Pilih satu kategori atau lebih. Setelah kartu dibalik, beri nilai 1–4: nilai 1 & 2 diulang di sesi ini, 3 muncul besok, 4 muncul 3 hari lagi.</p>
-    <div class="decks">${ds.map((d) => {
-      const due = d.cards.filter(isDue).length, sched = d.cards.length - due, on = S.sel.includes(d.id);
-      const pics = d.cards.filter(hasPic).slice(0, 4).map(picHTML).join('') || `<span class="hz">${esc(d.cards[0]?.h || '')}</span>`;
-      return `<button class="deck" data-pick="${esc(d.id)}" aria-pressed="${on}" style="--dc:${d.color}"><span class="chk">${ic('check')}</span>
-        <div class="pics">${pics}</div><div class="zh">${esc(d.zh)}</div><div class="id">${esc(d.idn)}</div>
-        ${d.owner_id ? `<span class="pill mute tag">Buatan ${d.mine ? 'kamu' : esc(d.owner_name || 'murid')}</span>` : ''}
-        <div class="bar"><i style="width:${(sched / d.cards.length) * 100}%"></i></div>
-        <div class="meta"><span class="dotc"></span>${due} siap · ${d.cards.length} kartu</div></button>`;
-    }).join('') || '<div class="panel empty"><b>Belum ada kategori</b>Gurumu belum menampilkan kategori untukmu.</div>'}</div>`;
+    <div id="resumeBox">${resumeHTML()}</div>
+    <div class="learnbar">
+      ${mwOn() ? `<div class="seg" role="group" aria-label="Jenis latihan"><button data-lkind="card" aria-pressed="${kindNow() === 'card'}">Flashcard</button><button data-lkind="mw" aria-pressed="${kindNow() === 'mw'}">Kuis 量词</button></div>` : ''}
+      <button class="chip" data-act="split" aria-pressed="${S.split.on}">${ic('split')} Bagi kartu</button>
+    </div>
+    ${S.split.on ? `<div class="splitbox">
+      <label class="field" for="spSize">Kartu per bagian<input id="spSize" type="number" inputmode="numeric" min="1" max="500" value="${S.split.size}"></label>
+      <span class="x-sign">=</span>
+      <label class="field" for="spCount">Jumlah bagian<input id="spCount" type="number" inputmode="numeric" min="1" max="100" value="${Math.max(1, ps.length)}"></label>
+      <p class="note" style="flex:1;min-width:180px;padding-bottom:10px">${pool} kartu dari kategori yang dipilih. Pilih bagian yang mau dipelajari sekarang.</p>
+      <div class="parts">${ps.map((p, i) => `<button class="part ${dp.includes(i) ? 'ok' : ''}" data-part="${i}" aria-pressed="${S.split.part === i}">Bagian ${i + 1}<small>${dp.includes(i) ? '✓ selesai · ' : ''}${p.length} kartu</small></button>`).join('') || '<span class="note">Pilih kategori dulu.</span>'}</div>
+    </div>` : `<p class="note" style="margin:-6px 0 16px">${kindNow() === 'mw' ? 'Kuis 量词: tebak kata satuan yang tepat untuk tiap benda, misalnya 一<b>本</b>书.' : 'Pilih satu kategori atau lebih. Setelah kartu dibalik, beri nilai 1–4: nilai 1 & 2 diulang di sesi ini, 3 muncul besok, 4 muncul 3 hari lagi.'}</p>`}
+    ${priv.length ? `<div class="sec-title">${ic('key')} Pribadi · ${priv.length}</div><div class="decks">${priv.map(deckCard).join('')}</div>${rest.length ? '<div class="sec-title">Kategori kelas</div>' : ''}` : ''}
+    <div class="decks">${rest.map(deckCard).join('') || (priv.length ? '' : '<div class="panel empty"><b>Belum ada kategori</b>Gurumu belum menampilkan kategori untukmu.</div>')}</div>`;
+  const sz = $('#spSize'), ct = $('#spCount');
+  if (sz) {
+    const upd = (from) => {
+      const n = poolCards().length || 1;
+      if (from === 'size') S.split.size = Math.max(1, Math.min(500, parseInt(sz.value, 10) || 1));
+      else { const k = Math.max(1, Math.min(100, parseInt(ct.value, 10) || 1)); S.split.size = Math.max(1, Math.ceil(n / k)); }
+      S.split.part = 0; savePrefs();
+      clearTimeout(splitT); splitT = setTimeout(() => { const f = document.activeElement && document.activeElement.id; renderLearn(); const el = f && $('#' + f); if (el) { el.focus(); try { el.setSelectionRange(99, 99); } catch (_) { /* number */ } } }, 500);
+    };
+    sz.addEventListener('input', () => upd('size')); ct.addEventListener('input', () => upd('count'));
+  }
   renderActionbar();
+  checkSaved();
 }
+let splitT = 0;
 function renderActionbar() {
   const bar = $('#actionbar'); if (S.view !== 'learn') { bar.hidden = true; return; } bar.hidden = false;
-  const cs = selCards(), due = cs.filter(isDue).length, n = S.all ? cs.length : due;
-  bar.innerHTML = `<div class="in"><div class="info"><b>${n} kartu</b><span>${S.sel.length} kategori · ${S.all ? 'semua kartu, jadwal diabaikan' : 'kartu baru & yang jatuh tempo'}</span></div>
-    <button class="switch" role="switch" aria-checked="${S.all}" data-act="togall"><span class="track"></span>Latih semua</button>
+  const cs = planCards(), n = cs.length, ps = S.split.on ? parts() : [];
+  const info = S.split.on ? `Bagian ${ps.length ? S.split.part + 1 : 0}/${ps.length} · semua kartu di bagian ini` : `${S.sel.length} kategori · ${S.all ? 'semua kartu, jadwal diabaikan' : 'kartu baru & yang jatuh tempo'}`;
+  bar.innerHTML = `<div class="in"><div class="info"><b>${n} kartu${kindNow() === 'mw' ? ' · 量词' : ''}</b><span>${info}</span></div>
+    ${S.split.on ? '' : `<button class="switch" role="switch" aria-checked="${S.all}" data-act="togall"><span class="track"></span>Latih semua</button>`}
     <button class="btn" data-act="start" ${n ? '' : 'disabled'}>${ic('play')} Mulai</button></div>`;
+}
+
+/* ---- simpan & lanjutkan sesi (setelah keluar / refresh) ---- */
+let RESUME_OK = false;
+const savedRun = () => { const r = store.get('run', null); return r && ME && r.uid === ME.id && typeof r.sid === 'string' && Array.isArray(r.ids) ? r : null; };
+function saveRun() {
+  if (!Q || !Q.sid) return;
+  store.set('run', { uid: ME.id, sid: Q.sid, ids: Q.queue.map((c) => c.id), total: Q.total, done: Q.done, mode: Q.mode, kind: Q.kind, awayCount: Q.awayCount, decks: Q.decks, part: Q.part || null, partLabel: Q.part ? `Bagian ${Q.part.idx + 1}` : '', at: Date.now() });
+}
+const clearRun = () => { store.set('run', null); RESUME_OK = false; };
+let checkingSaved = false;
+async function checkSaved() {
+  const r = savedRun(); if (!r || checkingSaved) return;
+  if (RESUME_OK) return;
+  checkingSaved = true;
+  try { const st = await api.runStatus(r.sid); if (st.open) RESUME_OK = true; else clearRun(); }
+  catch (_) { /* offline: coba lagi nanti */ }
+  checkingSaved = false;
+  const box = $('#resumeBox'); if (box && S.view === 'learn') box.innerHTML = resumeHTML();
+}
+function resumeRun() {
+  const r = savedRun(); if (!r) return;
+  const byId = new Map(CARDS.map((c) => [c.id, c]));
+  const queue = r.ids.map((id) => byId.get(id)).filter(Boolean);
+  if (!queue.length) { toast('Kartu di sesi itu sudah tidak tersedia.'); endSaved(); return; }
+  Q = { sid: r.sid, queue, total: r.total, done: r.done, mode: r.mode, kind: r.kind === 'mw' ? 'mw' : 'card', decks: r.decks, part: r.part, chain: Promise.resolve(), failed: 0, streak: 0, awayCount: r.awayCount || 0, awayMs: 0, awayStart: 0 };
+  PRES.state = 'away'; S.view = 'study'; $('#actionbar').hidden = true; shell(); startBeat(); window.scrollTo(0, 0);
+  setPresence('active', true); renderStudy(); toast('Sesi dilanjutkan.');
+}
+async function endSaved() {
+  const r = savedRun(); clearRun();
+  if (r) { try { await api.finishSession(r.sid, true); } catch (_) { /* sudah selesai */ } }
+  if (S.view === 'learn') { const box = $('#resumeBox'); if (box) box.innerHTML = ''; }
 }
 
 /* ================= sesi belajar + deteksi keluar aplikasi ================= */
@@ -220,9 +322,17 @@ function setPresence(st) {
   if (!Q || !Q.sid || S.view !== 'study') return;
   if (PRES.state === st) return;
   PRES.state = st;
-  if (st === 'away') { Q.awayCount++; Q.awayStart = Date.now(); }
+  if (st === 'away') { Q.awayCount++; Q.awayStart = Date.now(); saveRun(); }
   else if (Q.awayStart) { Q.awayMs += Date.now() - Q.awayStart; Q.awayStart = 0; showAwayBanner(); }
-  api.presence(Q.sid, st);
+  api.presence(Q.sid, st).then(onPresence);
+}
+// Server bilang sesi sudah ditutup (mis. diakhiri guru)
+function onPresence(r) {
+  if (!r || r.ok !== false || !Q || S.view !== 'study') return;
+  const by = r.ended_by; stopBeat(); clearRun(); Q = null;
+  S.view = 'learn'; savePrefs(); shell(); renderLearn();
+  showOverlay({ cls: by === 'teacher' ? 'warn' : '', icon: 'stop', title: by === 'teacher' ? 'Sesi diakhiri oleh guru' : 'Sesi sudah berakhir',
+    body: `<p class="msg">${by === 'teacher' ? 'Gurumu mengakhiri sesi ini. Jawaban yang sudah kamu beri tetap tersimpan.' : 'Sesi ini sudah ditutup. Mulai sesi baru dari daftar kategori.'}</p>`, buttons: [['ok', 'Mengerti']] });
 }
 document.addEventListener('visibilitychange', () => {
   if (Q && Q.cur) { if (document.hidden) hiddenAt = performance.now(); else if (hiddenAt) { Q.cur.hidden += performance.now() - hiddenAt; hiddenAt = 0; } }
@@ -231,7 +341,7 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('blur', () => { clearTimeout(blurT); blurT = setTimeout(() => { if (!document.hasFocus()) setPresence('away'); }, 1500); });
 window.addEventListener('focus', () => { clearTimeout(blurT); setPresence('active'); });
 window.addEventListener('pagehide', () => setPresence('away'));
-function startBeat() { stopBeat(); beatT = setInterval(() => { if (Q && Q.sid && S.view === 'study' && !document.hidden) api.presence(Q.sid, PRES.state); }, 15000); }
+function startBeat() { stopBeat(); beatT = setInterval(() => { if (Q && Q.sid && S.view === 'study' && !document.hidden) api.presence(Q.sid, PRES.state).then(onPresence); }, 10000); }
 function stopBeat() { clearInterval(beatT); beatT = 0; }
 function showAwayBanner() {
   const el = $('#awayBanner'); if (!el) return;
@@ -243,19 +353,24 @@ function showAwayBanner() {
 async function withRetry(fn, tries = 3) {
   for (let i = 0; ; i++) { try { return await fn(); } catch (e) { if (i >= tries - 1 || (e.status && e.status < 500)) throw e; await new Promise((r) => setTimeout(r, 600 * (i + 1))); } }
 }
-async function startStudy() {
-  let cs = selCards(); if (!S.all) cs = cs.filter(isDue); if (!cs.length) return;
+async function startStudy(cards) {
+  const cs = cards || planCards(); if (!cs.length) return;
   const btn = document.querySelector('[data-act="start"]'); if (btn) btn.disabled = true;
-  const mode = effMode();
+  if (savedRun()) await endSaved(); // sesi lama yang ditinggal ditutup dulu
+  const kind = cards ? 'card' : kindNow();
+  const mode = kind === 'mw' ? 'mw' : effMode();
+  const decks = [...new Set(cs.map((c) => c.deck_id))];
   let sid;
-  try { sid = await api.startSession([...new Set(cs.map((c) => c.deck_id))], mode, cs.length); }
+  try { sid = await api.startSession(decks, mode, cs.length); }
   catch (e) { toast(e.message); if (btn) btn.disabled = false; return; }
-  Q = { sid, queue: shuffle(cs), total: cs.length, done: 0, mode, chain: Promise.resolve(), failed: 0, streak: 0, awayCount: 0, awayMs: 0, awayStart: 0 };
-  PRES.state = 'active';
+  const part = !cards && S.split.on ? { key: partKey(), idx: S.split.part, of: parts().length } : null;
+  Q = { sid, queue: shuffle(cs), total: cs.length, done: 0, mode, kind, decks, part, chain: Promise.resolve(), failed: 0, streak: 0, awayCount: 0, awayMs: 0, awayStart: 0 };
+  PRES.state = 'active'; saveRun();
   S.view = 'study'; $('#actionbar').hidden = true; shell(); startBeat(); window.scrollTo(0, 0); renderStudy();
 }
-function cardMode(c) { let m = effMode(); if (m === 'mix') m = ['pic', 'han', 'arti'][(Math.random() * 3) | 0]; if (m === 'pic' && !hasPic(c)) m = 'han'; return m; }
+function cardMode(c) { if (Q && Q.kind === 'mw') return 'mw'; let m = effMode(); if (m === 'mix') m = ['pic', 'han', 'arti'][(Math.random() * 3) | 0]; if (m === 'pic' && !hasPic(c)) m = 'han'; return m; }
 function frontHTML(c, m) {
+  if (m === 'mw') return `${hasPic(c) ? `<div class="big" style="width:min(40%,150px)">${picHTML(c)}</div>` : ''}<div class="mwq">一<span class="blank">个</span>${esc(c.h)}</div><div class="mwq-sub">${esc(c.p)} · ${esc(c.m)}</div><div class="q">Kata satuannya apa?</div>`;
   if (m === 'han') return `<div class="bighan">${esc(c.h)}</div><div class="q">Apa artinya?</div>`;
   if (m === 'arti') return `<div class="bigid">${esc(c.m)}</div><div class="q">Bahasa Mandarinnya apa?</div>`;
   return `<div class="big">${picHTML(c)}</div><div class="q">Ini apa dalam bahasa Mandarin?</div>`;
@@ -270,16 +385,18 @@ const sayText = (c) => (c.mw ? c.h : c.s || c.h);
 function renderStudy() {
   if (!Q.queue.length) { renderDone(); return; }
   const c = Q.queue[0], d = deckOf(c.deck_id) || { zh: '', color: '#1f3fbf', cards: [] }, m = cardMode(c);
-  const canQuiz = SET.quiz_enabled && S.quiz && d.cards.length >= 4;
+  const isMw = Q.kind === 'mw';
+  const canQuiz = isMw || (SET.quiz_enabled && S.quiz && d.cards.length >= 4);
   Q.cur = { c, m, t0: performance.now(), hidden: 0, answered: !canQuiz, flipped: false, sug: 0 };
   document.documentElement.style.setProperty('--c', d.color);
   $('#view').innerHTML = `<div class="study">
-    <div class="study-top"><button class="btn ghost sm" data-act="quit">${ic('back')} Kategori</button><div class="progress"><i style="width:${(Q.done / Q.total) * 100}%"></i></div><span class="count">${Q.done}/${Q.total}</span></div>
+    <div class="study-top"><button class="btn ghost sm" data-act="quit">${ic('back')} Kategori</button><div class="progress"><i style="width:${(Q.done / Q.total) * 100}%"></i></div><span class="count">${Q.part ? `Bag. ${Q.part.idx + 1} · ` : ''}${Q.done}/${Q.total}</span><button class="btn ghost sm end" data-act="endrun" title="Akhiri sesi sekarang">${ic('stop')} <span>Akhiri</span></button></div>
     <div id="awayBanner" class="away-banner" role="status" ${Q.awayCount ? '' : 'hidden'}>${Q.awayCount ? `${ic('alert')}<span>Kamu sudah keluar dari aplikasi ${Q.awayCount} kali di sesi ini. Gurumu bisa melihatnya.</span>` : ''}</div>
     <div class="study-opts">
-      ${SET.student_can_choose && SET.modes.length > 1 ? `<div class="seg" role="group" aria-label="Sisi depan kartu">${SET.modes.map((x) => `<button data-mode="${x}" aria-pressed="${effMode() === x}">${MODE_LABEL[x]}</button>`).join('')}</div>` : ''}
+      ${isMw ? '<span class="pill priv">Kuis 量词</span>' : ''}
+      ${!isMw && SET.student_can_choose && SET.modes.length > 1 ? `<div class="seg" role="group" aria-label="Sisi depan kartu">${SET.modes.map((x) => `<button data-mode="${x}" aria-pressed="${effMode() === x}">${MODE_LABEL[x]}</button>`).join('')}</div>` : ''}
       <span class="spacer"></span>
-      ${SET.quiz_enabled ? `<button class="chip" data-act="quiz" aria-pressed="${S.quiz}">Tebak</button>` : ''}
+      ${SET.quiz_enabled && !isMw ? `<button class="chip" data-act="quiz" aria-pressed="${S.quiz}">Tebak</button>` : ''}
       <button class="chip" data-act="auto" aria-pressed="${S.auto}" aria-label="Ucapan otomatis" title="Ucapan otomatis">${ic('sound')}</button>
       <button class="chip" data-act="sfx" aria-pressed="${S.sfx}" aria-label="Efek suara" title="Efek suara">${ic(S.sfx ? 'sparkle' : 'mute')}</button>
     </div>
@@ -298,10 +415,13 @@ async function loadQuiz(c, m) {
   const cur = Q.cur;
   try {
     await Q.chain;
-    const opts = await withRetry(() => api.quizOptions(Q.sid, c.id));
+    const opts = await withRetry(() => api.quizOptions(Q.sid, c.id, m === 'mw' ? 'mw' : undefined));
     if (!Q || Q.cur !== cur) return;
+    if (opts && opts.answered) { cur.answered = true; cur.sug = opts.correct ? 3 : 1; flip(true); return; } // sudah dijawab sebelum refresh
     const showArti = m === 'han';
-    $('#ctrl').innerHTML = `<div class="quiz">${opts.map((o) => `<button class="qo" data-t="${esc(o.t)}">${showArti ? `<span class="t">${esc(o.m)}</span>` : `<span class="z">${esc(o.h)}</span>${o.p ? `<span class="y">${esc(o.p)}</span>` : ''}`}</button>`).join('')}</div>`;
+    const optHTML = (o) => (m === 'mw' ? `<span class="z">${esc(o.w)}</span><span class="y">${esc(o.y)}</span>`
+      : showArti ? `<span class="t">${esc(o.m)}</span>` : `<span class="z">${esc(o.h)}</span>${o.p ? `<span class="y">${esc(o.p)}</span>` : ''}`);
+    $('#ctrl').innerHTML = `<div class="quiz ${m === 'mw' ? 'mw' : ''}">${opts.map((o) => `<button class="qo" data-t="${esc(o.t)}">${optHTML(o)}</button>`).join('')}</div>`;
   } catch (e) {
     if (!Q || Q.cur !== cur) return;
     cur.answered = true;
@@ -316,6 +436,7 @@ async function answerQuiz(btn) {
   catch (e) { toast(e.message); cur.answered = true; cur.busy = false; flip(true); return; }
   cur.answered = true; cur.busy = false;
   document.querySelectorAll('.qo').forEach((b) => { if (b.dataset.t === res.correct_token) b.classList.add('right'); });
+  const blank = document.querySelector('.mwq .blank'); if (blank) { blank.textContent = cur.c.mw; blank.style.color = res.correct ? 'var(--good)' : 'var(--bad)'; }
   const tilt = $('#tilt');
   badgeFx(res.correct);
   if (res.correct) {
@@ -345,6 +466,7 @@ function rate(n) {
   Q.chain = Q.chain.then(() => withRetry(() => api.rateCard(sid, c.id, n, ms))).catch(() => { Q.failed++; toast('Satu jawaban gagal tersimpan. Periksa koneksi.'); });
   if (n <= 2) { Q.queue.splice(Math.min(RATE[n].gap, Q.queue.length), 0, c); SRS[c.id] = { due: Date.now(), last: n }; }
   else { SRS[c.id] = { due: Date.now() + RATE[n].days * 864e5, last: n }; Q.done++; }
+  saveRun();
   const btn = document.querySelector(`.rb[data-rate="${n}"]`); if (btn) btn.classList.add('press');
   const tilt = $('#tilt');
   ({ 1: () => { SFX.r1(); fx(tilt, 'fx-wrong'); }, 2: () => { SFX.r2(); fx(tilt, 'fx-lift'); }, 3: () => { SFX.r3(); fx(tilt, 'fx-right'); }, 4: () => { SFX.r4(); fx(tilt, 'fx-right'); burst(24); } })[n]();
@@ -359,27 +481,78 @@ function bindTilt() {
   });
   tilt.addEventListener('pointerleave', () => { tilt.style.transition = ''; tilt.style.transform = ''; });
 }
-async function renderDone() {
+async function renderDone(early) {
+  if (early === true) Q.early = true;
   S.view = 'done'; stopBeat();
   $('#view').innerHTML = '<div class="study"><div class="panel done"><p class="note">Menyimpan hasil dan menghitung skor…</p></div></div>';
   await Q.chain;
   let s;
-  try { s = await withRetry(() => api.finishSession(Q.sid)); }
+  try { s = await withRetry(() => api.finishSession(Q.sid, Q.early)); clearRun(); if (Q.part && !Q.early) markPart(Q.part.key, Q.part.idx); }
   catch (e) { $('#view').innerHTML = `<div class="study"><div class="panel done"><h2 class="h2">Skor belum tersimpan</h2><p class="sub">${esc(e.message)}</p><button class="btn" data-act="retryfinish">Coba simpan lagi</button></div></div>`; return; }
   const pct = s.score ?? 0;
   if (pct >= 75) burst(48);
   const mins = Math.max(1, Math.round((s.seconds || 0) / 60));
   $('#view').innerHTML = `<div class="study"><div class="panel done">
     <div class="ring" style="--p:${pct}"><div>${pct}</div></div>
-    <h2 class="h1"><span class="han">${pct >= 85 ? '太棒了！' : pct >= 60 ? '很好！' : '加油！'}</span> Sesi selesai</h2>
+    <h2 class="h1"><span class="han">${pct >= 85 ? '太棒了！' : pct >= 60 ? '很好！' : '加油！'}</span> ${Q.early ? 'Sesi diakhiri' : 'Sesi selesai'}${Q.part ? ` · Bagian ${Q.part.idx + 1}/${Q.part.of}` : ''}</h2>
     <p class="sub">${s.total} kartu dalam ${mins} menit${s.quiz_total ? ` · tebakan benar ${s.quiz_right}/${s.quiz_total}` : ''}. Skor dihitung dari nilai pertama tiap kartu.</p>
     <div class="stats">${[1, 2, 3, 4].map((n) => `<div class="r${n}"><b>${s['c' + n]}</b>${RATE[n].l}</div>`).join('')}</div>
     ${s.away_count ? `<span class="pill bad"><span class="d"></span>Keluar aplikasi ${s.away_count}× · ${dur(s.away_ms)}</span>` : '<span class="pill good"><span class="d"></span>Fokus penuh, tidak pernah keluar aplikasi</span>'}
     <span class="ok-line">${ic('check')} Skor tersimpan dan bisa dilihat gurumu</span>
     ${Q.failed ? `<p class="note">${Q.failed} jawaban gagal tersimpan karena koneksi.</p>` : ''}
-    <div class="row" style="justify-content:center"><button class="btn secondary" data-act="again">${ic('play')} Ulangi</button><button class="btn" data-act="quit">Pilih kategori lain</button></div>
+    <div class="row" style="justify-content:center">${Q.part && !Q.early && Q.part.idx + 1 < Q.part.of && S.split.on && partKey() === Q.part.key
+      ? `<button class="btn secondary" data-act="quit">Pilih kategori lain</button><button class="btn" data-act="nextpart">${ic('play')} Lanjut Bagian ${Q.part.idx + 2}</button>`
+      : `<button class="btn secondary" data-act="again">${ic('play')} Ulangi</button><button class="btn" data-act="quit">Pilih kategori lain</button>`}</div>
   </div></div>`;
 }
+
+/* ================= layar penuh: pesan guru & kiriman ================= */
+const OVQ = []; let ovOpen = false;
+function showOverlay(o) { OVQ.push(o); if (!ovOpen) nextOverlay(); }
+function nextOverlay() {
+  const o = OVQ.shift(); if (!o) { ovOpen = false; return; }
+  ovOpen = true;
+  const el = document.createElement('div'); el.className = 'overlay ' + (o.cls || ''); el.id = 'overlay';
+  el.setAttribute('role', 'alertdialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-labelledby', 'ovTitle');
+  el.innerHTML = `<div class="box"><div class="big-ic">${ic(o.icon || 'chat')}</div><h2 id="ovTitle">${esc(o.title)}</h2>${o.from ? `<div class="from">${esc(o.from)}</div>` : ''}${o.body || ''}
+    <div class="row">${(o.buttons || [['ok', 'Mengerti']]).map(([k, l], i, a) => `<button class="btn ${i < a.length - 1 ? 'secondary' : ''} lg" data-ov="${k}">${esc(l)}</button>`).join('')}</div></div>`;
+  document.body.appendChild(el);
+  const btns = el.querySelectorAll('[data-ov]'); btns[btns.length - 1].focus();
+  el.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ov]'); if (!b) return;
+    el.remove(); try { if (o.onClose) o.onClose(b.dataset.ov); } catch (_) { /* abaikan */ }
+    setTimeout(nextOverlay, 150);
+  });
+}
+let inboxT = 0, inboxBusy = false;
+async function pollInbox() {
+  if (!ME || isTeacher() || document.hidden || inboxBusy) return;
+  inboxBusy = true;
+  try {
+    const r = await api.inbox();
+    const mIds = r.messages.map((m) => m.id), dIds = r.deliveries.map((d) => d.id);
+    if (mIds.length || dIds.length) await api.inboxSeen(mIds, dIds);
+    for (const m of r.messages) {
+      const warn = m.kind === 'warn';
+      if (warn) { SFX.wrong(); try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (_) { /* tidak didukung */ } } else SFX.flip();
+      showOverlay({ cls: warn ? 'warn' : '', icon: warn ? 'alert' : 'chat', title: warn ? 'Peringatan dari guru' : 'Pesan dari guru', from: fmtDate(m.created_at, { timeStyle: 'short' }), body: `<p class="msg">${esc(m.text)}</p>`, buttons: [['ok', warn ? 'Mengerti, aku fokus' : 'Oke']] });
+    }
+    if (r.deliveries.length) {
+      await reloadContent().catch(() => {});
+      if (S.view === 'learn') renderLearn();
+      const ids = r.deliveries.map((d) => d.deck_id);
+      SFX.r4(); burst(30);
+      const studying = S.view === 'study';
+      showOverlay({ cls: 'gift', icon: 'gift', title: r.deliveries.length > 1 ? `${r.deliveries.length} kategori baru dari guru!` : 'Kartu baru dari guru!',
+        body: `<div>${r.deliveries.map((d) => `<div class="deckchip" style="border-left:5px solid ${/^#[0-9a-f]{6}$/i.test(d.color) ? d.color : '#1f3fbf'}"><span class="han">${esc(d.zh)}</span><span>${esc(d.idn)} · ${d.n} kartu</span></div>`).join('')}</div>
+          <p class="note" style="margin-bottom:18px">Sudah ada di daftar kategorimu, paling atas dengan tanda <b>Pribadi</b>.</p>`,
+        buttons: studying ? [['ok', 'Oke, nanti']] : [['later', 'Nanti'], ['go', 'Belajar sekarang']],
+        onClose: (k) => { if (k === 'go' && S.view !== 'study') { S.sel = ids.filter((id) => deckOf(id)); S.kind = 'card'; S.split.on = false; S.all = true; savePrefs(); S.view = 'learn'; shell(); renderLearn(); startStudy(); } } });
+    }
+  } catch (e) { if (e.status === 401) { ME = null; renderLogin('Silakan masuk lagi.'); } }
+  inboxBusy = false;
+}
+function startInbox() { clearInterval(inboxT); if (ME && !isTeacher()) { inboxT = setInterval(pollInbox, 8000); pollInbox(); } }
 
 /* ================= Riwayat ================= */
 async function renderHist() {
@@ -399,11 +572,11 @@ async function renderHist() {
 }
 
 /* ================= Kartu (editor) ================= */
-const ED = { deck: null, tab: 'add', text: '', rows: [], cache: {}, note: '', newOpen: false, newColor: COLORS[0], list: [], armDeck: false, armCard: null, renameColor: null };
+const ED = { shared: true, deliverOpen: false, deck: null, tab: 'add', text: '', rows: [], cache: {}, note: '', newOpen: false, newColor: COLORS[0], list: [], armDeck: false, armCard: null, renameColor: null };
 const EMOJIS = '🍎🍌🍊🍇🍉🍓🍒🍑🥭🍍🥥🥝🥑🍋🥕🌽🥦🥬🥒🍆🍅🥔🧅🧄🍄🥜🍚🍜🍞🥟🍗🍔🍕🍟🍰🍪🍫🍬🍦🥛☕🍵🧃💧🐶🐱🐭🐰🐼🐻🐨🐯🦁🐮🐷🐵🐔🐦🐧🦆🐟🐬🐳🦋🐝🐞🐍🐢🦒🐘🦓🐴🦄📚✏️🖊️📏✂️📎🎒💻📱⌚🔑🚪🪑🛏️💡📺🚗🚌🚲✈️🚢🚀⚽🏀🎸🎹🎨🎁🎈☀️🌙⭐☁️🌧️❄️🌈🔥🌳🌸🏠🏫🏥👨👩👦👧👶👴👵🙂😄😢😠😮😴🤒😋❤️👍👋🙏👀👂👃👄✋🦶'.match(/\p{Extended_Pictographic}️?(?:‍\p{Extended_Pictographic}️?)*/gu);
 const editableDecks = () => DECKS.filter((d) => d.editable);
 function statusPill(d) {
-  if (!d.owner_id) return '<span class="pill good"><span class="d"></span>Tampil untuk murid</span>';
+  if (!d.owner_id) return d.status === 'private' ? '<span class="pill priv"><span class="d"></span>Hanya untuk penerima kiriman</span>' : '<span class="pill good"><span class="d"></span>Tampil untuk semua murid</span>';
   return { public: '<span class="pill good"><span class="d"></span>Disetujui · tampil untuk murid</span>', pending: '<span class="pill warn"><span class="d"></span>Menunggu persetujuan guru</span>', private: '<span class="pill mute"><span class="d"></span>Pribadi · hanya kamu</span>' }[d.status] || '';
 }
 function renderCards() {
@@ -421,6 +594,7 @@ function renderCards() {
         <label class="field" for="ndz">Nama Mandarin<input id="ndz" maxlength="16" placeholder="学校"></label>
         <label class="field" for="ndi">Nama Indonesia<input id="ndi" maxlength="40" placeholder="Sekolah"></label>
         <div class="swatches">${COLORS.map((c) => `<button type="button" class="sw" data-ncolor="${c}" style="background:${c}" aria-pressed="${ED.newColor === c}" aria-label="Warna ${c}"></button>`).join('')}</div>
+        ${isTeacher() ? `<button type="button" class="switch" role="switch" aria-checked="${ED.shared}" data-act="newshared"><span class="track"></span>Tampil untuk semua murid</button><p class="note">Matikan kalau kategori ini hanya untuk dikirim ke murid tertentu.</p>` : ''}
         <button class="btn sm" type="submit">Buat kategori</button>
       </form>
       <nav class="decklist" aria-label="Kategori">${ds.map((k) => `<button data-edeck="${esc(k.id)}" aria-current="${ED.deck === k.id}" style="--dc:${k.color}"><span class="dotc"></span><span><span class="zh">${esc(k.zh)}</span> <span class="note">${esc(k.idn)}</span></span><span class="n">${k.status === 'pending' ? '<span class="pill warn" style="height:20px">menunggu</span>' : k.cards.length}</span></button>`).join('') || '<p class="note" style="padding:8px">Belum ada kategori. Buat yang pertama.</p>'}</nav>
@@ -431,7 +605,7 @@ function renderCards() {
   $('#newDeckForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const zh = $('#ndz').value.trim(); if (!zh) { toast('Isi nama Mandarin kategori.'); return; }
-    try { const r = await api.createDeck({ zh, idn: $('#ndi').value.trim(), color: ED.newColor }); ED.deck = r.id; ED.newOpen = false; ED.tab = 'add'; await reloadContent(); toast('Kategori dibuat. Sekarang tambahkan kartu.'); renderCards(); }
+    try { const r = await api.createDeck({ zh, idn: $('#ndi').value.trim(), color: ED.newColor, shared: isTeacher() ? ED.shared : undefined }); ED.deck = r.id; ED.newOpen = false; ED.tab = 'add'; await reloadContent(); toast('Kategori dibuat. Sekarang tambahkan kartu.'); renderCards(); }
     catch (err) { toast(err.message); }
   });
 }
@@ -441,10 +615,17 @@ function deckPane(d) {
     <div class="row">
       ${d.owner_id && !isTeacher() && d.status === 'private' ? `<button class="btn sm" data-act="submitdeck">${ic('send')} Minta persetujuan guru</button>` : ''}
       ${d.owner_id && !isTeacher() && d.status !== 'private' ? '<span class="note">Setiap perubahan perlu disetujui guru lagi.</span>' : ''}
+      ${isTeacher() ? `<button class="btn sm" data-act="deliver" ${d.cards.length ? '' : 'disabled'}>${ic('gift')} Kirim ke murid</button>` : ''}
+      ${isTeacher() && !d.owner_id ? `<button class="switch" role="switch" aria-checked="${d.status !== 'private'}" data-act="sharedeck"><span class="track"></span>Tampil untuk semua</button>` : ''}
       <span class="spacer"></span>
       <button class="chip" data-act="renamedeck">${ic('edit')} Ubah nama</button>
       <button class="chip danger" data-act="deldeck" data-armed="${ED.armDeck ? 1 : 0}">${ic('trash')} ${ED.armDeck ? 'Ketuk lagi untuk menghapus' : 'Hapus kategori'}</button>
     </div>
+    ${isTeacher() ? `<form id="deliverForm" class="compose" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)" ${ED.deliverOpen ? '' : 'hidden'} novalidate>
+      <p class="note">Kategori <b class="han">${esc(d.zh)}</b> (${d.cards.length} kartu) langsung muncul memenuhi layar murid dan masuk ke daftar <b>Pribadi</b> mereka, paling atas.</p>
+      <div id="deliverTo">${STUDENTS.length || ED.stuLoaded ? toHTML('d') : '<p class="note">Memuat murid…</p>'}</div>
+      <div class="row"><span class="note" id="dlvNote"></span><span class="spacer"></span><button class="btn" type="submit">${ic('send')} Kirim sekarang</button></div>
+    </form>` : ''}
     <form id="renameForm" class="formgrid" hidden style="margin-top:14px" novalidate>
       <label class="field" for="rdz">Nama Mandarin<input id="rdz" maxlength="16" value="${esc(d.zh)}"></label>
       <label class="field" for="rdi">Nama Indonesia<input id="rdi" maxlength="40" value="${esc(d.idn)}"></label>
@@ -499,6 +680,15 @@ function listHTML(d) {
 }
 let trT = 0;
 function bindDeckPane(d) {
+  const df = $('#deliverForm');
+  if (df) {
+    bindTo('d');
+    df.addEventListener('submit', async (e) => {
+      e.preventDefault(); const n = $('#dlvNote');
+      try { const to = readTo(); const r = await api.deliver(d.id, to); n.textContent = `Terkirim ke ${r.sent} murid (${toLabel(to)}).`; toast('Kartu terkirim ke layar murid.'); burst(20); }
+      catch (err) { n.textContent = err.message; }
+    });
+  }
   const ta = $('#bulkText');
   if (ta) ta.addEventListener('input', () => { ED.text = ta.value; clearTimeout(trT); trT = setTimeout(syncRows, 650); });
   $('#renameForm').addEventListener('submit', async (e) => {
@@ -597,19 +787,64 @@ async function renderTeach() {
     <div class="tabs" role="tablist">${TTABS.map(([k, i, l]) => `<button role="tab" data-ttab="${k}" aria-selected="${S.ttab === k}">${ic(i)} ${l}${k === 'approve' && pend ? `<span class="n">${pend}</span>` : ''}</button>`).join('')}</div><div id="tview"><p class="note">Memuat…</p></div>`;
   armed = null;
   const tab = S.ttab, draw = () => ({ live: tLive, students: tStudents, scores: tScores, time: tTime, approve: tApprove, settings: tSettings })[tab]();
-  if (['settings', 'approve', 'live'].includes(tab)) { draw(); return; }
+  if (['settings', 'approve'].includes(tab)) { draw(); return; }
   try { STUDENTS = await api.students(); } catch (e) { toast(e.message); }
   if (S.view === 'teach' && S.ttab === tab) draw();
 }
 const classes = () => [...new Set(STUDENTS.map((s) => s.class_name).filter(Boolean))].sort();
 const sName = (id) => STUDENTS.find((s) => s.id === id)?.display_name || 'Murid terhapus';
 
+/* ---- penerima (semua / kelas / murid tertentu) ---- */
+const PICK = { mode: 'all', cls: '', ids: [] };
+function toHTML(px) {
+  const cl = classes();
+  return `<div class="to-row"><label class="field" for="${px}Mode" style="flex-direction:row;align-items:center;gap:8px;white-space:nowrap">Kirim ke
+    <select id="${px}Mode">
+      <option value="all" ${PICK.mode === 'all' ? 'selected' : ''}>Semua murid (${STUDENTS.filter((x) => x.active).length})</option>
+      ${cl.map((c) => `<option value="class:${esc(c)}" ${PICK.mode === 'class' && PICK.cls === c ? 'selected' : ''}>Kelas ${esc(c)}</option>`).join('')}
+      <option value="pick" ${PICK.mode === 'pick' ? 'selected' : ''}>Pilih murid…</option>
+    </select></label></div>
+    <div class="stu-picks" id="${px}Picks" ${PICK.mode === 'pick' ? '' : 'hidden'}>${STUDENTS.filter((x) => x.active).map((x) => `<button type="button" class="chip" data-pickstu="${esc(x.id)}" aria-pressed="${PICK.ids.includes(x.id)}">${esc(x.display_name)}${x.class_name ? ` <span class="note">${esc(x.class_name)}</span>` : ''}</button>`).join('') || '<span class="note">Belum ada murid aktif.</span>'}</div>`;
+}
+function bindTo(px) {
+  const sel = $('#' + px + 'Mode'); if (!sel) return;
+  sel.addEventListener('change', () => {
+    const v = sel.value;
+    if (v.startsWith('class:')) { PICK.mode = 'class'; PICK.cls = v.slice(6); } else PICK.mode = v;
+    $('#' + px + 'Picks').hidden = PICK.mode !== 'pick';
+  });
+}
+function readTo() {
+  if (PICK.mode === 'class') return { class: PICK.cls };
+  if (PICK.mode === 'pick') { if (!PICK.ids.length) throw new Error('Pilih minimal satu murid.'); return { users: PICK.ids.slice() }; }
+  return { all: true };
+}
+const toLabel = (to) => (to.all ? 'semua murid' : to.class ? 'kelas ' + to.class : `${to.users.length} murid`);
+const WARN_PRESET = 'Jangan keluar-keluar aplikasi ya! Fokus belajar dulu sampai sesi selesai.';
+
 /* ---- Pantau langsung ---- */
+let LIVE_ARM = null;
 async function tLive() {
+  $('#tview').innerHTML = `<form class="panel compose" id="msgForm" novalidate>
+      <div class="panel-head" style="margin:0"><h2 class="h3">${ic('chat')} Kirim pesan ke layar murid</h2>
+        <div class="seg" role="group" aria-label="Jenis pesan"><button type="button" data-mkind="chat" aria-pressed="true">Pesan</button><button type="button" data-mkind="warn" aria-pressed="false">Peringatan</button></div></div>
+      <textarea id="msgText" maxlength="300" placeholder="Tulis pesan… (muncul memenuhi layar murid)"></textarea>
+      <div class="row"><button type="button" class="chip" data-act="preset">${ic('alert')} Isi: “Jangan keluar-keluar aplikasi”</button></div>
+      ${toHTML('m')}
+      <div class="row"><span class="note" id="msgNote"></span><span class="spacer"></span><button class="btn" type="submit">${ic('send')} Kirim sekarang</button></div>
+    </form>
+    <div id="liveArea" style="margin-top:16px"><p class="note">Memuat…</p></div>`;
+  bindTo('m');
+  $('#msgForm').addEventListener('submit', async (e) => {
+    e.preventDefault(); const n = $('#msgNote');
+    const kind = document.querySelector('[data-mkind="warn"]').getAttribute('aria-pressed') === 'true' ? 'warn' : 'chat';
+    try { const to = readTo(); const r = await api.message($('#msgText').value, kind, to); n.textContent = `Terkirim ke ${r.sent} murid (${toLabel(to)}).`; $('#msgText').value = ''; toast('Pesan terkirim.'); }
+    catch (err) { n.textContent = err.message; }
+  });
   const draw = async () => {
     if (S.view !== 'teach' || S.ttab !== 'live') { stopLive(); return; }
     let d; try { d = await api.live(); } catch (_) { return; }
-    const v = $('#tview'); if (!v || S.ttab !== 'live' || S.view !== 'teach') return;
+    const v = $('#liveArea'); if (!v || S.ttab !== 'live' || S.view !== 'teach') return;
     const now = d.now, nm = (id) => deckOf(id)?.zh || id;
     const active = d.runs.filter((r) => !r.finished_at), done = d.runs.filter((r) => r.finished_at);
     const awayNow = (r) => r.state === 'away' && now - r.last_seen <= 60000;
@@ -618,19 +853,25 @@ async function tLive() {
       if (now - r.last_seen > 60000) return `<span class="pill mute"><span class="d"></span>Tidak aktif · ${dur(now - r.last_seen)}</span>`;
       return '<span class="pill good pulse"><span class="d"></span>Sedang belajar</span>';
     };
+    const msgInfo = (r) => (r.msg_at && now - r.msg_at < 3600e3 ? `<span class="seen">Pesan ${new Date(r.msg_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} · ${r.msg_seen ? '✓ sudah tampil' : 'belum tampil'}</span>` : '');
     v.innerHTML = `<div class="kpis"><div class="kpi"><b>${active.length}</b><span>sesi berjalan</span></div><div class="kpi"><b style="color:${active.some(awayNow) ? 'var(--bad)' : 'inherit'}">${active.filter(awayNow).length}</b><span>keluar aplikasi sekarang</span></div><div class="kpi"><b>${done.length}</b><span>selesai 30 menit terakhir</span></div></div>
-      <div class="panel-head"><h2 class="h3">Sesi berjalan</h2><span class="note">Diperbarui ${new Date(now).toLocaleTimeString('id-ID')} · otomatis tiap 5 detik</span></div>
+      <div class="panel-head"><h2 class="h3">Sesi berjalan</h2><div class="row"><span class="note">Diperbarui ${new Date(now).toLocaleTimeString('id-ID')} · tiap 5 detik</span>
+        ${active.length ? `<button class="chip danger" data-endall="1" data-armed="${LIVE_ARM === 'all' ? 1 : 0}">${ic('stop')} ${LIVE_ARM === 'all' ? 'Ketuk lagi: akhiri semua' : 'Akhiri semua sesi'}</button>` : ''}</div></div>
       ${active.length ? `<div class="live">${active.map((r) => `<div class="lv ${awayNow(r) ? 'away' : ''}">
-        <div class="who"><div class="avatar">${initial(r.name)}</div><div><b>${esc(r.name)}</b><span>${esc(r.class_name || 'Tanpa kelas')} · <span class="han">${esc(r.decks.map(nm).join('、'))}</span></span></div></div>
+        <div class="who"><div class="avatar">${initial(r.name)}</div><div><b>${esc(r.name)}</b><span>${esc(r.class_name || 'Tanpa kelas')} · <span class="han">${esc(r.decks.map(nm).join('、'))}</span>${r.mode === 'mw' ? ' · 量词' : ''}</span></div></div>
         <div>${status(r)}</div>
         <div class="prog"><i style="width:${r.planned ? Math.min(100, (r.done / r.planned) * 100) : 0}%"></i></div>
         <div class="foot"><span>${r.done}${r.planned ? `/${r.planned}` : ''} kartu · mulai ${new Date(r.started_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span><span style="color:${r.away_count ? 'var(--bad)' : 'inherit'}">Keluar ${r.away_count}× · ${dur(r.away_ms + (r.state === 'away' ? now - (r.state_since || now) : 0))}</span></div>
+        <div class="acts"><button class="chip" data-warn="${esc(r.student_id)}">${ic('alert')} Peringatkan</button><button class="chip" data-chatto="${esc(r.student_id)}">${ic('chat')} Pesan</button><button class="chip danger" data-endrun="${esc(r.id)}" data-armed="${LIVE_ARM === r.id ? 1 : 0}">${ic('stop')} ${LIVE_ARM === r.id ? 'Ketuk lagi' : 'Akhiri sesi'}</button></div>
+        ${msgInfo(r)}
       </div>`).join('')}</div>` : '<div class="panel empty"><b>Belum ada yang belajar</b>Sesi murid muncul di sini begitu mereka menekan Mulai.</div>'}
       ${done.length ? `<div class="panel" style="margin-top:16px"><div class="panel-head"><h2 class="h3">Baru selesai</h2></div><div class="tablewrap"><table class="table"><thead><tr><th>Murid</th><th>Selesai</th><th>Kartu</th><th>Keluar app</th><th>Skor</th></tr></thead><tbody>
-        ${done.map((r) => `<tr><td><b>${esc(r.name)}</b></td><td>${new Date(r.finished_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</td><td>${r.total}</td><td>${r.away_count ? `<span class="pill bad">${r.away_count}× · ${dur(r.away_ms)}</span>` : '<span class="pill good">0×</span>'}</td><td>${scoreTag(r.score)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
+        ${done.map((r) => `<tr><td><b>${esc(r.name)}</b>${r.ended_by === 'teacher' ? ' <span class="pill warn">diakhiri guru</span>' : r.ended_by === 'self' ? ' <span class="pill mute">diakhiri murid</span>' : ''}</td><td>${new Date(r.finished_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</td><td>${r.total}</td><td>${r.away_count ? `<span class="pill bad">${r.away_count}× · ${dur(r.away_ms)}</span>` : '<span class="pill good">0×</span>'}</td><td>${scoreTag(r.score)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
   };
+  LIVE_DRAW = draw;
   stopLive(); await draw(); if (S.view === 'teach' && S.ttab === 'live') liveT = setInterval(draw, 5000);
 }
+let LIVE_DRAW = null;
 
 /* ---- Murid ---- */
 function tStudents() {
@@ -746,7 +987,8 @@ function tSettings() {
       <div class="row">${MODES.map((m) => `<button class="chip" data-cfgmode="${m}" aria-pressed="${DRAFT.modes.includes(m)}">${MODE_LABEL[m]}</button>`).join('')}</div>
       <label class="field" for="defmode">Tampilan awal<select id="defmode">${DRAFT.modes.map((m) => `<option value="${m}" ${DRAFT.default_mode === m ? 'selected' : ''}>${MODE_LABEL[m]}</option>`).join('')}</select></label>
       <button class="switch" role="switch" aria-checked="${DRAFT.student_can_choose}" data-cfgtog="student_can_choose"><span class="track"></span>Murid boleh mengganti tampilan</button>
-      <button class="switch" role="switch" aria-checked="${DRAFT.quiz_enabled}" data-cfgtog="quiz_enabled"><span class="track"></span>Aktifkan mode tebak</button></div>
+      <button class="switch" role="switch" aria-checked="${DRAFT.quiz_enabled}" data-cfgtog="quiz_enabled"><span class="track"></span>Aktifkan mode tebak</button>
+      <button class="switch" role="switch" aria-checked="${DRAFT.mw_quiz}" data-cfgtog="mw_quiz"><span class="track"></span>Aktifkan kuis kata satuan (量词)</button></div>
     <div class="panel stack"><h2 class="h3">Kategori untuk murid</h2><p class="note">Matikan kategori yang belum diajarkan.</p>
       <div class="row">${shared.map((d) => `<button class="chip" data-cfgdeck="${esc(d.id)}" aria-pressed="${!DRAFT.hidden_decks.includes(d.id)}"><span class="han">${esc(d.zh)}</span> ${esc(d.idn)}</button>`).join('')}</div></div>
   </div>
@@ -764,14 +1006,35 @@ function tSettings() {
 }
 
 /* ================= event klik ================= */
-let leaveArmed = 0;
-function confirmLeave() { if (Date.now() - leaveArmed < 3000) return true; leaveArmed = Date.now(); toast('Sesi belum selesai. Ketuk sekali lagi untuk keluar.'); return false; }
+// Keluar dari layar belajar: sesi disimpan supaya bisa dilanjutkan
+function leaveStudy() {
+  if (S.view === 'study' && Q && Q.sid) { saveRun(); RESUME_OK = true; if (PRES.state !== 'away') { PRES.state = 'away'; api.presence(Q.sid, 'away'); } toast('Sesi disimpan. Tekan Lanjutkan kapan saja.'); }
+  stopBeat();
+}
+let endArmed = 0;
 document.addEventListener('click', async (e) => {
   if (!e.target.closest('#emojiPop') && !e.target.closest('[data-emo]')) closeEmoji();
-  const b = e.target.closest('[data-nav],[data-pick],[data-act],[data-mode],[data-rate],[data-t],[data-ttab],[data-sact],[data-stu],[data-cfgmode],[data-cfgtog],[data-cfgdeck],[data-edeck],[data-etab],[data-ncolor],[data-rcolor],[data-emo],[data-pick-emo],[data-rm],[data-approve]');
+  const b = e.target.closest('[data-lkind],[data-part],[data-pickstu],[data-mkind],[data-warn],[data-chatto],[data-endrun],[data-endall],[data-nav],[data-pick],[data-act],[data-mode],[data-rate],[data-t],[data-ttab],[data-sact],[data-stu],[data-cfgmode],[data-cfgtog],[data-cfgdeck],[data-edeck],[data-etab],[data-ncolor],[data-rcolor],[data-emo],[data-pick-emo],[data-rm],[data-approve]');
   if (!b) { const fc = e.target.closest('#fc'); if (fc && Q && Q.cur && Q.cur.answered) flip(); return; }
   const ds = b.dataset;
-  if (ds.nav) { if (S.view === 'study' && Q && Q.done < Q.total && !confirmLeave()) return; stopBeat(); go(ds.nav); return; }
+  if (ds.nav) { leaveStudy(); go(ds.nav); return; }
+  if (ds.lkind) { S.kind = ds.lkind; S.split.part = 0; savePrefs(); renderLearn(); return; }
+  if (ds.part !== undefined) { S.split.part = +ds.part; savePrefs(); document.querySelectorAll('[data-part]').forEach((x) => x.setAttribute('aria-pressed', x.dataset.part === ds.part)); renderActionbar(); return; }
+  if (ds.pickstu) { const id = ds.pickstu; PICK.ids = PICK.ids.includes(id) ? PICK.ids.filter((x) => x !== id) : [...PICK.ids, id]; b.setAttribute('aria-pressed', PICK.ids.includes(id)); return; }
+  if (ds.mkind) { document.querySelectorAll('[data-mkind]').forEach((x) => x.setAttribute('aria-pressed', x === b)); return; }
+  if (ds.warn || ds.chatto) {
+    const id = ds.warn || ds.chatto; PICK.mode = 'pick'; PICK.ids = [id];
+    const sel = $('#mMode'); if (sel) { sel.value = 'pick'; $('#mPicks').hidden = false; document.querySelectorAll('[data-pickstu]').forEach((x) => x.setAttribute('aria-pressed', x.dataset.pickstu === id)); }
+    if (ds.warn) { try { await api.message(WARN_PRESET, 'warn', { users: [id] }); toast('Peringatan muncul di layar murid.'); } catch (err) { toast(err.message); } return; }
+    document.querySelector('[data-mkind="chat"]').click(); const t = $('#msgText'); t.scrollIntoView({ behavior: 'smooth', block: 'center' }); t.focus(); return;
+  }
+  if (ds.endrun || ds.endall) {
+    const key = ds.endall ? 'all' : ds.endrun;
+    if (LIVE_ARM !== key) { LIVE_ARM = key; b.dataset.armed = '1'; b.innerHTML = `${ic('stop')} ${ds.endall ? 'Ketuk lagi: akhiri semua' : 'Ketuk lagi'}`; setTimeout(() => { if (LIVE_ARM === key) LIVE_ARM = null; }, 4000); return; }
+    LIVE_ARM = null;
+    try { const r = await api.endRun(ds.endall ? { all: true } : { sid: ds.endrun }); toast(`${r.ended} sesi diakhiri. Murid langsung melihat pemberitahuan.`); if (LIVE_DRAW) LIVE_DRAW(); } catch (err) { toast(err.message); }
+    return;
+  }
   if (ds.pick) { const id = ds.pick; S.sel = S.sel.includes(id) ? S.sel.filter((x) => x !== id) : [...S.sel, id]; savePrefs(); b.setAttribute('aria-pressed', S.sel.includes(id)); renderActionbar(); return; }
   if (ds.mode) { S.mode = ds.mode; savePrefs(); if (Q && Q.queue.length) renderStudy(); return; }
   if (ds.t !== undefined && b.classList.contains('qo')) { answerQuiz(b); return; }
@@ -809,11 +1072,27 @@ document.addEventListener('click', async (e) => {
     return;
   }
   const a = ds.act;
-  if (a === 'logout') { stopBeat(); stopLive(); await api.logout(); ME = null; Q = null; renderLogin(); }
+  if (a === 'logout') { stopBeat(); stopLive(); clearInterval(inboxT); await api.logout(); ME = null; Q = null; renderLogin(); }
   else if (a === 'selall') { const d2 = studyDecks(); S.sel = S.sel.length === d2.length ? [] : d2.map((d) => d.id); savePrefs(); renderLearn(); }
   else if (a === 'togall') { S.all = !S.all; savePrefs(); renderActionbar(); }
   else if (a === 'start' || a === 'again') startStudy();
-  else if (a === 'quit') { if (S.view === 'study' && Q && Q.done < Q.total && !confirmLeave()) return; stopBeat(); S.view = 'learn'; savePrefs(); shell(); renderLearn(); }
+  else if (a === 'quit') { if (S.view === 'study') leaveStudy(); else stopBeat(); S.view = 'learn'; savePrefs(); shell(); renderLearn(); }
+  else if (a === 'endrun') {
+    if (!Q || S.view !== 'study') return;
+    if (Date.now() - endArmed > 3000) { endArmed = Date.now(); b.innerHTML = `${ic('stop')} <span>Ketuk lagi</span>`; toast('Ketuk "Akhiri" sekali lagi untuk mengakhiri sesi. Skor dihitung dari kartu yang sudah dinilai.'); return; }
+    endArmed = 0; renderDone(true);
+  }
+  else if (a === 'resume') resumeRun();
+  else if (a === 'endsaved') { await endSaved(); toast('Sesi lama diakhiri.'); }
+  else if (a === 'nextpart') { S.split.part = Q.part.idx + 1; savePrefs(); S.view = 'learn'; shell(); renderLearn(); startStudy(); }
+  else if (a === 'split') { S.split.on = !S.split.on; S.split.part = 0; savePrefs(); renderLearn(); }
+  else if (a === 'preset') { $('#msgText').value = WARN_PRESET; document.querySelector('[data-mkind="warn"]').click(); }
+  else if (a === 'newshared') { ED.shared = !ED.shared; b.setAttribute('aria-checked', ED.shared); }
+  else if (a === 'deliver') {
+    ED.deliverOpen = !ED.deliverOpen; const f = $('#deliverForm'); f.hidden = !ED.deliverOpen;
+    if (ED.deliverOpen && !ED.stuLoaded) { try { STUDENTS = await api.students(); } catch (err) { toast(err.message); } ED.stuLoaded = true; const box = $('#deliverTo'); if (box) { box.innerHTML = toHTML('d'); bindTo('d'); } }
+  }
+  else if (a === 'sharedeck') { const d = deckOf(ED.deck); if (!d) return; const on = d.status === 'private'; try { await api.updateDeck({ id: d.id, shared: on }); await reloadContent(); toast(on ? 'Kategori tampil untuk semua murid.' : 'Kategori sekarang hanya untuk murid yang dikirimi.'); renderCards(); } catch (err) { toast(err.message); } }
   else if (a === 'flip') flip();
   else if (a === 'quiz') { S.quiz = !S.quiz; savePrefs(); renderStudy(); }
   else if (a === 'auto') { S.auto = !S.auto; savePrefs(); b.setAttribute('aria-pressed', S.auto); }
