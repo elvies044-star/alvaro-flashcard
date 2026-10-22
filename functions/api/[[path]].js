@@ -131,8 +131,9 @@ const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS deliveries_user ON deliveries(user_id)`,
   `CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, kind TEXT NOT NULL, text TEXT NOT NULL, created_at INTEGER NOT NULL, seen_at INTEGER)`,
   `CREATE INDEX IF NOT EXISTS messages_user ON messages(user_id, seen_at)`,
+  `ALTER TABLE deliveries ADD COLUMN sender_id TEXT`,
 ];
-const SCHEMA_VERSION = '4';
+const SCHEMA_VERSION = '5';
 const RUSH_RATE_MS = 1200, RUSH_QUIZ_MS = 700;
 const DEFAULT_SETTINGS = { modes: ['pic', 'han', 'arti', 'mix'], default_mode: 'pic', student_can_choose: true, quiz_enabled: true, hidden_decks: [] };
 let ready = null;
@@ -191,8 +192,10 @@ function deckVisible(u, d, settings, delivered) {
   return d.status === 'public' && !settings.hidden_decks.includes(d.id);
 }
 async function deliveredMap(db, u) {
-  const rows = (await db.prepare('SELECT deck_id, created_at FROM deliveries WHERE user_id = ?1').bind(u.id).all()).results;
-  return new Map(rows.map((r) => [r.deck_id, r.created_at]));
+  const rows = (await db.prepare(`SELECT l.deck_id, l.created_at, s.display_name AS from_name, s.role AS from_role FROM deliveries l LEFT JOIN users s ON s.id = l.sender_id WHERE l.user_id = ?1`).bind(u.id).all()).results;
+  const m = new Map(rows.map((r) => [r.deck_id, r.created_at]));
+  m.from = new Map(rows.map((r) => [r.deck_id, r.from_role === 'student' ? r.from_name || 'Teman' : null]));
+  return m;
 }
 // Penerima: semua murid, satu kelas, atau daftar murid tertentu
 async function targets(db, to) {
@@ -394,7 +397,7 @@ export async function onRequest(ctx) {
       const ok = new Set(decks.map((d) => d.id));
       const cards = (await db.prepare('SELECT id, deck_id, h, p, m, en, mw, alt, opp, s, sp, si, pic, builtin, sort FROM cards ORDER BY deck_id, sort, created_at').all()).results
         .filter((c) => ok.has(c.deck_id)).map((c) => ({ ...c, en: c.en || enOf(c.h), alt: (() => { try { return JSON.parse(c.alt); } catch (_) { return []; } })(), builtin: !!c.builtin }));
-      return json({ settings, decks: decks.map((d) => ({ ...d, builtin: !!d.builtin, mine: d.owner_id === user.id, editable: canEditDeck(user, d), owner_name: d.owner_id ? d.owner_name || 'Murid' : null, delivered_at: dmap.get(d.id) || null })), cards, me: pubUser(user) });
+      return json({ settings, decks: decks.map((d) => ({ ...d, builtin: !!d.builtin, mine: d.owner_id === user.id, editable: canEditDeck(user, d), owner_name: d.owner_id ? d.owner_name || 'Murid' : null, delivered_at: dmap.get(d.id) || null, delivered_from: dmap.from.get(d.id) || null })), cards, me: pubUser(user) });
     }
     if (path === '/srs' && method === 'GET') {
       const rows = (await db.prepare('SELECT card_id, due, last FROM srs WHERE user_id = ?1').bind(user.id).all()).results;
@@ -427,10 +430,15 @@ export async function onRequest(ctx) {
       const r = await db.prepare('SELECT finished_at, started_at, ended_by FROM runs WHERE id = ?1 AND user_id = ?2').bind(sid, user.id).first();
       return json({ open: !!r && !r.finished_at && r.started_at > now() - 6 * 3600e3, ended_by: r ? r.ended_by : null });
     }
+    if (path === '/classmates' && method === 'GET') {
+      const rows = (await db.prepare("SELECT id, display_name, class_name FROM users WHERE role = 'student' AND active = 1 AND id <> ?1 ORDER BY class_name, display_name LIMIT 500").bind(user.id).all()).results;
+      return json(rows);
+    }
     if (path === '/inbox' && method === 'GET') {
       const msgs = (await db.prepare('SELECT id, kind, text, created_at FROM messages WHERE user_id = ?1 AND seen_at IS NULL ORDER BY created_at LIMIT 20').bind(user.id).all()).results;
-      const dels = (await db.prepare(`SELECT l.id, l.deck_id, l.created_at, d.zh, d.idn, d.color, (SELECT COUNT(*) FROM cards c WHERE c.deck_id = d.id) AS n
-        FROM deliveries l JOIN decks d ON d.id = l.deck_id WHERE l.user_id = ?1 AND l.seen_at IS NULL ORDER BY l.created_at LIMIT 20`).bind(user.id).all()).results;
+      const dels = (await db.prepare(`SELECT l.id, l.deck_id, l.created_at, d.zh, d.idn, d.color, (SELECT COUNT(*) FROM cards c WHERE c.deck_id = d.id) AS n,
+          CASE WHEN s.role = 'student' THEN s.display_name ELSE NULL END AS from_name
+        FROM deliveries l JOIN decks d ON d.id = l.deck_id LEFT JOIN users s ON s.id = l.sender_id WHERE l.user_id = ?1 AND l.seen_at IS NULL ORDER BY l.created_at LIMIT 20`).bind(user.id).all()).results;
       return json({ messages: msgs, deliveries: dels });
     }
     if (path === '/inbox/seen' && method === 'POST') {
@@ -748,14 +756,21 @@ export async function onRequest(ctx) {
       for (const r of rows.slice(0, 300)) await finishRun(db, r, 'teacher');
       return json({ ended: Math.min(rows.length, 300) });
     }
-    if (path === '/t/deliver' && method === 'POST') {
-      needTeacher();
+    if ((path === '/t/deliver' || path === '/deliver') && method === 'POST') {
+      if (path === '/t/deliver') needTeacher();
       const b = await body();
-      const d = await db.prepare('SELECT id FROM decks WHERE id = ?1').bind(String(b.deck_id || '')).first();
+      const d = await db.prepare('SELECT * FROM decks WHERE id = ?1').bind(String(b.deck_id || '')).first();
       if (!d) fail(404, 'Kategori tidak ditemukan.');
+      // murid hanya boleh mengirim kategori buatannya sendiri, ke teman tertentu
+      if (!teacher && d.owner_id !== user.id) fail(404, 'Kategori tidak ditemukan.');
+      if (!teacher && (!b.to || !Array.isArray(b.to.users))) fail(400, 'Pilih teman yang mau dikirimi.');
+      if (!teacher && b.to.users.length > 30) fail(400, 'Maksimal 30 teman sekali kirim.');
+      if (!teacher && !(await usageOk(db, 'dlv:' + user.id, 60, 3600e3))) fail(429, 'Terlalu sering mengirim. Coba lagi nanti.');
       if ((await db.prepare('SELECT COUNT(*) AS n FROM cards WHERE deck_id = ?1').bind(d.id).first('n')) < 1) fail(400, 'Kategori ini masih kosong.');
-      const ids = await targets(db, b.to); const t = now();
-      const st = ids.map((uid) => db.prepare('INSERT INTO deliveries (id, deck_id, user_id, created_at, seen_at) VALUES (?1,?2,?3,?4,NULL) ON CONFLICT(deck_id, user_id) DO UPDATE SET created_at = excluded.created_at, seen_at = NULL').bind(randHex(16), d.id, uid, t));
+      const ids = (await targets(db, b.to)).filter((uid) => uid !== user.id);
+      if (!ids.length) fail(400, 'Tidak ada penerima.');
+      const t = now();
+      const st = ids.map((uid) => db.prepare('INSERT INTO deliveries (id, deck_id, user_id, created_at, seen_at, sender_id) VALUES (?1,?2,?3,?4,NULL,?5) ON CONFLICT(deck_id, user_id) DO UPDATE SET created_at = excluded.created_at, seen_at = NULL, sender_id = excluded.sender_id').bind(randHex(16), d.id, uid, t, user.id));
       for (let i = 0; i < st.length; i += 50) await db.batch(st.slice(i, i + 50));
       return json({ sent: ids.length });
     }

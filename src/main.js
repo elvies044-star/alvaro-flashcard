@@ -5,7 +5,7 @@ import { api } from './api/http.js';
 import { hbars, lineChart } from './charts.js';
 
 const APP = 'Alvaro Mandarin Flashcard Tamer';
-const APP_VERSION = '2026.10.22-custom';
+const APP_VERSION = '2026.10.22-kirim';
 const BUILD = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev';
 
 /* ================= helpers ================= */
@@ -223,7 +223,8 @@ function deckCard(d) {
   const pics = d.cards.filter(hasPic).slice(0, 3).map(picHTML).join('') || `<span class="hz">${esc(d.cards[0]?.h || '')}</span>`;
   const tags = [];
   if (isPriv(d)) tags.push(`<span class="pill priv">${ic('key')} Pribadi</span>`);
-  if (d.delivered_at && !isTeacher()) tags.push(isNewGift(d) ? '<span class="pill new">Baru dari guru</span>' : '<span class="pill mute">Dari guru</span>');
+  const fromWho = d.delivered_from ? esc(d.delivered_from) : 'guru';
+  if (d.delivered_at && !isTeacher()) tags.push(isNewGift(d) ? `<span class="pill new">Baru dari ${fromWho}</span>` : `<span class="pill mute">Dari ${fromWho}</span>`);
   else if (d.owner_id) tags.push(`<span class="pill mute">Buatan ${d.mine ? 'kamu' : esc(d.owner_name || 'murid')}</span>`);
   if (isTeacher() && !d.owner_id && d.status === 'private') tags.push('<span class="pill priv">Hanya untuk penerima kiriman</span>');
   return `<button class="deck ${isPriv(d) ? 'mine' : ''}" data-pick="${esc(d.id)}" aria-pressed="${on}" style="--dc:${d.color}"><span class="chk">${ic('check')}</span>
@@ -255,6 +256,7 @@ function renderLearn() {
     <div class="learnbar">
       ${mwOn() ? `<div class="seg" role="group" aria-label="Jenis latihan"><button data-lkind="card" aria-pressed="${kindNow() === 'card'}">Flashcard</button><button data-lkind="mw" aria-pressed="${kindNow() === 'mw'}">Kuis 量词</button></div>` : ''}
       <button class="chip" data-act="split" aria-pressed="${S.split.on}">${ic('split')} Atur sesi</button>
+      <button class="chip" data-act="sendsheet">${ic('send')} Kirim kartu</button>
 
     </div>
     ${S.split.on ? `<div class="splitbox">
@@ -430,12 +432,25 @@ function renderStudy() {
       <div class="face bface"><div class="tag"><span class="dotc" style="--dc:${d.color}"></span>${esc(d.zh)}</div><button class="say" data-act="say" aria-label="Dengarkan pengucapan">${ic('sound')}</button>${backHTML(c)}</div>
     </div></div></div>
     <div id="ctrl">${canQuiz ? `<div class="quiz" aria-busy="true">${'<button class="qo skeleton" disabled>…</button>'.repeat(4)}</div>` : `<button class="btn lg flipbtn" data-act="flip">${ic('flip')} Balik kartu</button>`}</div>
-    <div class="keys">Spasi: balik · 1–4: jawab atau nilai · S: dengarkan · H: clue</div>
+    <div class="skiprow"><button class="btn ghost sm" data-act="skip" title="Lewati kartu ini (muncul lagi di akhir sesi)">Lewati kartu ${ic('play')}</button></div>
+    <div class="keys">Spasi: balik · 1–4: jawab atau nilai · S: dengarkan · H: clue · N: lewati</div>
   </div>`;
   bindTilt();
   if (m === 'han' && S.auto) speak(c.h);
   if (canQuiz) loadQuiz(c, m);
 }
+/* ---- lewati kartu: pindah ke akhir antrean, tidak dinilai ---- */
+function skipCard() {
+  const cur = Q && Q.cur; if (!cur || cur.rated || cur.busy) return;
+  cur.rated = true;
+  const c = Q.queue.shift();
+  if (Q.queue.length) { Q.queue.push(c); toast('Kartu dilewati. Nanti muncul lagi di akhir.'); }
+  else { Q.total = Math.max(Q.done, Q.total - 1); toast('Kartu terakhir dilewati.'); }
+  Q.skipped = (Q.skipped || 0) + 1; saveRun();
+  const tilt = $('#tilt'); if (tilt) { tilt.style.transition = 'transform .25s, opacity .25s'; tilt.style.transform = 'translateX(-40px) rotate(-4deg)'; tilt.style.opacity = '0'; }
+  setTimeout(renderStudy, 220);
+}
+
 /* ---- clue: huruf depan jawaban; jatah 2, tambah 1 tiap 3 benar berturut-turut ---- */
 const CLUE_START = 2, CLUE_STREAK = 3, CLUE_MAX = 5;
 const plain = (p) => String(p || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ü/g, 'v');
@@ -640,8 +655,8 @@ async function pollInbox() {
       const ids = r.deliveries.map((d) => d.deck_id);
       SFX.r4(); burst(30);
       const studying = S.view === 'study';
-      showOverlay({ cls: 'gift', icon: 'gift', title: r.deliveries.length > 1 ? `${r.deliveries.length} kategori baru dari guru!` : 'Kartu baru dari guru!',
-        body: `<div>${r.deliveries.map((d) => `<div class="deckchip" style="border-left:5px solid ${/^#[0-9a-f]{6}$/i.test(d.color) ? d.color : '#1f3fbf'}"><span class="han">${esc(d.zh)}</span><span>${esc(d.idn)} · ${d.n} kartu</span></div>`).join('')}</div>
+      showOverlay({ cls: 'gift', icon: 'gift', title: r.deliveries.length > 1 ? `${r.deliveries.length} kategori baru untukmu!` : `Kartu baru dari ${r.deliveries[0].from_name || 'guru'}!`,
+        body: `<div>${r.deliveries.map((d) => `<div class="deckchip" style="border-left:5px solid ${/^#[0-9a-f]{6}$/i.test(d.color) ? d.color : '#1f3fbf'}"><span class="han">${esc(d.zh)}</span><span>${esc(d.idn)} · ${d.n} kartu${d.from_name ? ' · dari ' + esc(d.from_name) : ''}</span></div>`).join('')}</div>
           <p class="note" style="margin-bottom:18px">Sudah ada di daftar kategorimu, paling atas dengan tanda <b>Pribadi</b>.</p>`,
         buttons: studying ? [['ok', 'Oke, nanti']] : [['later', 'Nanti'], ['go', 'Belajar sekarang']],
         onClose: (k) => { if (k === 'go' && S.view !== 'study') { S.sel = ids.filter((id) => deckOf(id)); S.kind = 'card'; S.split.on = false; S.all = true; savePrefs(); S.view = 'learn'; shell(); renderLearn(); startStudy(); } } });
@@ -674,6 +689,41 @@ function myProgress() {
     ${pbar(tot, tot.total)}${legend()}
     <div class="prows">${started.map((r) => `<div class="prow" style="--dc:${r.d.color}"><div class="pname"><span class="dotc"></span><span class="han">${esc(r.d.zh)}</span><span class="note">${esc(r.d.idn)}</span></div>${pbar(r.c, r.total)}<b>${pct(r.c, r.total)}%</b></div>`).join('') || '<p class="note">Belum ada kategori yang dimulai.</p>'}
     ${fresh.length ? `<p class="note" style="margin-top:6px">Belum dimulai: <span class="han">${fresh.map((r) => esc(r.d.zh)).join('、')}</span></p>` : ''}</div></div>`;
+}
+
+/* ================= kirim kartu ke orang lain ================= */
+let MATES = null;
+async function openSendSheet(deckId) {
+  const mine = isTeacher() ? DECKS.filter((d) => d.cards.length) : DECKS.filter((d) => d.mine && d.cards.length);
+  if (!mine.length) { toast(isTeacher() ? 'Belum ada kategori yang berisi kartu.' : 'Buat kategori sendiri dulu lewat tombol Custom, lalu kirim ke temanmu.'); return; }
+  try { if (isTeacher()) { if (!STUDENTS.length) STUDENTS = await api.students(); } else if (!MATES) MATES = await api.classmates(); } catch (e) { toast(e.message); return; }
+  const sel = deckId && mine.some((d) => d.id === deckId) ? deckId : (S.sel.find((id) => mine.some((d) => d.id === id)) || mine[0].id);
+  const people = isTeacher() ? STUDENTS.filter((x) => x.active) : MATES;
+  PICK.mode = isTeacher() ? PICK.mode : 'pick'; PICK.ids = [];
+  const el = document.createElement('div'); el.className = 'overlay sheet'; el.id = 'sendSheet'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true');
+  el.innerHTML = `<form class="box" novalidate style="text-align:left">
+    <div class="row" style="justify-content:space-between;margin-bottom:12px"><h2 style="margin:0">${ic('send')} Kirim kartu</h2><button type="button" class="icon-btn" data-close="1" aria-label="Tutup">${ic('x')}</button></div>
+    <label class="field" for="ssDeck">Kategori yang dikirim<select id="ssDeck">${mine.map((d) => `<option value="${esc(d.id)}" ${d.id === sel ? 'selected' : ''}>${esc(d.zh)} · ${esc(d.idn)} (${d.cards.length} kartu)</option>`).join('')}</select></label>
+    ${isTeacher() ? `<div style="margin-top:12px">${toHTML('s')}</div>` : `<div class="field" style="margin-top:12px">Kirim ke teman<input id="ssFind" placeholder="Cari nama…" autocomplete="off"></div>
+      <div class="stu-picks" id="sPicks" style="margin-top:8px">${people.map((x) => `<button type="button" class="chip" data-pickstu="${esc(x.id)}" data-nm="${esc((x.display_name + ' ' + (x.class_name || '')).toLowerCase())}" aria-pressed="false">${esc(x.display_name)}${x.class_name ? ` <span class="note">${esc(x.class_name)}</span>` : ''}</button>`).join('') || '<span class="note">Belum ada teman lain.</span>'}</div>`}
+    <p class="note" id="ssNote" style="margin:12px 0">${isTeacher() ? 'Kartu langsung muncul memenuhi layar murid dan masuk ke daftar Pribadi mereka.' : 'Temanmu langsung mendapat pemberitahuan dan kategori ini masuk ke daftar Pribadi mereka. Mereka hanya bisa memakai, tidak bisa mengubah.'}</p>
+    <div class="row" style="justify-content:flex-end"><button type="button" class="btn secondary" data-close="1">Batal</button><button class="btn" type="submit">${ic('send')} Kirim</button></div>
+  </form>`;
+  document.body.appendChild(el);
+  if (isTeacher()) bindTo('s');
+  const find = el.querySelector('#ssFind');
+  if (find) find.addEventListener('input', () => { const q = find.value.trim().toLowerCase(); el.querySelectorAll('[data-nm]').forEach((b) => { b.hidden = q && !b.dataset.nm.includes(q); }); });
+  el.addEventListener('click', (e) => { if (e.target === el || e.target.closest('[data-close]')) el.remove(); });
+  el.querySelector('form').addEventListener('submit', async (e) => {
+    e.preventDefault(); const n = el.querySelector('#ssNote'), btn = el.querySelector('button[type=submit]');
+    let to; try { to = readTo(); } catch (err) { n.textContent = err.message; n.style.color = 'var(--bad)'; return; }
+    btn.disabled = true;
+    try {
+      const deck = el.querySelector('#ssDeck').value;
+      const r = isTeacher() ? await api.deliver(deck, to) : await api.deliverMine(deck, to);
+      el.remove(); burst(24); toast(`Terkirim ke ${r.sent} ${isTeacher() ? 'murid' : 'teman'}.`);
+    } catch (err) { n.textContent = err.message; n.style.color = 'var(--bad)'; btn.disabled = false; }
+  });
 }
 
 /* ================= Riwayat ================= */
@@ -739,6 +789,7 @@ function deckPane(d) {
     <div class="row">
       ${d.owner_id && !isTeacher() ? `<div class="seg vis" role="group" aria-label="Siapa yang bisa melihat"><button data-act="setpriv" aria-pressed="${d.status === 'private'}">${ic('key')} Privat</button><button data-act="submitdeck" aria-pressed="${d.status !== 'private'}">${ic('users')} Publik</button></div>
         <span class="note">${d.status === 'private' ? 'Hanya kamu dan guru.' : d.status === 'pending' ? 'Menunggu persetujuan guru.' : 'Tampil untuk semua teman. Perubahan perlu disetujui lagi.'}</span>` : ''}
+      ${d.owner_id && !isTeacher() && d.mine ? `<button class="btn sm" data-act="senddeck" ${d.cards.length ? '' : 'disabled'}>${ic('send')} Kirim ke teman</button>` : ''}
       ${d.owner_id && isTeacher() ? `<span class="note">Buatan ${esc(d.owner_name || 'murid')} · ${d.status === 'private' ? 'privat' : d.status === 'pending' ? 'minta publik' : 'publik'}</span>` : ''}
       ${isTeacher() ? `<button class="btn sm" data-act="deliver" ${d.cards.length ? '' : 'disabled'}>${ic('gift')} Kirim ke murid</button>` : ''}
       ${isTeacher() && !d.owner_id ? `<button class="switch" role="switch" aria-checked="${d.status !== 'private'}" data-act="sharedeck"><span class="track"></span>Tampil untuk semua</button>` : ''}
@@ -1251,6 +1302,9 @@ document.addEventListener('click', async (e) => {
   else if (a === 'clue') useClue();
   else if (a === 'install' && installEvt) { installEvt.prompt(); try { await installEvt.userChoice; } catch (_) { /* batal */ } installEvt = null; renderLearn(); }
   else if (a === 'noinstall') { store.set('noinstall', true); renderLearn(); }
+  else if (a === 'sendsheet') openSendSheet();
+  else if (a === 'senddeck') openSendSheet(ED.deck);
+  else if (a === 'skip') skipCard();
   else if (a === 'closebar') { BAR_OPEN = false; renderActionbar(); }
   else if (a === 'custom') { if (!canCreate()) { toast('Gurumu belum mengizinkan membuat kartu sendiri.'); return; } ED.deck = null; ED.newOpen = true; ED.wantPublic = false; go('cards'); setTimeout(() => { const z = $('#ndz'); if (z) z.focus(); }, 50); }
   else if (a === 'lang') { S.lang = { id: 'en', en: 'both', both: 'id' }[S.lang] || 'id'; savePrefs(); b.textContent = LANG_LABEL[S.lang]; if (Q && Q.cur) { const cur = Q.cur; const f = document.querySelector('.face.front'), bk = document.querySelector('.face.bface'); if (bk) { bk.querySelectorAll('.m').forEach((x) => { x.textContent = mean(cur.c); }); } if (f && cur.m === 'arti') { const bi = f.querySelector('.bigid'); if (bi) bi.textContent = mean(cur.c); } } toast('Arti: ' + { id: 'bahasa Indonesia', en: 'English', both: 'Indonesia + English' }[S.lang]); }
@@ -1290,6 +1344,7 @@ document.addEventListener('keydown', (e) => {
   else if (/^[1-4]$/.test(e.key)) { if (Q.cur.flipped) rate(+e.key); else if (!Q.cur.answered) { const o = document.querySelectorAll('.qo:not([disabled])')[+e.key - 1]; if (o) answerQuiz(o); } }
   else if (e.key.toLowerCase() === 's') speak(sayText(Q.cur.c));
   else if (e.key.toLowerCase() === 'h') useClue();
+  else if (e.key.toLowerCase() === 'n' || e.key === 'ArrowRight') skipCard();
 });
 
 /* ---- efek sentuh di HP (sama seperti hover di PC) ---- */

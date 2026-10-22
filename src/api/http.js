@@ -83,6 +83,8 @@ export const api = {
   approve: (id, approve) => call('POST', '/t/approve', { id, approve }),
   live: () => call('GET', '/t/live'),
   endRun: (p) => call('POST', '/t/end-run', p),
+  deliverMine: (deck_id, to) => call('POST', '/deliver', { deck_id, to }),
+  classmates: () => call('GET', '/classmates'),
   deliver: (deck_id, to) => call('POST', '/t/deliver', { deck_id, to }),
   message: (text, kind, to) => call('POST', '/t/message', { text, kind, to }),
 };

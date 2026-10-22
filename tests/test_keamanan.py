@@ -163,6 +163,23 @@ check('Murid menarik kembali jadi privat', S3.req('POST', '/api/deck/submit', {'
 check('Murid lain tak bisa mengubah privat/publik kategori orang', S4.req('POST', '/api/deck/submit', {'id': _pd, 'public': False})[0] in (403, 404))
 T.req('POST', '/api/t/settings', {**cfg, 'all_can_create': False})
 check('Izin global dimatikan: tak bisa lagi', S3.req('POST', '/api/deck', {'zh': '测试二'})[0] == 403)
+# ---- murid kirim kartu ke teman ----
+T.req('POST', '/api/t/settings', {'all_can_create': True})
+sd = S3.req('POST', '/api/deck', {'zh': '分享'})[1]['id']
+S3.req('POST', '/api/cards/bulk', {'deck_id': sd, 'cards': [{'h': '书', 'm': 'buku'}]})
+rina = [u for u in S3.req('GET', '/api/classmates')[1] if u['display_name'] == 'Rina']
+check('Murid melihat daftar teman (tanpa username/password)', len(rina) == 1 and set(rina[0]) == {'id', 'display_name', 'class_name'}, rina)
+check('Murid tak bisa kirim ke semua murid', S3.req('POST', '/api/deliver', {'deck_id': sd, 'to': {'all': True}})[0] == 400)
+check('Murid tak bisa kirim kategori milik orang lain/guru', S3.req('POST', '/api/deliver', {'deck_id': 'buah', 'to': {'users': [rina[0]['id']]}})[0] == 404)
+check('Murid tak bisa pakai jalur kirim guru', S3.req('POST', '/api/t/deliver', {'deck_id': sd, 'to': {'users': [rina[0]['id']]}})[0] == 403)
+st, r, _ = S3.req('POST', '/api/deliver', {'deck_id': sd, 'to': {'users': [rina[0]['id']]}})
+check('Murid mengirim kategorinya ke teman', st == 200 and r['sent'] == 1, r)
+rc = [d for d in S4.req('GET', '/api/content')[1]['decks'] if d['id'] == sd]
+check('Teman menerima, tertulis dari siapa, dan tidak bisa mengubah', rc and rc[0]['delivered_from'] == 'Dewi' and rc[0]['editable'] is False, rc)
+check('Kiriman teman muncul di kotak masuk', any(x['deck_id'] == sd and x['from_name'] == 'Dewi' for x in S4.req('GET', '/api/inbox')[1]['deliveries']))
+check('Teman tak bisa mengubah kartu kiriman', S4.req('POST', '/api/cards/bulk', {'deck_id': sd, 'cards': [{'h': '笔', 'm': 'x'}]})[0] in (403, 404))
+_ib = S4.req('GET', '/api/inbox')[1]; S4.req('POST', '/api/inbox/seen', {'deliveries': [x['id'] for x in _ib['deliveries']]})
+T.req('POST', '/api/t/settings', {'all_can_create': False})
 # ---- kiriman kartu ----
 rid = [u['id'] for u in T.req('GET', '/api/t/students')[1] if u['username'] == 'rina'][0]
 dv = T.req('POST', '/api/deck', {'zh': '礼物', 'idn': 'Hadiah', 'shared': False})[1]['id']
