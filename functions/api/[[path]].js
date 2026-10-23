@@ -135,7 +135,7 @@ const MIGRATIONS = [
   `ALTER TABLE deliveries ADD COLUMN sender_id TEXT`,
   `ALTER TABLE users ADD COLUMN photo TEXT NOT NULL DEFAULT ''`,
 ];
-const SCHEMA_VERSION = '5';
+const SCHEMA_VERSION = '6';
 const RUSH_RATE_MS = 1200, RUSH_QUIZ_MS = 700;
 const DEFAULT_SETTINGS = { modes: ['pic', 'han', 'arti', 'mix'], default_mode: 'pic', student_can_choose: true, quiz_enabled: true, hidden_decks: [] };
 let ready = null;
