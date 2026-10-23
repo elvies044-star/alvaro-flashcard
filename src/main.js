@@ -5,7 +5,7 @@ import { api } from './api/http.js';
 import { hbars, lineChart } from './charts.js';
 
 const APP = 'Alvaro Mandarin Flashcard Tamer';
-const APP_VERSION = '2026.10.24-hsk';
+const APP_VERSION = '2026.10.24-ai';
 const BUILD = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev';
 
 /* ================= helpers ================= */
@@ -471,6 +471,7 @@ function renderStudy() {
       ${SET.quiz_enabled && !isMw ? `<button class="chip" data-act="quiz" aria-pressed="${S.quiz}">Tebak</button>` : ''}
       <button class="chip" data-act="auto" aria-pressed="${S.auto}" aria-label="Ucapan otomatis" title="Ucapan otomatis">${ic('sound')}</button>
       <button class="chip" data-act="sfx" aria-pressed="${S.sfx}" aria-label="Efek suara" title="Efek suara">${ic(S.sfx ? 'sparkle' : 'mute')}</button>
+      ${AI_ON ? `<button class="chip ailah" data-act="asklaoshi" title="Tanya Laoshi soal kartu ini">${ic('laoshi')} Laoshi</button>` : ''}
     </div>
     <div class="stage"><div class="tilt" id="tilt"><div class="fc" id="fc" tabindex="0" role="button" aria-label="Kartu. Ketuk untuk membalik">
       <div class="face front"><div class="tag"><span class="dotc" style="--dc:${d.color}"></span>${esc(d.zh)}</div>${frontHTML(c, m)}<div class="clue" id="clueBox" hidden></div><div class="hint">${canQuiz ? 'Pilih jawaban di bawah' : 'Ketuk kartu untuk membalik'}</div></div>
@@ -832,6 +833,49 @@ async function aiSend(text) {
   }
   aiBusy = false; if (btn) btn.disabled = false;
   aiRender();
+}
+/* ---- chat kecil "Tanya Laoshi" saat belajar ---- */
+let SHEET = { ctx: '', msgs: [], busy: false, first: true };
+function aiSheetRender() {
+  const box = document.getElementById('shMsgs'); if (!box) return;
+  const quick = SHEET.msgs.length ? '' : `<div class="sh-tips">${['Beri 2 contoh kalimat', 'Kapan dan bagaimana dipakai?', 'Kata yang mirip atau lawannya?', 'Jelaskan karakternya'].map((q) => `<button class="chip" data-sheetq="${esc(q)}">${esc(q)}</button>`).join('')}</div>`;
+  box.innerHTML = SHEET.msgs.map((m) => m.role === 'user'
+    ? `<div class="ai-msg me"><div class="bub">${esc(m.content).replace(/\n/g, '<br>')}</div></div>`
+    : `<div class="ai-msg ai"><div class="ava">${ic('laoshi')}</div><div class="bub">${m.pending ? '<span class="typing"><i></i><i></i><i></i></span>' : aiMd(m.content)}</div></div>`).join('') + quick;
+  box.scrollTop = box.scrollHeight;
+}
+function openAiSheet(c) {
+  SHEET = { ctx: `Pertanyaan ini tentang kata yang sedang dipelajari murid: ${c.h}${c.p ? ' (' + c.p + ')' : ''}${c.m ? ' = ' + c.m : ''}. Jawab singkat.`, msgs: [], busy: false, first: true };
+  closeAiSheet();
+  const el = document.createElement('div'); el.className = 'overlay sheet ai-sheet'; el.id = 'aiSheet'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true');
+  el.innerHTML = `<div class="box">
+    <div class="sh-head"><div class="row" style="gap:8px;align-items:center"><span class="sh-ava">${ic('laoshi')}</span><div><b>Tanya Laoshi</b><div class="note">tentang <span class="han">${esc(c.h)}</span> ${c.p ? '· ' + esc(c.p) : ''} ${c.m ? '· ' + esc(c.m) : ''}</div></div></div><button class="icon-btn" data-act="closeai" aria-label="Tutup">${ic('x')}</button></div>
+    <div id="shMsgs" class="ai-msgs sh-msgs"></div>
+    <form id="shForm" class="ai-bar"><textarea id="shInput" rows="1" maxlength="600" placeholder="Tanya soal kata ini…"></textarea><button class="btn" type="submit" aria-label="Kirim">${ic('send')}</button></form></div>`;
+  document.body.appendChild(el);
+  aiSheetRender();
+  el.addEventListener('click', (e) => { if (e.target === el) closeAiSheet(); });
+  const ta = document.getElementById('shInput');
+  ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 120) + 'px'; });
+  ta.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); aiSheetSend(ta.value); } });
+  document.getElementById('shForm').addEventListener('submit', (e) => { e.preventDefault(); aiSheetSend(ta.value); });
+}
+function closeAiSheet() { const el = document.getElementById('aiSheet'); if (el) el.remove(); }
+async function aiSheetSend(text) {
+  text = (text || '').trim(); if (!text || SHEET.busy) return;
+  SHEET.busy = true;
+  SHEET.msgs.push({ role: 'user', content: text.slice(0, 600) });
+  SHEET.msgs.push({ role: 'assistant', content: '', pending: true });
+  aiSheetRender();
+  const ta = document.getElementById('shInput'); if (ta) { ta.value = ''; ta.style.height = 'auto'; }
+  try {
+    const hist = SHEET.msgs.filter((m) => !m.pending).map((m, i) => ({ role: m.role, content: i === 0 ? SHEET.ctx + '\n' + m.content : m.content }));
+    const r = await api.aiAsk(hist);
+    SHEET.msgs = SHEET.msgs.filter((m) => !m.pending); SHEET.msgs.push({ role: 'assistant', content: r.reply || '(kosong)' });
+  } catch (e) {
+    SHEET.msgs = SHEET.msgs.filter((m) => !m.pending); SHEET.msgs.push({ role: 'assistant', content: 'Maaf, ' + (e.message || 'ada gangguan') + ' 🙏' });
+  }
+  SHEET.busy = false; aiSheetRender();
 }
 function renderAI() {
   $('#actionbar').hidden = true; document.documentElement.style.setProperty('--c', 'var(--brand)');
@@ -1341,7 +1385,7 @@ function leaveStudy() {
 let endArmed = 0, LAST_TAP = { id: null, t: 0 };
 document.addEventListener('click', async (e) => {
   if (!e.target.closest('#emojiPop') && !e.target.closest('[data-emo]')) closeEmoji();
-  const b = e.target.closest('[data-aitip],[data-dl],[data-hsk],[data-vis],[data-pstu],[data-lkind],[data-part],[data-pickstu],[data-mkind],[data-warn],[data-chatto],[data-endrun],[data-endall],[data-nav],[data-pick],[data-act],[data-mode],[data-rate],[data-t],[data-ttab],[data-sact],[data-stu],[data-cfgmode],[data-cfgtog],[data-cfgdeck],[data-edeck],[data-etab],[data-ncolor],[data-rcolor],[data-emo],[data-pick-emo],[data-rm],[data-approve]');
+  const b = e.target.closest('[data-sheetq],[data-aitip],[data-dl],[data-hsk],[data-vis],[data-pstu],[data-lkind],[data-part],[data-pickstu],[data-mkind],[data-warn],[data-chatto],[data-endrun],[data-endall],[data-nav],[data-pick],[data-act],[data-mode],[data-rate],[data-t],[data-ttab],[data-sact],[data-stu],[data-cfgmode],[data-cfgtog],[data-cfgdeck],[data-edeck],[data-etab],[data-ncolor],[data-rcolor],[data-emo],[data-pick-emo],[data-rm],[data-approve]');
   if (!b) { const fc = e.target.closest('#fc'); if (fc && Q && Q.cur && Q.cur.answered) flip(); return; }
   const ds = b.dataset;
   if (ds.nav) { leaveStudy(); go(ds.nav); return; }
@@ -1436,6 +1480,9 @@ document.addEventListener('click', async (e) => {
   else if (a === 'custom') { if (!canCreate()) { toast('Gurumu belum mengizinkan membuat kartu sendiri.'); return; } ED.deck = null; ED.newOpen = true; ED.wantPublic = false; go('cards'); setTimeout(() => { const z = $('#ndz'); if (z) z.focus(); }, 50); }
   else if (a === 'lang') { S.lang = { id: 'en', en: 'both', both: 'id' }[S.lang] || 'id'; savePrefs(); b.textContent = LANG_LABEL[S.lang]; if (Q && Q.cur) { const cur = Q.cur; const f = document.querySelector('.face.front'), bk = document.querySelector('.face.bface'); if (bk) { bk.querySelectorAll('.m').forEach((x) => { x.textContent = mean(cur.c); }); } if (f && cur.m === 'arti') { const bi = f.querySelector('.bigid'); if (bi) bi.textContent = mean(cur.c); } } toast('Arti: ' + { id: 'bahasa Indonesia', en: 'English', both: 'Indonesia + English' }[S.lang]); }
   else if (a === 'ainew') { AICHAT = []; renderAI(); }
+  else if (a === 'asklaoshi') { if (Q && Q.cur) openAiSheet(Q.cur.c); }
+  else if (a === 'closeai') closeAiSheet();
+  else if (ds.sheetq !== undefined) aiSheetSend(ds.sheetq);
   else if (a === 'mycards') { ED.newOpen = !editableDecks().length; go('cards'); }
   else if (a === 'endsaved') { await endSaved(); toast('Sesi lama diakhiri.'); }
   else if (a === 'nextpart') { S.split.part = Q.part.idx + 1; savePrefs(); S.view = 'learn'; shell(); renderLearn(); startStudy(); }
@@ -1465,7 +1512,7 @@ document.addEventListener('click', async (e) => {
   else if (a === 'savebulk') saveBulk();
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeEmoji();
+  if (e.key === 'Escape') { closeEmoji(); closeAiSheet(); }
   if (S.view !== 'study' || !Q || !Q.cur || !$('#fc')) return;
   if (e.target.matches('input,select,textarea')) return;
   if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); if (Q.cur.answered) flip(); }
