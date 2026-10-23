@@ -85,6 +85,7 @@ export const api = {
   endRun: (p) => call('POST', '/t/end-run', p),
   deliverMine: (deck_id, to) => call('POST', '/deliver', { deck_id, to }),
   classmates: () => call('GET', '/classmates'),
+  aiAsk: (messages) => call('POST', '/ai/ask', { messages }),
   deliver: (deck_id, to) => call('POST', '/t/deliver', { deck_id, to }),
   message: (text, kind, to) => call('POST', '/t/message', { text, kind, to }),
 };

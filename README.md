@@ -54,7 +54,7 @@ Buka proyek Pages → **Settings**:
    - Variable name: `AI`
    - Save
 
-   Ini gratis sampai 10.000 "neuron" per hari, kira-kira ribuan kata. Tanpa AI, terjemahan tetap jalan untuk 568 kartu bawaan dan ±250 kata dasar (setara HSK 1–2). Kata lain cukup diisi artinya manual, sedangkan pinyin selalu otomatis.
+   Ini gratis sampai 10.000 "neuron" per hari. Workers AI juga menyalakan fitur **AI Laoshi** (tanya-jawab). Tanpa AI, terjemahan tetap jalan untuk 568 kartu bawaan dan ±250 kata dasar (setara HSK 1–2). Kata lain cukup diisi artinya manual, sedangkan pinyin selalu otomatis.
 4. Buka **Deployments** → titik tiga pada deployment terakhir → **Retry deployment**. Pengaturan baru hanya berlaku setelah deploy ulang.
 
 ## 6. Buat akun guru (sekali saja)
@@ -78,6 +78,17 @@ Buka proyek Pages → **Settings**:
 - **Pengaturan**: sisi depan kartu (Gambar / 汉字 / Arti / Campur), mode tebak, kategori yang tampil, ganti password.
 
 Murid juga melihat peringatan setiap kali kembali dari aplikasi lain: *"Kamu baru saja keluar dari aplikasi… gurumu bisa melihatnya."*
+
+## AI Laoshi (tanya-jawab Mandarin)
+Kalau **Workers AI** sudah dipasang (langkah 3, gratis), muncul menu **AI Laoshi**. Murid bisa bertanya arti kata, minta contoh kalimat & cara pakai, atau menanyakan perbedaan dua kata/tata bahasa — dijawab dalam Bahasa Indonesia dengan hanzi + pinyin + contoh. Ada batas 40 pertanyaan/jam per murid dan kuota harian, supaya hemat. Bisa dimatikan di Guru → Pengaturan. Tanpa Workers AI, menunya tidak muncul.
+
+## Kosakata HSK 3.0 (bawaan)
+Sudah termasuk kosakata **新HSK教程 (New HSK Course) 1–3** dari bukunya, total ±1000 kata dengan pinyin + arti Indonesia + English:
+- 3 deck besar **HSK 3.0 级1 / 级2 / 级3** (warna mencolok, paling atas).
+- 48 deck **per pelajaran** (级1 Pelajaran 1, dst). Ketuk chip "级N · per pelajaran" untuk membukanya.
+- Tiap kata yang di luar silabus level itu ditandai **★**.
+- **Tombol unduh** (ikon panah bawah) di tiap deck mengunduh tabel kosakata (汉字 · pinyin · arti · English · 量词) yang bisa dicetak atau disimpan PDF.
+Deck HSK ini bawaan seperti deck lain: bisa disembunyikan atau dihapus lewat panel Guru, dan ikut otomatis diperbarui.
 
 ## Cara memperbarui
 

@@ -5,7 +5,7 @@ import { api } from './api/http.js';
 import { hbars, lineChart } from './charts.js';
 
 const APP = 'Alvaro Mandarin Flashcard Tamer';
-const APP_VERSION = '2026.10.22-kirim';
+const APP_VERSION = '2026.10.24-hsk';
 const BUILD = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev';
 
 /* ================= helpers ================= */
@@ -43,6 +43,9 @@ const ICON = {
   smile: '<circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/>', send: '<path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/>',
   image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>', sparkle: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>',
   list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+  download: '<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>',
+  laoshi: '<path d="M12 3l8 4-8 4-8-4 8-4z"/><path d="M6 10v4c0 1.5 2.7 3 6 3s6-1.5 6-3v-4"/><path d="M20 8v5"/>',
+  book2: '<path d="M4 4h11a2 2 0 0 1 2 2v14H6a2 2 0 0 1-2-2z"/><path d="M9 4v14"/>',
   gift: '<rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18M12 8S10.5 3 8 3a2.5 2.5 0 0 0 0 5h4zM12 8s1.5-5 4-5a2.5 2.5 0 0 1 0 5h-4z"/>',
   chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
   split: '<rect x="3" y="4" width="7" height="16" rx="2"/><rect x="14" y="4" width="7" height="16" rx="2"/>',
@@ -89,7 +92,7 @@ const COLORS = ['#1f3fbf', '#2fa3d6', '#16a34a', '#0f9f74', '#e0b51b', '#f08a24'
 const S = Object.assign({ mode: 'pic', quiz: true, auto: true, sfx: true, all: false, sel: [], view: 'learn', ttab: 'live', hints: true, kind: 'card', lang: 'id', split: { on: false, size: 10, part: 0 } }, store.get('prefs', {}));
 if (!S.split || typeof S.split !== 'object') S.split = { on: false, size: 10, part: 0 };
 const savePrefs = () => store.set('prefs', { mode: S.mode, quiz: S.quiz, auto: S.auto, sfx: S.sfx, all: S.all, sel: S.sel, view: ['study', 'done'].includes(S.view) ? 'learn' : S.view, ttab: S.ttab, hints: S.hints, kind: S.kind, split: S.split, lang: S.lang });
-let ME = null, SET = null, DECKS = [], CARDS = [], SRS = {}, Q = null, STUDENTS = [];
+let ME = null, SET = null, DECKS = [], CARDS = [], SRS = {}, Q = null, STUDENTS = [], AI_ON = false;
 const isTeacher = () => !!ME && ME.role === 'teacher';
 const canCreate = () => !!ME && (ME.role === 'teacher' || !!ME.can_create);
 
@@ -97,15 +100,16 @@ function cleanSettings(s) {
   s = s || {};
   const modes = Array.isArray(s.modes) ? MODES.filter((m) => s.modes.includes(m)) : MODES.slice();
   const ms = modes.length ? modes : ['pic'];
-  return { modes: ms, default_mode: ms.includes(s.default_mode) ? s.default_mode : ms[0], student_can_choose: s.student_can_choose !== false, quiz_enabled: s.quiz_enabled !== false, mw_quiz: s.mw_quiz !== false, all_can_create: s.all_can_create !== false, hidden_decks: Array.isArray(s.hidden_decks) ? s.hidden_decks.filter((x) => typeof x === 'string') : [] };
+  return { modes: ms, default_mode: ms.includes(s.default_mode) ? s.default_mode : ms[0], student_can_choose: s.student_can_choose !== false, quiz_enabled: s.quiz_enabled !== false, mw_quiz: s.mw_quiz !== false, all_can_create: s.all_can_create !== false, ai_laoshi: s.ai_laoshi !== false, hidden_decks: Array.isArray(s.hidden_decks) ? s.hidden_decks.filter((x) => typeof x === 'string') : [] };
 }
 function applyContent(c) {
   SET = cleanSettings(c.settings);
+  AI_ON = !!c.ai;
   if (c.me) ME = c.me;
   CARDS = (c.cards || []).filter((x) => x && typeof x.id === 'string' && typeof x.h === 'string');
   const by = {};
   for (const card of CARDS) (by[card.deck_id] ||= []).push(card);
-  DECKS = (c.decks || []).filter((d) => d && typeof d.id === 'string').map((d) => ({ ...d, color: /^#[0-9a-f]{6}$/i.test(d.color) ? d.color : '#1f3fbf', cards: by[d.id] || [] }));
+  DECKS = (c.decks || []).filter((d) => d && typeof d.id === 'string').map((d) => { const hm = /^hsk([123])(?:_l(\d+))?$/.exec(d.id); return { ...d, color: /^#[0-9a-f]{6}$/i.test(d.color) ? d.color : '#1f3fbf', cards: by[d.id] || [], hskLevel: hm ? +hm[1] : 0, hskLesson: hm && hm[2] ? +hm[2] : 0 }; });
 }
 // Untuk belajar: guru tidak ikut melihat kategori pribadi murid
 const studyDecks = () => DECKS.filter((d) => d.cards.length && (!isTeacher() || !d.owner_id || d.status === 'public'));
@@ -129,6 +133,7 @@ const meanAns = (c) => (S.lang === 'en' ? c.en || c.m : c.m);
 /* ================= shell ================= */
 function navItems() {
   const n = [['learn', 'learn', 'Belajar'], ['hist', 'hist', 'Riwayat']];
+  if (AI_ON) n.push(['ai', 'laoshi', 'AI Laoshi']);
   if (canCreate()) n.push(['cards', 'edit', isTeacher() ? 'Kartu' : 'Kartu saya']);
   if (isTeacher()) n.push(['teach', 'teach', 'Guru']);
   return n;
@@ -147,10 +152,11 @@ function hideShell() { $('.top').hidden = true; $('#bottomnav').hidden = true; $
 function go(v) {
   if (v === 'teach' && !isTeacher()) v = 'learn';
   if (v === 'cards' && !canCreate()) v = 'learn';
-  if (!['learn', 'hist', 'cards', 'teach'].includes(v)) v = 'learn';
+  if (v === 'ai' && !AI_ON) v = 'learn';
+  if (!['learn', 'hist', 'cards', 'teach', 'ai'].includes(v)) v = 'learn';
   stopLive();
   S.view = v; savePrefs(); shell(); window.scrollTo(0, 0);
-  ({ learn: renderLearn, hist: renderHist, cards: renderCards, teach: renderTeach })[v]();
+  ({ learn: renderLearn, hist: renderHist, cards: renderCards, teach: renderTeach, ai: renderAI })[v]();
 }
 
 /* ================= masuk ================= */
@@ -217,7 +223,17 @@ function planCards() {
   if (S.split.on) { const ps = parts(); if (!ps.length) return []; if (S.split.part >= ps.length) S.split.part = 0; return ps[S.split.part]; }
   const cs = poolCards(); return S.all ? cs : cs.filter(isDue);
 }
+const dlBtn = (d) => `<span class="dl" role="button" tabindex="0" data-dl="${esc(d.id)}" aria-label="Unduh tabel kosakata" title="Unduh tabel kosakata">${ic('download')}</span>`;
+function hskCard(d) {
+  const on = S.sel.includes(d.id), n = d.cards.length;
+  return `<button class="deck hsk lv${d.hskLevel}" data-pick="${esc(d.id)}" aria-pressed="${on}" style="--dc:${d.color}"><span class="chk">${ic('check')}</span>${dlBtn(d)}
+    <div class="hsk-badge"><span class="h3o">HSK 3.0</span><span class="lvl">级${d.hskLevel}</span></div>
+    <div class="hsk-big">HSK${d.hskLevel}</div>
+    <div class="id">${n} kosakata inti · semua pelajaran</div>
+    <div class="meta"><span class="dotc"></span>Ketuk untuk pilih · ketuk 2× untuk mulai</div></button>`;
+}
 function deckCard(d) {
+  if (d.hskLevel && !d.hskLesson) return hskCard(d);
   const due = d.cards.filter(isDue).length, sched = d.cards.length - due, on = S.sel.includes(d.id);
   const mwN = d.cards.filter((c) => c.mw).length;
   const pics = d.cards.filter(hasPic).slice(0, 3).map(picHTML).join('') || `<span class="hz">${esc(d.cards[0]?.h || '')}</span>`;
@@ -227,7 +243,8 @@ function deckCard(d) {
   if (d.delivered_at && !isTeacher()) tags.push(isNewGift(d) ? `<span class="pill new">Baru dari ${fromWho}</span>` : `<span class="pill mute">Dari ${fromWho}</span>`);
   else if (d.owner_id) tags.push(`<span class="pill mute">Buatan ${d.mine ? 'kamu' : esc(d.owner_name || 'murid')}</span>`);
   if (isTeacher() && !d.owner_id && d.status === 'private') tags.push('<span class="pill priv">Hanya untuk penerima kiriman</span>');
-  return `<button class="deck ${isPriv(d) ? 'mine' : ''}" data-pick="${esc(d.id)}" aria-pressed="${on}" style="--dc:${d.color}"><span class="chk">${ic('check')}</span>
+  if (d.hskLesson) tags.push(`<span class="pill hsk-tag">HSK3.0 级${d.hskLevel}·${d.hskLesson}</span>`);
+  return `<button class="deck ${isPriv(d) ? 'mine' : ''} ${d.hskLesson ? 'hsk-lesson lv' + d.hskLevel : ''}" data-pick="${esc(d.id)}" aria-pressed="${on}" style="--dc:${d.color}"><span class="chk">${ic('check')}</span>${dlBtn(d)}
     <div class="pics">${pics}</div><div class="zh">${esc(d.zh)}</div><div class="id">${esc(d.idn)}</div>
     ${tags.length ? `<div class="tags">${tags.join('')}</div>` : ''}
     <div class="bar"><i style="width:${(sched / d.cards.length) * 100}%"></i></div>
@@ -245,7 +262,9 @@ function renderLearn() {
   if (S.kind === 'mw' && !mwOn()) S.kind = 'card';
   const dueAll = ds.flatMap((d) => d.cards).filter(isDue).length;
   const priv = ds.filter(isPriv).sort((a, b) => (b.delivered_at || b.created_at || 0) - (a.delivered_at || a.created_at || 0));
-  const rest = ds.filter((d) => !isPriv(d));
+  const rest = ds.filter((d) => !isPriv(d) && !d.hskLevel);
+  const hskLevels = ds.filter((d) => d.hskLevel && !d.hskLesson).sort((a, b) => a.hskLevel - b.hskLevel);
+  const hskLessons = ds.filter((d) => d.hskLesson && d.hskLevel === HSK_OPEN).sort((a, b) => a.hskLesson - b.hskLesson);
   const ps = S.split.on ? parts() : [], dp = doneParts(), pool = poolCards().length;
   if (S.split.part >= ps.length) S.split.part = 0;
   $('#view').innerHTML = `<div class="page-head"><div class="hello"><div class="avatar" aria-hidden="true">${initial(ME.display_name)}</div><div>
@@ -266,6 +285,9 @@ function renderLearn() {
       <p class="note" style="flex:1;min-width:180px;padding-bottom:10px">${pool} kartu dari kategori yang dipilih. Pilih sesi yang mau dipelajari sekarang.</p>
       <div class="parts">${ps.map((p, i) => `<button class="part ${dp.includes(i) ? 'ok' : ''}" data-part="${i}" aria-pressed="${S.split.part === i}">Sesi ${i + 1}<small>${dp.includes(i) ? '✓ selesai · ' : ''}${p.length} kartu</small></button>`).join('') || '<span class="note">Pilih kategori dulu.</span>'}</div>
     </div>` : `<p class="note" style="margin:-6px 0 16px">${kindNow() === 'mw' ? 'Kuis 量词: tebak kata satuan yang tepat untuk tiap benda, misalnya 一<b>本</b>书.' : 'Ketuk kategori untuk memilih. <b>Ketuk 2× cepat</b> untuk membuka tombol Mulai. Nilai 1 & 2 diulang di sesi ini, 3 muncul besok, 4 muncul 3 hari lagi.'}</p>`}
+    ${hskLevels.length ? `<div class="sec-title">${ic('book2')} HSK 3.0</div><div class="decks hsk-row">${hskLevels.map(hskCard).join('')}</div>
+      <div class="hsk-chips">${hskLevels.map((d) => `<button class="chip ${HSK_OPEN === d.hskLevel ? 'on' : ''}" data-hsk="${d.hskLevel}">${ic('list')} 级${d.hskLevel} · per pelajaran</button>`).join('')}</div>
+      ${hskLessons.length ? `<div class="sec-title sub">级${HSK_OPEN} · ${hskLessons.length} pelajaran</div><div class="decks">${hskLessons.map(deckCard).join('')}</div>` : ''}` : ''}
     ${!isTeacher() || priv.length ? `<div class="sec-title">${ic('key')} Pribadi${priv.length ? ' · ' + priv.length : ''}</div><div class="decks">${!isTeacher() ? `<button class="deck custom" data-act="custom" aria-label="Buat kartu sendiri"><span class="plus">${ic('plus')}</span><b>Custom</b><span>Buat kartu sendiri</span></button>` : ''}${priv.map(deckCard).join('')}</div>${rest.length ? '<div class="sec-title">Kategori kelas</div>' : ''}` : ''}
     <div class="decks">${rest.map(deckCard).join('') || (priv.length ? '' : '<div class="panel empty"><b>Belum ada kategori</b>Gurumu belum menampilkan kategori untukmu.</div>')}</div>
     <p class="ver">Versi ${APP_VERSION}</p>`;
@@ -303,6 +325,29 @@ function renderActionbar() {
     if (S.view === 'learn') renderLearn();
     toast(`${pool} kartu dibagi jadi ${parts().length} sesi, masing-masing ${S.split.size} kartu.`);
   });
+}
+
+/* ---- unduh tabel kosakata (semua deck) ---- */
+let HSK_OPEN = 0;
+function downloadTable(deckId) {
+  const d = deckOf(deckId); if (!d || !d.cards.length) { toast('Kategori ini kosong.'); return; }
+  const rows = d.cards.map((c, i) => `<tr><td>${i + 1}</td><td class="h">${esc(c.h)}</td><td>${esc(c.p || '')}</td><td>${esc(c.m || '')}</td><td>${esc(c.en || '')}</td><td>${esc(c.mw || '')}</td></tr>`).join('');
+  const title = `${d.zh}${d.idn ? ' — ' + d.idn : ''}`;
+  const html = `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>
+<style>body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;margin:24px;color:#13161c}h1{font-size:20px;margin:0 0 4px}p.sub{color:#667;margin:0 0 16px;font-size:13px}
+table{border-collapse:collapse;width:100%;font-size:14px}th,td{border:1px solid #d7dbe3;padding:7px 10px;text-align:left}th{background:${d.color};color:#fff}
+td.h{font:700 20px "Noto Sans SC","PingFang SC",sans-serif}tr:nth-child(even){background:#f5f6f8}@media print{body{margin:0}th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+.b{margin:16px 0;text-align:center}.b button{font-size:14px;padding:8px 16px;border:0;border-radius:8px;background:${d.color};color:#fff;cursor:pointer}</style></head>
+<body><h1>${esc(title)}</h1><p class="sub">${d.cards.length} kosakata · Alvaro Education Centre · dari Flashcard Tamer</p>
+<div class="b"><button onclick="print()">Cetak / Simpan PDF</button></div>
+<table><thead><tr><th>No</th><th>汉字</th><th>Pinyin</th><th>Arti</th><th>English</th><th>量词</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
+  try {
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = `${(d.zh || 'kosakata').replace(/[^\w\u4e00-\u9fff-]/g, '_')}.html`;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
+    toast('Tabel kosakata diunduh. Buka filenya, bisa dicetak atau simpan PDF.');
+  } catch (_) { toast('Gagal mengunduh.'); }
 }
 
 /* ---- simpan & lanjutkan sesi (setelah keluar / refresh) ---- */
@@ -724,6 +769,84 @@ async function openSendSheet(deckId) {
       el.remove(); burst(24); toast(`Terkirim ke ${r.sent} ${isTeacher() ? 'murid' : 'teman'}.`);
     } catch (err) { n.textContent = err.message; n.style.color = 'var(--bad)'; btn.disabled = false; }
   });
+}
+
+/* ================= AI Laoshi (tanya-jawab) ================= */
+let AICHAT = [];
+let aiBusy = false;
+const AI_TIPS = [
+  'Apa arti dan contoh kalimat 把?',
+  'Apa beda 会, 能, dan 可以?',
+  'Kapan pakai 了? Beri contoh.',
+  'Buatkan 3 contoh kalimat dengan 虽然…但是…',
+  'Apa beda 二 dan 两?',
+];
+function aiMd(t) {
+  let h = esc(t);
+  h = h.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  h = h.replace(/^###?\s*(.+)$/gm, '<b>$1</b>');
+  const lines = h.split(/\r?\n/).map((l) => {
+    const m = /^\s*[-*•]\s+(.*)$/.exec(l);
+    if (m) return '<li>' + m[1] + '</li>';
+    return l;
+  });
+  let out = '', inList = false;
+  for (const l of lines) {
+    if (l.startsWith('<li>')) { if (!inList) { out += '<ul>'; inList = true; } out += l; }
+    else { if (inList) { out += '</ul>'; inList = false; } out += (l.trim() ? '<p>' + l + '</p>' : ''); }
+  }
+  if (inList) out += '</ul>';
+  return out || '<p></p>';
+}
+function aiRender() {
+  const box = $('#aiMsgs'); if (!box) return;
+  if (!AICHAT.length) {
+    box.innerHTML = `<div class="ai-intro"><div class="ai-ava">${ic('laoshi')}</div>
+      <h2 class="h2">Halo! Aku Laoshi 👋</h2>
+      <p class="sub">Tanya apa saja tentang bahasa Mandarin — arti kata, contoh kalimat, cara pakai, atau perbedaan dua kata. Aku jawab dalam Bahasa Indonesia.</p>
+      <div class="ai-tips">${AI_TIPS.map((t) => `<button class="chip" data-aitip="${esc(t)}">${esc(t)}</button>`).join('')}</div></div>`;
+    return;
+  }
+  box.innerHTML = AICHAT.map((m) => m.role === 'user'
+    ? `<div class="ai-msg me"><div class="bub">${esc(m.content).replace(/\n/g, '<br>')}</div></div>`
+    : `<div class="ai-msg ai"><div class="ava">${ic('laoshi')}</div><div class="bub">${m.pending ? '<span class="typing"><i></i><i></i><i></i></span>' : aiMd(m.content)}</div></div>`).join('');
+  box.scrollTop = box.scrollHeight;
+}
+async function aiSend(text) {
+  text = (text || '').trim(); if (!text || aiBusy) return;
+  if (text.length > 600) text = text.slice(0, 600);
+  aiBusy = true;
+  AICHAT.push({ role: 'user', content: text });
+  AICHAT.push({ role: 'assistant', content: '', pending: true });
+  aiRender();
+  const ta = $('#aiInput'); if (ta) { ta.value = ''; ta.style.height = 'auto'; }
+  const btn = $('#aiSend'); if (btn) btn.disabled = true;
+  try {
+    const hist = AICHAT.filter((m) => !m.pending).map((m) => ({ role: m.role, content: m.content }));
+    const r = await api.aiAsk(hist);
+    AICHAT = AICHAT.filter((m) => !m.pending);
+    AICHAT.push({ role: 'assistant', content: r.reply || '(kosong)' });
+  } catch (e) {
+    AICHAT = AICHAT.filter((m) => !m.pending);
+    AICHAT.push({ role: 'assistant', content: 'Maaf, ' + (e.message || 'ada gangguan') + ' 🙏' });
+  }
+  aiBusy = false; if (btn) btn.disabled = false;
+  aiRender();
+}
+function renderAI() {
+  $('#actionbar').hidden = true; document.documentElement.style.setProperty('--c', 'var(--brand)');
+  $('#view').innerHTML = `<div class="ai-wrap">
+    <div class="page-head" style="margin-bottom:10px"><div><p class="eyebrow">Tanya-jawab Mandarin</p><h1 class="h1">AI Laoshi</h1></div>${AICHAT.length ? `<button class="chip" data-act="ainew">${ic('plus')} Obrolan baru</button>` : ''}</div>
+    <div id="aiMsgs" class="ai-msgs"></div>
+    <form id="aiForm" class="ai-bar"><textarea id="aiInput" rows="1" maxlength="600" placeholder="Tulis pertanyaanmu… mis. apa beda 还 dan 再?" ${aiBusy ? 'disabled' : ''}></textarea>
+      <button id="aiSend" class="btn" type="submit" aria-label="Kirim" ${aiBusy ? 'disabled' : ''}>${ic('send')}</button></form>
+    <p class="note" style="text-align:center;margin-top:8px">AI bisa keliru — untuk soal penting, pastikan ke gurumu.</p></div>`;
+  aiRender();
+  const ta = $('#aiInput');
+  ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; });
+  ta.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); aiSend(ta.value); } });
+  $('#aiForm').addEventListener('submit', (e) => { e.preventDefault(); aiSend(ta.value); });
+  if (!aiBusy) ta.focus();
 }
 
 /* ================= Riwayat ================= */
@@ -1191,7 +1314,8 @@ function tSettings() {
       <button class="switch" role="switch" aria-checked="${DRAFT.quiz_enabled}" data-cfgtog="quiz_enabled"><span class="track"></span>Aktifkan mode tebak</button>
       <button class="switch" role="switch" aria-checked="${DRAFT.mw_quiz}" data-cfgtog="mw_quiz"><span class="track"></span>Aktifkan kuis kata satuan (量词)</button>
       <button class="switch" role="switch" aria-checked="${DRAFT.all_can_create}" data-cfgtog="all_can_create"><span class="track"></span>Semua murid boleh membuat kartu sendiri</button>
-      <p class="note">Kartu buatan murid hanya terlihat oleh pembuatnya, sampai kamu setujui di menu Persetujuan. Izin per murid tetap bisa diatur di menu Murid.</p></div>
+      <button class="switch" role="switch" aria-checked="${DRAFT.ai_laoshi}" data-cfgtog="ai_laoshi"><span class="track"></span>Aktifkan AI Laoshi (tanya-jawab Mandarin)</button>
+      <p class="note">Kartu buatan murid hanya terlihat oleh pembuatnya, sampai kamu setujui di menu Persetujuan. AI Laoshi butuh Workers AI terpasang di Cloudflare (gratis); kalau belum, menunya tidak muncul.</p></div>
     <div class="panel stack"><h2 class="h3">Kategori untuk murid</h2><p class="note">Matikan kategori yang belum diajarkan.</p>
       <div class="row">${shared.map((d) => `<button class="chip" data-cfgdeck="${esc(d.id)}" aria-pressed="${!DRAFT.hidden_decks.includes(d.id)}"><span class="han">${esc(d.zh)}</span> ${esc(d.idn)}</button>`).join('')}</div></div>
   </div>
@@ -1217,7 +1341,7 @@ function leaveStudy() {
 let endArmed = 0, LAST_TAP = { id: null, t: 0 };
 document.addEventListener('click', async (e) => {
   if (!e.target.closest('#emojiPop') && !e.target.closest('[data-emo]')) closeEmoji();
-  const b = e.target.closest('[data-vis],[data-pstu],[data-lkind],[data-part],[data-pickstu],[data-mkind],[data-warn],[data-chatto],[data-endrun],[data-endall],[data-nav],[data-pick],[data-act],[data-mode],[data-rate],[data-t],[data-ttab],[data-sact],[data-stu],[data-cfgmode],[data-cfgtog],[data-cfgdeck],[data-edeck],[data-etab],[data-ncolor],[data-rcolor],[data-emo],[data-pick-emo],[data-rm],[data-approve]');
+  const b = e.target.closest('[data-aitip],[data-dl],[data-hsk],[data-vis],[data-pstu],[data-lkind],[data-part],[data-pickstu],[data-mkind],[data-warn],[data-chatto],[data-endrun],[data-endall],[data-nav],[data-pick],[data-act],[data-mode],[data-rate],[data-t],[data-ttab],[data-sact],[data-stu],[data-cfgmode],[data-cfgtog],[data-cfgdeck],[data-edeck],[data-etab],[data-ncolor],[data-rcolor],[data-emo],[data-pick-emo],[data-rm],[data-approve]');
   if (!b) { const fc = e.target.closest('#fc'); if (fc && Q && Q.cur && Q.cur.answered) flip(); return; }
   const ds = b.dataset;
   if (ds.nav) { leaveStudy(); go(ds.nav); return; }
@@ -1240,6 +1364,9 @@ document.addEventListener('click', async (e) => {
     try { const r = await api.endRun(ds.endall ? { all: true } : { sid: ds.endrun }); toast(`${r.ended} sesi diakhiri. Murid langsung melihat pemberitahuan.`); if (LIVE_DRAW) LIVE_DRAW(); } catch (err) { toast(err.message); }
     return;
   }
+  if (ds.aitip !== undefined) { aiSend(ds.aitip); return; }
+  if (ds.dl !== undefined) { e.preventDefault(); e.stopPropagation(); downloadTable(ds.dl); return; }
+  if (ds.hsk !== undefined) { const lv = +ds.hsk; HSK_OPEN = HSK_OPEN === lv ? 0 : lv; renderLearn(); return; }
   if (ds.pick) {
     const id = ds.pick, t = Date.now();
     if (LAST_TAP.id === id && t - LAST_TAP.t < 500) { // ketuk 2×: pilih & buka tombol Mulai
@@ -1308,6 +1435,7 @@ document.addEventListener('click', async (e) => {
   else if (a === 'closebar') { BAR_OPEN = false; renderActionbar(); }
   else if (a === 'custom') { if (!canCreate()) { toast('Gurumu belum mengizinkan membuat kartu sendiri.'); return; } ED.deck = null; ED.newOpen = true; ED.wantPublic = false; go('cards'); setTimeout(() => { const z = $('#ndz'); if (z) z.focus(); }, 50); }
   else if (a === 'lang') { S.lang = { id: 'en', en: 'both', both: 'id' }[S.lang] || 'id'; savePrefs(); b.textContent = LANG_LABEL[S.lang]; if (Q && Q.cur) { const cur = Q.cur; const f = document.querySelector('.face.front'), bk = document.querySelector('.face.bface'); if (bk) { bk.querySelectorAll('.m').forEach((x) => { x.textContent = mean(cur.c); }); } if (f && cur.m === 'arti') { const bi = f.querySelector('.bigid'); if (bi) bi.textContent = mean(cur.c); } } toast('Arti: ' + { id: 'bahasa Indonesia', en: 'English', both: 'Indonesia + English' }[S.lang]); }
+  else if (a === 'ainew') { AICHAT = []; renderAI(); }
   else if (a === 'mycards') { ED.newOpen = !editableDecks().length; go('cards'); }
   else if (a === 'endsaved') { await endSaved(); toast('Sesi lama diakhiri.'); }
   else if (a === 'nextpart') { S.split.part = Q.part.idx + 1; savePrefs(); S.view = 'learn'; shell(); renderLearn(); startStudy(); }

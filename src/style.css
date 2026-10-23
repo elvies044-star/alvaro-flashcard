@@ -514,3 +514,63 @@ code { font: 600 13px ui-monospace, SFMono-Regular, Menlo, monospace; background
 .overlay.sheet h2 { display: flex; align-items: center; gap: 8px; font-size: 20px; }
 @media (min-width: 641px) { .overlay.sheet { place-items: center; padding: 24px; } .overlay.sheet .box { border-radius: 26px; } }
 .stu-picks .chip[aria-pressed="true"] { background: var(--brand); color: #fff; } .stu-picks .chip[aria-pressed="true"] .note { color: #dfe6ff; }
+
+/* ===== HSK decks ===== */
+.sec-title.sub { font-size: 12px; opacity: .85; margin-top: 14px; }
+.hsk-row { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.deck.hsk { align-items: flex-start; justify-content: space-between; min-height: 170px; color: #fff; border: 0; overflow: hidden; background: linear-gradient(145deg, var(--dc), color-mix(in srgb, var(--dc) 62%, #000)); box-shadow: 0 10px 26px -10px color-mix(in srgb, var(--dc) 70%, transparent); }
+.deck.hsk::before { content: ""; position: absolute; inset: 0; background: radial-gradient(120% 90% at 85% 0%, rgba(255,255,255,.28), transparent 55%); pointer-events: none; }
+.deck.hsk .hsk-badge { display: flex; align-items: center; gap: 8px; z-index: 2; }
+.deck.hsk .h3o { font-weight: 800; font-size: 12px; letter-spacing: .12em; background: rgba(255,255,255,.22); padding: 3px 8px; border-radius: 999px; }
+.deck.hsk .lvl { font: 700 15px var(--f-han); }
+.deck.hsk .hsk-big { font: 900 46px/1 var(--f-ui, inherit); letter-spacing: -.03em; margin: 6px 0 2px; text-shadow: 0 2px 10px rgba(0,0,0,.2); z-index: 2; }
+.deck.hsk .id { color: rgba(255,255,255,.92); font-weight: 650; z-index: 2; margin: 0; }
+.deck.hsk .meta { color: rgba(255,255,255,.8); z-index: 2; }
+.deck.hsk .meta .dotc { background: rgba(255,255,255,.9); }
+.deck.hsk .chk { background: rgba(255,255,255,.25); border-color: rgba(255,255,255,.6); }
+.deck.hsk[aria-pressed="true"] { box-shadow: 0 0 0 3px #fff, 0 10px 26px -8px color-mix(in srgb, var(--dc) 80%, transparent); }
+.deck.hsk[aria-pressed="true"] .chk { background: #fff; } .deck.hsk[aria-pressed="true"] .chk .i { color: var(--dc); opacity: 1; }
+/* efek timbul keren saat ditekan */
+.deck.hsk.tap { animation: hskPop .55s cubic-bezier(.2,1.5,.4,1); }
+@keyframes hskPop { 0% { transform: scale(1); } 30% { transform: scale(1.06) translateY(-6px) rotate(-1deg); box-shadow: 0 22px 40px -12px color-mix(in srgb, var(--dc) 85%, transparent); } 60% { transform: scale(.99) translateY(0); } 100% { transform: none; } }
+@media (hover: hover) { .deck.hsk:hover { transform: translateY(-5px) scale(1.015); } }
+.hsk-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 4px; }
+.hsk-chips .chip.on { background: var(--brand); color: #fff; border-color: transparent; }
+.deck.hsk-lesson { border-left: 4px solid var(--dc); }
+.deck.hsk-lesson .zh { font-family: var(--f-ui, inherit); font-weight: 800; }
+.pill.hsk-tag { background: color-mix(in srgb, var(--dc) 16%, transparent); color: var(--dc); }
+/* tombol unduh di tiap kartu */
+.deck .dl { position: absolute; bottom: 10px; right: 10px; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; color: var(--muted); background: var(--surface-2); z-index: 4; transition: background .15s, color .15s; }
+.deck .dl .i { width: 16px; height: 16px; }
+.deck .dl:hover { background: var(--brand); color: #fff; }
+.deck.hsk .dl { color: #fff; background: rgba(255,255,255,.22); bottom: 12px; right: 12px; }
+.deck.hsk .dl:hover { background: #fff; color: var(--dc); }
+.deck { padding-bottom: 14px; }
+
+/* ===== AI Laoshi ===== */
+.ai-wrap { display: flex; flex-direction: column; min-height: calc(100dvh - 120px); }
+.ai-msgs { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding: 4px 2px 10px; }
+.ai-intro { text-align: center; margin: auto; padding: 20px 10px; max-width: 520px; }
+.ai-intro .ai-ava { width: 64px; height: 64px; margin: 0 auto 12px; border-radius: 20px; display: grid; place-items: center; background: var(--brand); color: #fff; }
+.ai-intro .ai-ava .i { width: 34px; height: 34px; }
+.ai-tips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 18px; }
+.ai-tips .chip { white-space: normal; text-align: left; height: auto; padding: 9px 13px; line-height: 1.35; }
+.ai-msg { display: flex; gap: 10px; max-width: 100%; }
+.ai-msg .ava { width: 32px; height: 32px; flex: none; border-radius: 10px; background: var(--brand); color: #fff; display: grid; place-items: center; }
+.ai-msg .ava .i { width: 18px; height: 18px; }
+.ai-msg .bub { padding: 11px 14px; border-radius: 16px; font-size: 15px; line-height: 1.55; max-width: min(640px, 82%); overflow-wrap: anywhere; }
+.ai-msg.me { justify-content: flex-end; }
+.ai-msg.me .bub { background: var(--brand); color: #fff; border-bottom-right-radius: 5px; }
+.ai-msg.ai .bub { background: var(--surface); border: 1px solid var(--line); border-bottom-left-radius: 5px; }
+.ai-msg.ai .bub p { margin: 0 0 7px; } .ai-msg.ai .bub p:last-child { margin: 0; }
+.ai-msg.ai .bub ul { margin: 4px 0; padding-left: 20px; } .ai-msg.ai .bub li { margin: 3px 0; }
+.ai-msg.ai .bub b { color: var(--brand); }
+.typing { display: inline-flex; gap: 4px; padding: 3px 0; }
+.typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: tdot 1s infinite; }
+.typing i:nth-child(2) { animation-delay: .18s; } .typing i:nth-child(3) { animation-delay: .36s; }
+@keyframes tdot { 0%, 60%, 100% { opacity: .3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-4px); } }
+.ai-bar { position: sticky; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); display: flex; gap: 8px; align-items: flex-end; background: var(--surface-2); border: 1px solid var(--line); border-radius: 18px; padding: 8px; box-shadow: var(--sh-1); }
+.ai-bar textarea { flex: 1; resize: none; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 15px; padding: 8px 10px; max-height: 140px; outline: none; }
+.ai-bar .btn { width: 44px; padding: 0; flex: none; }
+.ai-bar .btn .i { width: 20px; height: 20px; }
+@media (max-width: 640px) { .ai-wrap { min-height: calc(100dvh - 150px); } .ai-msg .bub { max-width: 86%; } }
