@@ -190,7 +190,7 @@ function cleanSettings(s) {
   const modes = Array.isArray(s.modes) ? FRONT_MODES.filter((m) => s.modes.includes(m)) : FRONT_MODES.slice();
   const ms = modes.length ? modes : ['pic'];
   const hidden = Array.isArray(s.hidden_decks) ? [...new Set(s.hidden_decks.filter((x) => typeof x === 'string' && /^[a-z0-9_]{2,32}$/.test(x)))].slice(0, 300) : [];
-  return { modes: ms, default_mode: ms.includes(s.default_mode) ? s.default_mode : ms[0], student_can_choose: s.student_can_choose !== false, quiz_enabled: s.quiz_enabled !== false, mw_quiz: s.mw_quiz !== false, all_can_create: s.all_can_create !== false, ai_laoshi: s.ai_laoshi !== false, hidden_decks: hidden };
+  return { modes: ms, default_mode: ms.includes(s.default_mode) ? s.default_mode : ms[0], student_can_choose: s.student_can_choose !== false, quiz_enabled: s.quiz_enabled !== false, mw_quiz: s.mw_quiz !== false, all_can_create: s.all_can_create !== false, ai_laoshi: s.ai_laoshi !== false, ai_name: (typeof s.ai_name === 'string' ? s.ai_name.replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 20) : '') || 'Laoshi', hidden_decks: hidden };
 }
 async function getSettings(db) {
   const row = await db.prepare('SELECT data FROM settings WHERE id = 1').first('data');
@@ -456,25 +456,36 @@ export async function onRequest(ctx) {
         .slice(-8).map((m) => ({ role: m.role, content: m.content.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').trim().slice(0, 600) }))
         .filter((m) => m.content);
       if (!msgs.length || msgs[msgs.length - 1].role !== 'user') fail(400, 'Tulis dulu pertanyaanmu.');
-      const sys = 'Kamu adalah "Laoshi", guru bahasa Mandarin yang ramah dan sabar untuk murid Indonesia di Alvaro Education Centre (fokus HSK 1-3). '
+      const aiName = settings.ai_name || 'Laoshi';
+      const sys = `Kamu adalah "${aiName}", guru bahasa Mandarin yang ramah dan sabar untuk murid Indonesia di Alvaro Education Centre (fokus HSK 1-3). `
+        + `Kalau ditanya namamu, jawab bahwa namamu ${aiName}. `
         + 'Selalu jawab dalam Bahasa Indonesia yang sederhana dan jelas. '
         + 'Setiap menyebut kata/kalimat Mandarin, tulis dalam format: 汉字 (pinyin bernada) = arti. '
         + 'Kalau murid bertanya sebuah kata: beri arti, pinyin, lalu 1-2 contoh kalimat pendek lengkap dengan pinyin dan terjemahannya, dan kapan dipakai. '
         + 'Kalau murid bertanya perbedaan dua kata/tata bahasa: jelaskan ringkas poin bedanya, lalu beri contoh untuk masing-masing. '
         + 'Jawaban singkat, rapi, pakai poin bila perlu. Jangan mengarang; kalau ragu, katakan dengan jujur. '
         + 'Hanya bahas pembelajaran bahasa Mandarin; jika ditanya hal lain, ajak kembali ke topik belajar Mandarin dengan sopan.';
-      const MODELS = ['@cf/qwen/qwen1.5-14b-chat-awq', '@cf/meta/llama-3.1-8b-instruct'];
-      let reply = '';
+      // proven model (dipakai terjemahan) didahulukan, lalu cadangan
+      const MODELS = ['@cf/meta/llama-3.1-8b-instruct', '@cf/qwen/qwen1.5-14b-chat-awq', '@cf/meta/llama-3-8b-instruct', '@cf/qwen/qwen2.5-7b-instruct'];
+      let reply = '', lastErr = '', used = '';
+      const chat = [{ role: 'system', content: sys }, ...msgs];
       for (const model of MODELS) {
         try {
-          const res = await env.AI.run(model, { messages: [{ role: 'system', content: sys }, ...msgs], max_tokens: 768, temperature: 0.3 });
-          reply = String((res && (res.response !== undefined ? res.response : res.result)) || '').trim();
-          if (reply) break;
-        } catch (_) { /* coba model berikutnya */ }
+          const res = await env.AI.run(model, { messages: chat, max_tokens: 640 });
+          let v = res && typeof res === 'object' ? (res.response !== undefined ? res.response : res.result !== undefined ? res.result : res.output_text) : res;
+          if (v && typeof v === 'object') v = v.response || v.text || v.output || '';
+          reply = String(v || '').trim();
+          if (reply) { used = model; break; }
+          lastErr = 'kosong dari ' + model;
+        } catch (e) { lastErr = (model.split('/').pop()) + ': ' + String((e && e.message) || e).slice(0, 140); }
       }
       reply = reply.slice(0, 4000);
-      if (!reply) fail(502, 'AI sedang sibuk atau tidak menjawab. Coba ulangi sebentar lagi.');
-      return json({ reply });
+      if (!reply) {
+        // tampilkan sebab asli supaya mudah diperbaiki (khusus guru lebih detail)
+        const d = teacher && lastErr ? ' [' + lastErr + ']' : '';
+        fail(502, 'AI belum bisa menjawab.' + d + ' Coba lagi, atau pastikan Workers AI aktif.');
+      }
+      return json({ reply, model: teacher ? used : undefined });
     }
     if (path === '/classmates' && method === 'GET') {
       const rows = (await db.prepare("SELECT id, display_name, class_name FROM users WHERE role = 'student' AND active = 1 AND id <> ?1 ORDER BY class_name, display_name LIMIT 500").bind(user.id).all()).results;

@@ -5,7 +5,7 @@ import { api } from './api/http.js';
 import { hbars, lineChart } from './charts.js';
 
 const APP = 'Alvaro Mandarin Flashcard Tamer';
-const APP_VERSION = '2026.10.24-ai';
+const APP_VERSION = '2026.10.24-ai2';
 const BUILD = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev';
 
 /* ================= helpers ================= */
@@ -93,6 +93,7 @@ const S = Object.assign({ mode: 'pic', quiz: true, auto: true, sfx: true, all: f
 if (!S.split || typeof S.split !== 'object') S.split = { on: false, size: 10, part: 0 };
 const savePrefs = () => store.set('prefs', { mode: S.mode, quiz: S.quiz, auto: S.auto, sfx: S.sfx, all: S.all, sel: S.sel, view: ['study', 'done'].includes(S.view) ? 'learn' : S.view, ttab: S.ttab, hints: S.hints, kind: S.kind, split: S.split, lang: S.lang });
 let ME = null, SET = null, DECKS = [], CARDS = [], SRS = {}, Q = null, STUDENTS = [], AI_ON = false;
+const aiName = () => (SET && SET.ai_name) || 'Laoshi';
 const isTeacher = () => !!ME && ME.role === 'teacher';
 const canCreate = () => !!ME && (ME.role === 'teacher' || !!ME.can_create);
 
@@ -100,7 +101,7 @@ function cleanSettings(s) {
   s = s || {};
   const modes = Array.isArray(s.modes) ? MODES.filter((m) => s.modes.includes(m)) : MODES.slice();
   const ms = modes.length ? modes : ['pic'];
-  return { modes: ms, default_mode: ms.includes(s.default_mode) ? s.default_mode : ms[0], student_can_choose: s.student_can_choose !== false, quiz_enabled: s.quiz_enabled !== false, mw_quiz: s.mw_quiz !== false, all_can_create: s.all_can_create !== false, ai_laoshi: s.ai_laoshi !== false, hidden_decks: Array.isArray(s.hidden_decks) ? s.hidden_decks.filter((x) => typeof x === 'string') : [] };
+  return { modes: ms, default_mode: ms.includes(s.default_mode) ? s.default_mode : ms[0], student_can_choose: s.student_can_choose !== false, quiz_enabled: s.quiz_enabled !== false, mw_quiz: s.mw_quiz !== false, all_can_create: s.all_can_create !== false, ai_laoshi: s.ai_laoshi !== false, ai_name: (typeof s.ai_name === 'string' && s.ai_name.trim()) ? s.ai_name.trim().slice(0, 20) : 'Laoshi', hidden_decks: Array.isArray(s.hidden_decks) ? s.hidden_decks.filter((x) => typeof x === 'string') : [] };
 }
 function applyContent(c) {
   SET = cleanSettings(c.settings);
@@ -133,7 +134,7 @@ const meanAns = (c) => (S.lang === 'en' ? c.en || c.m : c.m);
 /* ================= shell ================= */
 function navItems() {
   const n = [['learn', 'learn', 'Belajar'], ['hist', 'hist', 'Riwayat']];
-  if (AI_ON) n.push(['ai', 'laoshi', 'AI Laoshi']);
+  if (AI_ON) n.push(['ai', 'laoshi', 'AI ' + aiName()]);
   if (canCreate()) n.push(['cards', 'edit', isTeacher() ? 'Kartu' : 'Kartu saya']);
   if (isTeacher()) n.push(['teach', 'teach', 'Guru']);
   return n;
@@ -471,7 +472,7 @@ function renderStudy() {
       ${SET.quiz_enabled && !isMw ? `<button class="chip" data-act="quiz" aria-pressed="${S.quiz}">Tebak</button>` : ''}
       <button class="chip" data-act="auto" aria-pressed="${S.auto}" aria-label="Ucapan otomatis" title="Ucapan otomatis">${ic('sound')}</button>
       <button class="chip" data-act="sfx" aria-pressed="${S.sfx}" aria-label="Efek suara" title="Efek suara">${ic(S.sfx ? 'sparkle' : 'mute')}</button>
-      ${AI_ON ? `<button class="chip ailah" data-act="asklaoshi" title="Tanya Laoshi soal kartu ini">${ic('laoshi')} Laoshi</button>` : ''}
+      ${AI_ON ? `<button class="chip ailah" data-act="asklaoshi" title="Tanya ${esc(aiName())} soal kartu ini">${monkey()} ${esc(aiName())}</button>` : ''}
     </div>
     <div class="stage"><div class="tilt" id="tilt"><div class="fc" id="fc" tabindex="0" role="button" aria-label="Kartu. Ketuk untuk membalik">
       <div class="face front"><div class="tag"><span class="dotc" style="--dc:${d.color}"></span>${esc(d.zh)}</div>${frontHTML(c, m)}<div class="clue" id="clueBox" hidden></div><div class="hint">${canQuiz ? 'Pilih jawaban di bawah' : 'Ketuk kartu untuk membalik'}</div></div>
@@ -773,6 +774,33 @@ async function openSendSheet(deckId) {
 }
 
 /* ================= AI Laoshi (tanya-jawab) ================= */
+const MONKEY = `<svg viewBox="0 0 48 48" class="monkey" aria-hidden="true">
+<circle cx="10" cy="19" r="6.5" fill="#8b5e3c"/><circle cx="10" cy="19" r="3.2" fill="#d2a06f"/>
+<circle cx="38" cy="19" r="6.5" fill="#8b5e3c"/><circle cx="38" cy="19" r="3.2" fill="#d2a06f"/>
+<path d="M24 6c9.5 0 15.5 6.5 15.5 15.5S33.5 38 24 38 8.5 30.5 8.5 21.5 14.5 6 24 6z" fill="#8b5e3c"/>
+<path d="M24 15.5c6.3 0 10.5 4.2 10.5 9.3S30.3 34 24 34s-10.5-4.1-10.5-9.2S17.7 15.5 24 15.5z" fill="#ead3b5"/>
+<ellipse cx="18.3" cy="20.5" rx="4.6" ry="5.2" fill="#fff"/><ellipse cx="29.7" cy="20.5" rx="4.6" ry="5.2" fill="#fff"/>
+<circle cx="18.9" cy="21.4" r="2.3" fill="#2f2015"/><circle cx="29.1" cy="21.4" r="2.3" fill="#2f2015"/>
+<circle cx="19.7" cy="20.6" r=".7" fill="#fff"/><circle cx="29.9" cy="20.6" r=".7" fill="#fff"/>
+<ellipse cx="24" cy="27.5" rx="6.2" ry="4.6" fill="#dcb088"/>
+<ellipse cx="21.6" cy="27.3" rx="1" ry="1.5" fill="#5a3a22"/><ellipse cx="26.4" cy="27.3" rx="1" ry="1.5" fill="#5a3a22"/>
+<path d="M20.8 31.2c1.7 1.5 4.7 1.5 6.4 0" stroke="#5a3a22" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>`;
+const monkey = () => `<span class="mk">${MONKEY}</span>`;
+// efek ngetik: ungkap teks bertahap lalu render rapi
+function typeInto(el, text, done) {
+  if (!el) { done && done(); return; }
+  const scroller = el.closest('.ai-msgs');
+  let i = 0; el.classList.add('typing-on');
+  const step = () => {
+    if (!document.body.contains(el)) return;
+    i = Math.min(text.length, i + 3);
+    el.innerHTML = esc(text.slice(0, i)).replace(/\n/g, '<br>') + '<span class="cur"></span>';
+    if (scroller) scroller.scrollTop = scroller.scrollHeight;
+    if (i < text.length) setTimeout(step, 12);
+    else { el.innerHTML = aiMd(text); el.classList.remove('typing-on'); if (scroller) scroller.scrollTop = scroller.scrollHeight; done && done(); }
+  };
+  step();
+}
 let AICHAT = [];
 let aiBusy = false;
 const AI_TIPS = [
@@ -802,15 +830,15 @@ function aiMd(t) {
 function aiRender() {
   const box = $('#aiMsgs'); if (!box) return;
   if (!AICHAT.length) {
-    box.innerHTML = `<div class="ai-intro"><div class="ai-ava">${ic('laoshi')}</div>
-      <h2 class="h2">Halo! Aku Laoshi 👋</h2>
+    box.innerHTML = `<div class="ai-intro"><div class="ai-ava big">${monkey()}</div>
+      <h2 class="h2">Halo! Aku ${esc(aiName())} 👋</h2>
       <p class="sub">Tanya apa saja tentang bahasa Mandarin — arti kata, contoh kalimat, cara pakai, atau perbedaan dua kata. Aku jawab dalam Bahasa Indonesia.</p>
       <div class="ai-tips">${AI_TIPS.map((t) => `<button class="chip" data-aitip="${esc(t)}">${esc(t)}</button>`).join('')}</div></div>`;
     return;
   }
   box.innerHTML = AICHAT.map((m) => m.role === 'user'
     ? `<div class="ai-msg me"><div class="bub">${esc(m.content).replace(/\n/g, '<br>')}</div></div>`
-    : `<div class="ai-msg ai"><div class="ava">${ic('laoshi')}</div><div class="bub">${m.pending ? '<span class="typing"><i></i><i></i><i></i></span>' : aiMd(m.content)}</div></div>`).join('');
+    : `<div class="ai-msg ai"><div class="ava">${monkey()}</div><div class="bub">${m.pending ? '<span class="typing"><i></i><i></i><i></i></span>' : m.anim ? '' : aiMd(m.content)}</div></div>`).join('');
   box.scrollTop = box.scrollHeight;
 }
 async function aiSend(text) {
@@ -826,13 +854,14 @@ async function aiSend(text) {
     const hist = AICHAT.filter((m) => !m.pending).map((m) => ({ role: m.role, content: m.content }));
     const r = await api.aiAsk(hist);
     AICHAT = AICHAT.filter((m) => !m.pending);
-    AICHAT.push({ role: 'assistant', content: r.reply || '(kosong)' });
+    const msg = { role: 'assistant', content: r.reply || '(kosong)', anim: true }; AICHAT.push(msg);
+    aiRender(); typeInto(document.querySelector('#aiMsgs .ai-msg.ai:last-child .bub'), msg.content, () => { msg.anim = false; });
   } catch (e) {
     AICHAT = AICHAT.filter((m) => !m.pending);
     AICHAT.push({ role: 'assistant', content: 'Maaf, ' + (e.message || 'ada gangguan') + ' 🙏' });
+    aiRender();
   }
   aiBusy = false; if (btn) btn.disabled = false;
-  aiRender();
 }
 /* ---- chat kecil "Tanya Laoshi" saat belajar ---- */
 let SHEET = { ctx: '', msgs: [], busy: false, first: true };
@@ -841,7 +870,7 @@ function aiSheetRender() {
   const quick = SHEET.msgs.length ? '' : `<div class="sh-tips">${['Beri 2 contoh kalimat', 'Kapan dan bagaimana dipakai?', 'Kata yang mirip atau lawannya?', 'Jelaskan karakternya'].map((q) => `<button class="chip" data-sheetq="${esc(q)}">${esc(q)}</button>`).join('')}</div>`;
   box.innerHTML = SHEET.msgs.map((m) => m.role === 'user'
     ? `<div class="ai-msg me"><div class="bub">${esc(m.content).replace(/\n/g, '<br>')}</div></div>`
-    : `<div class="ai-msg ai"><div class="ava">${ic('laoshi')}</div><div class="bub">${m.pending ? '<span class="typing"><i></i><i></i><i></i></span>' : aiMd(m.content)}</div></div>`).join('') + quick;
+    : `<div class="ai-msg ai"><div class="ava">${monkey()}</div><div class="bub">${m.pending ? '<span class="typing"><i></i><i></i><i></i></span>' : m.anim ? '' : aiMd(m.content)}</div></div>`).join('') + quick;
   box.scrollTop = box.scrollHeight;
 }
 function openAiSheet(c) {
@@ -849,7 +878,7 @@ function openAiSheet(c) {
   closeAiSheet();
   const el = document.createElement('div'); el.className = 'overlay sheet ai-sheet'; el.id = 'aiSheet'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true');
   el.innerHTML = `<div class="box">
-    <div class="sh-head"><div class="row" style="gap:8px;align-items:center"><span class="sh-ava">${ic('laoshi')}</span><div><b>Tanya Laoshi</b><div class="note">tentang <span class="han">${esc(c.h)}</span> ${c.p ? '· ' + esc(c.p) : ''} ${c.m ? '· ' + esc(c.m) : ''}</div></div></div><button class="icon-btn" data-act="closeai" aria-label="Tutup">${ic('x')}</button></div>
+    <div class="sh-head"><div class="row" style="gap:8px;align-items:center"><span class="sh-ava">${monkey()}</span><div><b>Tanya ${esc(aiName())}</b><div class="note">tentang <span class="han">${esc(c.h)}</span> ${c.p ? '· ' + esc(c.p) : ''} ${c.m ? '· ' + esc(c.m) : ''}</div></div></div><button class="icon-btn" data-act="closeai" aria-label="Tutup">${ic('x')}</button></div>
     <div id="shMsgs" class="ai-msgs sh-msgs"></div>
     <form id="shForm" class="ai-bar"><textarea id="shInput" rows="1" maxlength="600" placeholder="Tanya soal kata ini…"></textarea><button class="btn" type="submit" aria-label="Kirim">${ic('send')}</button></form></div>`;
   document.body.appendChild(el);
@@ -871,7 +900,8 @@ async function aiSheetSend(text) {
   try {
     const hist = SHEET.msgs.filter((m) => !m.pending).map((m, i) => ({ role: m.role, content: i === 0 ? SHEET.ctx + '\n' + m.content : m.content }));
     const r = await api.aiAsk(hist);
-    SHEET.msgs = SHEET.msgs.filter((m) => !m.pending); SHEET.msgs.push({ role: 'assistant', content: r.reply || '(kosong)' });
+    SHEET.msgs = SHEET.msgs.filter((m) => !m.pending); const msg = { role: 'assistant', content: r.reply || '(kosong)', anim: true }; SHEET.msgs.push(msg);
+    SHEET.busy = false; aiSheetRender(); typeInto(document.querySelector('#shMsgs .ai-msg.ai:last-child .bub'), msg.content, () => { msg.anim = false; }); return;
   } catch (e) {
     SHEET.msgs = SHEET.msgs.filter((m) => !m.pending); SHEET.msgs.push({ role: 'assistant', content: 'Maaf, ' + (e.message || 'ada gangguan') + ' 🙏' });
   }
@@ -880,7 +910,7 @@ async function aiSheetSend(text) {
 function renderAI() {
   $('#actionbar').hidden = true; document.documentElement.style.setProperty('--c', 'var(--brand)');
   $('#view').innerHTML = `<div class="ai-wrap">
-    <div class="page-head" style="margin-bottom:10px"><div><p class="eyebrow">Tanya-jawab Mandarin</p><h1 class="h1">AI Laoshi</h1></div>${AICHAT.length ? `<button class="chip" data-act="ainew">${ic('plus')} Obrolan baru</button>` : ''}</div>
+    <div class="page-head" style="margin-bottom:10px"><div><p class="eyebrow">Tanya-jawab Mandarin</p><h1 class="h1">AI ${esc(aiName())}</h1></div>${AICHAT.length ? `<button class="chip" data-act="ainew">${ic('plus')} Obrolan baru</button>` : ''}</div>
     <div id="aiMsgs" class="ai-msgs"></div>
     <form id="aiForm" class="ai-bar"><textarea id="aiInput" rows="1" maxlength="600" placeholder="Tulis pertanyaanmu… mis. apa beda 还 dan 再?" ${aiBusy ? 'disabled' : ''}></textarea>
       <button id="aiSend" class="btn" type="submit" aria-label="Kirim" ${aiBusy ? 'disabled' : ''}>${ic('send')}</button></form>
@@ -1359,6 +1389,7 @@ function tSettings() {
       <button class="switch" role="switch" aria-checked="${DRAFT.mw_quiz}" data-cfgtog="mw_quiz"><span class="track"></span>Aktifkan kuis kata satuan (量词)</button>
       <button class="switch" role="switch" aria-checked="${DRAFT.all_can_create}" data-cfgtog="all_can_create"><span class="track"></span>Semua murid boleh membuat kartu sendiri</button>
       <button class="switch" role="switch" aria-checked="${DRAFT.ai_laoshi}" data-cfgtog="ai_laoshi"><span class="track"></span>Aktifkan AI Laoshi (tanya-jawab Mandarin)</button>
+      <label class="field" for="aiName">Nama AI<input id="aiName" maxlength="20" value="${esc(DRAFT.ai_name || 'Laoshi')}" placeholder="Laoshi"></label>
       <p class="note">Kartu buatan murid hanya terlihat oleh pembuatnya, sampai kamu setujui di menu Persetujuan. AI Laoshi butuh Workers AI terpasang di Cloudflare (gratis); kalau belum, menunya tidak muncul.</p></div>
     <div class="panel stack"><h2 class="h3">Kategori untuk murid</h2><p class="note">Matikan kategori yang belum diajarkan.</p>
       <div class="row">${shared.map((d) => `<button class="chip" data-cfgdeck="${esc(d.id)}" aria-pressed="${!DRAFT.hidden_decks.includes(d.id)}"><span class="han">${esc(d.zh)}</span> ${esc(d.idn)}</button>`).join('')}</div></div>
@@ -1502,7 +1533,7 @@ document.addEventListener('click', async (e) => {
   else if (a === 'say') { e.stopPropagation(); if (Q && Q.cur) speak(sayText(Q.cur.c)); }
   else if (a === 'retryfinish') renderDone();
   else if (a === 'copycred' && lastCred) copyText(`${APP}\nNama: ${lastCred.name}\nUsername: ${lastCred.username}\nPassword: ${lastCred.password}\nLink: ${location.origin}`);
-  else if (a === 'savecfg') { DRAFT.default_mode = $('#defmode').value; const c = cleanSettings(DRAFT); $('#cfgnote').textContent = 'Menyimpan…'; try { await api.saveSettings(c); SET = c; $('#cfgnote').textContent = 'Tersimpan. Berlaku untuk semua murid.'; toast('Pengaturan disimpan.'); } catch (err) { $('#cfgnote').textContent = err.message; } }
+  else if (a === 'savecfg') { DRAFT.default_mode = $('#defmode').value; const _an = $('#aiName'); if (_an) DRAFT.ai_name = _an.value.trim() || 'Laoshi'; const c = cleanSettings(DRAFT); $('#cfgnote').textContent = 'Menyimpan…'; try { await api.saveSettings(c); SET = c; $('#cfgnote').textContent = 'Tersimpan. Berlaku untuk semua murid.'; toast('Pengaturan disimpan.'); } catch (err) { $('#cfgnote').textContent = err.message; } }
   else if (a === 'newdeck') { ED.newOpen = !ED.newOpen; $('#newDeckForm').hidden = !ED.newOpen; if (ED.newOpen) $('#ndz').focus(); }
   else if (a === 'renamedeck') { const f = $('#renameForm'); f.hidden = !f.hidden; }
   else if (a === 'deldeck') { if (!ED.armDeck) { ED.armDeck = true; b.dataset.armed = '1'; b.innerHTML = `${ic('trash')} Ketuk lagi untuk menghapus`; return; } ED.armDeck = false; try { await api.deleteDeck(ED.deck); ED.deck = null; await reloadContent(); toast('Kategori dan semua kartunya dihapus.'); renderCards(); } catch (err) { toast(err.message); } }

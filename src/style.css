@@ -586,3 +586,14 @@ code { font: 600 13px ui-monospace, SFMono-Regular, Menlo, monospace; background
 .sh-tips .chip { white-space: normal; height: auto; padding: 8px 12px; font-size: 13px; text-align: left; }
 .chip.ailah { background: var(--brand-soft); color: var(--brand); border-color: transparent; font-weight: 700; }
 .chip.ailah .i { width: 16px; height: 16px; }
+
+/* ===== monyet + efek ngetik ===== */
+.mk, .ai-ava .mk, .sh-ava .mk { display: block; width: 100%; height: 100%; }
+.monkey { width: 100%; height: 100%; display: block; }
+.ai-msg .ava { background: #f3e2cf; overflow: hidden; padding: 3px; }
+.ai-msg .ava .mk { width: 100%; height: 100%; }
+.ai-ava.big { background: #f3e2cf; padding: 8px; }
+.sh-ava { background: #f3e2cf; overflow: hidden; padding: 3px; }
+.chip.ailah .mk { width: 18px; height: 18px; display: inline-block; vertical-align: -4px; }
+.cur { display: inline-block; width: 2px; height: 1.05em; background: var(--brand); margin-left: 1px; vertical-align: -2px; animation: blink 1s step-end infinite; }
+@keyframes blink { 50% { opacity: 0; } }
