@@ -71,6 +71,8 @@ export const api = {
   updateCard: (c) => call('POST', '/card/update', c),
   deleteCard: (id) => call('POST', '/card/delete', { id }),
   async uploadImage(file) { const b = await shrink(file); return (await call('POST', '/image', b, true)).url; },
+  async setPhoto(file) { const b = await shrink(file); return (await call('POST', '/me/photo', b, true)).photo; },
+  clearPhoto: () => call('POST', '/me/photo/clear', {}),
 
   // guru
   changePassword: (oldPw, newPw) => call('POST', '/password', { old: oldPw, new: newPw }),

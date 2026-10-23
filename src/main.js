@@ -5,7 +5,7 @@ import { api } from './api/http.js';
 import { hbars, lineChart } from './charts.js';
 
 const APP = 'Alvaro Mandarin Flashcard Tamer';
-const APP_VERSION = '2026.10.24-ai3';
+const APP_VERSION = '2026.10.24-ai4';
 const BUILD = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev';
 
 /* ================= helpers ================= */
@@ -22,6 +22,8 @@ const svgSrc = (k) => SVGSRC[k] || (SVGSRC[k] = 'data:image/svg+xml;charset=utf-
 const scoreCls = (v) => (v >= 75 ? 'g' : v >= 50 ? 'w' : 'b');
 const scoreTag = (v) => `<span class="score ${scoreCls(v ?? 0)}">${v ?? 0}</span>`;
 const initial = (n) => esc(([...(n || '?')][0] || '?').toUpperCase());
+const avaHTML = (name, photo, cls) => `<div class="avatar ${cls || ''}" aria-hidden="true">${photo ? `<img src="${esc(photo)}" alt="">` : initial(name)}</div>`;
+function pickImage(cb) { const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/png,image/jpeg,image/webp,image/gif'; i.onchange = () => { const f = i.files && i.files[0]; if (f) cb(f); }; i.click(); }
 
 const ICON = {
   learn: '<rect x="3" y="5" width="13" height="16" rx="2"/><path d="M8 3h11a2 2 0 0 1 2 2v13"/>',
@@ -224,14 +226,15 @@ function planCards() {
   if (S.split.on) { const ps = parts(); if (!ps.length) return []; if (S.split.part >= ps.length) S.split.part = 0; return ps[S.split.part]; }
   const cs = poolCards(); return S.all ? cs : cs.filter(isDue);
 }
+const lessonsOf = (lv) => DECKS.filter((d) => d.hskLevel === lv && d.hskLesson).length;
 const dlBtn = (d) => `<span class="dl" role="button" tabindex="0" data-dl="${esc(d.id)}" aria-label="Unduh tabel kosakata" title="Unduh tabel kosakata">${ic('download')}</span>`;
 function hskCard(d) {
-  const on = S.sel.includes(d.id), n = d.cards.length;
-  return `<button class="deck hsk lv${d.hskLevel}" data-pick="${esc(d.id)}" aria-pressed="${on}" style="--dc:${d.color}"><span class="chk">${ic('check')}</span>${dlBtn(d)}
+  const open = HSK_OPEN === d.hskLevel, n = d.cards.length;
+  return `<button class="deck hsk lv${d.hskLevel} ${open ? 'open' : ''}" data-hsk="${d.hskLevel}" aria-expanded="${open}" style="--dc:${d.color}">${dlBtn(d)}
     <div class="hsk-badge"><span class="h3o">HSK 3.0</span><span class="lvl">级${d.hskLevel}</span></div>
     <div class="hsk-big">HSK${d.hskLevel}</div>
-    <div class="id">${n} kosakata inti · semua pelajaran</div>
-    <div class="meta"><span class="dotc"></span>Ketuk untuk pilih · ketuk 2× untuk mulai</div></button>`;
+    <div class="id">${n} kosakata · ${lessonsOf(d.hskLevel)} pelajaran</div>
+    <div class="meta"><span class="dotc"></span>${open ? 'Pelajaran terbuka di bawah ↓' : 'Ketuk untuk lihat semua pelajaran'}</div></button>`;
 }
 function deckCard(d) {
   if (d.hskLevel && !d.hskLesson) return hskCard(d);
@@ -251,6 +254,16 @@ function deckCard(d) {
     <div class="bar"><i style="width:${(sched / d.cards.length) * 100}%"></i></div>
     <div class="meta"><span class="dotc"></span>${kindNow() === 'mw' ? `${mwN} kartu ber-量词` : `${due} siap · ${d.cards.length} kartu`}</div></button>`;
 }
+function lastSessHTML() {
+  const r = store.get('lastsess', null); if (!r || !ME || (savedRun() && RESUME_OK)) return '';
+  const decks = (r.decks || []).map((id) => deckOf(id)).filter((d) => d && d.cards.length && studyDecks().some((x) => x.id === d.id));
+  if (!decks.length) return '';
+  const names = decks.map((d) => esc(d.zh)).join('、');
+  const days = Math.floor((Date.now() - (r.at || 0)) / 864e5);
+  const when = days <= 0 ? 'terakhir kamu pelajari' : days === 1 ? 'kemarin' : `${days} hari lalu`;
+  return `<div class="resume last"><div class="ic">${ic('hist')}</div><div><b>Lanjut belajar</b><span class="han">${names}</span><span> · ${r.kind === 'mw' ? 'Kuis 量词' : 'Flashcard'} · ${when}</span></div>
+    <div class="row"><button class="btn sm" data-act="studylast">${ic('play')} Belajar lagi</button></div></div>`;
+}
 function resumeHTML() {
   const r = savedRun(); if (!r || !RESUME_OK) return '';
   const nm = r.decks.map((id) => deckOf(id)?.zh).filter(Boolean).join('、');
@@ -268,11 +281,12 @@ function renderLearn() {
   const hskLessons = ds.filter((d) => d.hskLesson && d.hskLevel === HSK_OPEN).sort((a, b) => a.hskLesson - b.hskLesson);
   const ps = S.split.on ? parts() : [], dp = doneParts(), pool = poolCards().length;
   if (S.split.part >= ps.length) S.split.part = 0;
-  $('#view').innerHTML = `<div class="page-head"><div class="hello"><div class="avatar" aria-hidden="true">${initial(ME.display_name)}</div><div>
+  $('#view').innerHTML = `<div class="page-head"><div class="hello"><button class="avatar edit" data-act="setphoto" title="Ganti foto profil" aria-label="Ganti foto profil">${ME.photo ? `<img src="${esc(ME.photo)}" alt="">` : initial(ME.display_name)}<span class="cam">${ic('image')}</span></button><div>
       <h1 class="h1">Halo, ${esc(ME.display_name)}!</h1><p class="sub" style="margin-top:2px">${dueAll ? `${dueAll} kartu siap kamu pelajari hari ini.` : 'Semua kartu sudah terjadwal. Kerja bagus!'}</p></div></div>
     ${ds.length ? `<button class="chip" data-act="selall">${S.sel.length === ds.length ? 'Kosongkan pilihan' : 'Pilih semua'}</button>` : ''}</div>
     ${installHTML()}
     <div id="resumeBox">${resumeHTML()}</div>
+    ${lastSessHTML()}
     <div class="learnbar">
       ${mwOn() ? `<div class="seg" role="group" aria-label="Jenis latihan"><button data-lkind="card" aria-pressed="${kindNow() === 'card'}">Flashcard</button><button data-lkind="mw" aria-pressed="${kindNow() === 'mw'}">Kuis 量词</button></div>` : ''}
       <button class="chip" data-act="split" aria-pressed="${S.split.on}">${ic('split')} Atur sesi</button>
@@ -287,8 +301,8 @@ function renderLearn() {
       <div class="parts">${ps.map((p, i) => `<button class="part ${dp.includes(i) ? 'ok' : ''}" data-part="${i}" aria-pressed="${S.split.part === i}">Sesi ${i + 1}<small>${dp.includes(i) ? '✓ selesai · ' : ''}${p.length} kartu</small></button>`).join('') || '<span class="note">Pilih kategori dulu.</span>'}</div>
     </div>` : `<p class="note" style="margin:-6px 0 16px">${kindNow() === 'mw' ? 'Kuis 量词: tebak kata satuan yang tepat untuk tiap benda, misalnya 一<b>本</b>书.' : 'Ketuk kategori untuk memilih. <b>Ketuk 2× cepat</b> untuk membuka tombol Mulai. Nilai 1 & 2 diulang di sesi ini, 3 muncul besok, 4 muncul 3 hari lagi.'}</p>`}
     ${hskLevels.length ? `<div class="sec-title">${ic('book2')} HSK 3.0</div><div class="decks hsk-row">${hskLevels.map(hskCard).join('')}</div>
-      <div class="hsk-chips">${hskLevels.map((d) => `<button class="chip ${HSK_OPEN === d.hskLevel ? 'on' : ''}" data-hsk="${d.hskLevel}">${ic('list')} 级${d.hskLevel} · per pelajaran</button>`).join('')}</div>
-      ${hskLessons.length ? `<div class="sec-title sub">级${HSK_OPEN} · ${hskLessons.length} pelajaran</div><div class="decks">${hskLessons.map(deckCard).join('')}</div>` : ''}` : ''}
+      ${HSK_OPEN && hskLessons.length ? `<div class="hsk-open"><div class="hsk-open-bar"><b>级${HSK_OPEN} · ${hskLessons.length} pelajaran</b><span class="spacer"></span><button class="btn sm" data-studyhsk="${HSK_OPEN}">${ic('play')} Belajar semua</button><button class="chip" data-babpick="${HSK_OPEN}">${ic('list')} Per bab</button><button class="chip" data-hsk="${HSK_OPEN}">${ic('x')} Tutup</button></div>
+        <div class="decks">${hskLessons.map(deckCard).join('')}</div></div>` : '<p class="note" style="margin:-4px 0 14px">Ketuk salah satu kartu HSK di atas untuk membuka semua pelajarannya.</p>'}` : ''}
     ${!isTeacher() || priv.length ? `<div class="sec-title">${ic('key')} Pribadi${priv.length ? ' · ' + priv.length : ''}</div><div class="decks">${!isTeacher() ? `<button class="deck custom" data-act="custom" aria-label="Buat kartu sendiri"><span class="plus">${ic('plus')}</span><b>Custom</b><span>Buat kartu sendiri</span></button>` : ''}${priv.map(deckCard).join('')}</div>${rest.length ? '<div class="sec-title">Kategori kelas</div>' : ''}` : ''}
     <div class="decks">${rest.map(deckCard).join('') || (priv.length ? '' : '<div class="panel empty"><b>Belum ada kategori</b>Gurumu belum menampilkan kategori untukmu.</div>')}</div>
     <p class="ver">Versi ${APP_VERSION}</p>`;
@@ -327,6 +341,20 @@ function renderActionbar() {
     toast(`${pool} kartu dibagi jadi ${parts().length} sesi, masing-masing ${S.split.size} kartu.`);
   });
 }
+
+/* ---- pilih bab HSK ---- */
+function openBabPick(lv) {
+  const ls = DECKS.filter((d) => d.hskLevel === lv && d.hskLesson).sort((a, b) => a.hskLesson - b.hskLesson);
+  if (!ls.length) return;
+  const el = document.createElement('div'); el.className = 'overlay sheet babpick'; el.id = 'babPick'; el.setAttribute('role', 'dialog');
+  el.innerHTML = `<div class="box">
+    <div class="sh-head"><b>Pilih bab · HSK 级${lv}</b><button class="icon-btn" data-act="closebab" aria-label="Tutup">${ic('x')}</button></div>
+    <p class="note" style="margin:0 0 10px">Ketuk bab untuk langsung belajar pelajaran itu.</p>
+    <div class="bab-grid">${ls.map((d) => `<button class="bab" data-babgo="${esc(d.id)}"><b>${d.hskLesson}</b><span>${d.cards.length} kata</span></button>`).join('')}</div></div>`;
+  document.body.appendChild(el);
+  el.addEventListener('click', (e) => { if (e.target === el) closeBabPick(); });
+}
+function closeBabPick() { const el = document.getElementById('babPick'); if (el) el.remove(); }
 
 /* ---- unduh tabel kosakata (semua deck) ---- */
 let HSK_OPEN = 0;
@@ -634,7 +662,7 @@ async function renderDone(early) {
   $('#view').innerHTML = '<div class="study"><div class="panel done"><p class="note">Menyimpan hasil dan menghitung skor…</p></div></div>';
   await Q.chain;
   let s;
-  try { s = await withRetry(() => api.finishSession(Q.sid, Q.early)); clearRun(); if (Q.part && !Q.early) markPart(Q.part.key, Q.part.idx); }
+  try { s = await withRetry(() => api.finishSession(Q.sid, Q.early)); clearRun(); if (Q.part && !Q.early) markPart(Q.part.key, Q.part.idx); try { store.set('lastsess', { decks: Q.decks, kind: Q.kind, at: Date.now() }); } catch (_) { /* abaikan */ } }
   catch (e) { $('#view').innerHTML = `<div class="study"><div class="panel done"><h2 class="h2">Skor belum tersimpan</h2><p class="sub">${esc(e.message)}</p><button class="btn" data-act="retryfinish">Coba simpan lagi</button></div></div>`; return; }
   const pct = s.score ?? 0;
   if (pct >= 75) burst(48);
@@ -912,7 +940,7 @@ function renderAI() {
   $('#view').innerHTML = `<div class="ai-wrap">
     <div class="page-head" style="margin-bottom:10px"><div><p class="eyebrow">Tanya-jawab Mandarin</p><h1 class="h1">AI ${esc(aiName())}</h1></div>${AICHAT.length ? `<button class="chip" data-act="ainew">${ic('plus')} Obrolan baru</button>` : ''}</div>
     <div id="aiMsgs" class="ai-msgs"></div>
-    <form id="aiForm" class="ai-bar"><textarea id="aiInput" rows="1" maxlength="600" placeholder="Tulis pertanyaanmu… mis. apa beda 还 dan 再?" ${aiBusy ? 'disabled' : ''}></textarea>
+    <form id="aiForm" class="ai-bar"><textarea id="aiInput" rows="1" maxlength="600" placeholder="Tulis pertanyaanmu…" ${aiBusy ? 'disabled' : ''}></textarea>
       <button id="aiSend" class="btn" type="submit" aria-label="Kirim" ${aiBusy ? 'disabled' : ''}>${ic('send')}</button></form>
     <p class="note" style="text-align:center;margin-top:8px">AI bisa keliru — untuk soal penting, pastikan ke gurumu.</p></div>`;
   aiRender();
@@ -1234,7 +1262,7 @@ async function tLive() {
       <div class="panel-head"><h2 class="h3">Sesi berjalan</h2><div class="row"><span class="note">Diperbarui ${new Date(now).toLocaleTimeString('id-ID')} · tiap 5 detik</span>
         ${active.length ? `<button class="chip danger" data-endall="1" data-armed="${LIVE_ARM === 'all' ? 1 : 0}">${ic('stop')} ${LIVE_ARM === 'all' ? 'Ketuk lagi: akhiri semua' : 'Akhiri semua sesi'}</button>` : ''}</div></div>
       ${active.length ? `<div class="live">${active.map((r) => `<div class="lv ${awayNow(r) ? 'away' : ''}">
-        <div class="who"><div class="avatar">${initial(r.name)}</div><div><b>${esc(r.name)}</b><span>${esc(r.class_name || 'Tanpa kelas')} · <span class="han">${esc(r.decks.map(nm).join('、'))}</span>${r.mode === 'mw' ? ' · 量词' : ''}</span></div></div>
+        <div class="who">${avaHTML(r.name, r.photo, '')}<div><b>${esc(r.name)}</b><span>${esc(r.class_name || 'Tanpa kelas')} · <span class="han">${esc(r.decks.map(nm).join('、'))}</span>${r.mode === 'mw' ? ' · 量词' : ''}</span></div></div>
         <div>${status(r)}</div>
         <div class="prog"><i style="width:${r.planned ? Math.min(100, (r.done / r.planned) * 100) : 0}%"></i></div>
         <div class="foot"><span>${r.done}${r.planned ? `/${r.planned}` : ''} kartu · mulai ${new Date(r.started_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span><span style="color:${r.away_count ? 'var(--bad)' : 'inherit'}">Keluar ${r.away_count}× · ${dur(r.away_ms + (r.state === 'away' ? now - (r.state_since || now) : 0))}</span><span style="color:${r.rush ? 'var(--warn, #b8860b)' : 'inherit'}">Asal tekan ${r.rush}× · clue ${r.clues}</span></div>
@@ -1416,7 +1444,7 @@ function leaveStudy() {
 let endArmed = 0, LAST_TAP = { id: null, t: 0 };
 document.addEventListener('click', async (e) => {
   if (!e.target.closest('#emojiPop') && !e.target.closest('[data-emo]')) closeEmoji();
-  const b = e.target.closest('[data-sheetq],[data-aitip],[data-dl],[data-hsk],[data-vis],[data-pstu],[data-lkind],[data-part],[data-pickstu],[data-mkind],[data-warn],[data-chatto],[data-endrun],[data-endall],[data-nav],[data-pick],[data-act],[data-mode],[data-rate],[data-t],[data-ttab],[data-sact],[data-stu],[data-cfgmode],[data-cfgtog],[data-cfgdeck],[data-edeck],[data-etab],[data-ncolor],[data-rcolor],[data-emo],[data-pick-emo],[data-rm],[data-approve]');
+  const b = e.target.closest('[data-sheetq],[data-aitip],[data-dl],[data-hsk],[data-studyhsk],[data-babpick],[data-babgo],[data-vis],[data-pstu],[data-lkind],[data-part],[data-pickstu],[data-mkind],[data-warn],[data-chatto],[data-endrun],[data-endall],[data-nav],[data-pick],[data-act],[data-mode],[data-rate],[data-t],[data-ttab],[data-sact],[data-stu],[data-cfgmode],[data-cfgtog],[data-cfgdeck],[data-edeck],[data-etab],[data-ncolor],[data-rcolor],[data-emo],[data-pick-emo],[data-rm],[data-approve]');
   if (!b) { const fc = e.target.closest('#fc'); if (fc && Q && Q.cur && Q.cur.answered) flip(); return; }
   const ds = b.dataset;
   if (ds.nav) { leaveStudy(); go(ds.nav); return; }
@@ -1441,7 +1469,10 @@ document.addEventListener('click', async (e) => {
   }
   if (ds.aitip !== undefined) { aiSend(ds.aitip); return; }
   if (ds.dl !== undefined) { e.preventDefault(); e.stopPropagation(); downloadTable(ds.dl); return; }
-  if (ds.hsk !== undefined) { const lv = +ds.hsk; HSK_OPEN = HSK_OPEN === lv ? 0 : lv; renderLearn(); return; }
+  if (ds.hsk !== undefined) { const lv = +ds.hsk; HSK_OPEN = HSK_OPEN === lv ? 0 : lv; renderLearn(); if (HSK_OPEN) setTimeout(() => { const o = document.querySelector('.hsk-open'); if (o) o.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60); return; }
+  if (ds.studyhsk !== undefined) { S.sel = ['hsk' + ds.studyhsk]; S.split.on = false; S.kind = 'card'; savePrefs(); startStudy(); return; }
+  if (ds.babpick !== undefined) { openBabPick(+ds.babpick); return; }
+  if (ds.babgo !== undefined) { closeBabPick(); S.sel = [ds.babgo]; S.split.on = false; S.kind = 'card'; savePrefs(); startStudy(); return; }
   if (ds.pick) {
     const id = ds.pick, t = Date.now();
     if (LAST_TAP.id === id && t - LAST_TAP.t < 500) { // ketuk 2×: pilih & buka tombol Mulai
@@ -1501,6 +1532,7 @@ document.addEventListener('click', async (e) => {
     endArmed = 0; renderDone(true);
   }
   else if (a === 'resume') resumeRun();
+  else if (a === 'studylast') { const r = store.get('lastsess', null); if (!r) return; const ids = (r.decks || []).filter((id) => studyDecks().some((x) => x.id === id)); if (!ids.length) { toast('Kategorinya sudah tidak ada.'); return; } S.sel = ids; S.kind = r.kind === 'mw' && mwOn() ? 'mw' : 'card'; S.split.on = false; savePrefs(); startStudy(); }
   else if (a === 'clue') useClue();
   else if (a === 'install' && installEvt) { installEvt.prompt(); try { await installEvt.userChoice; } catch (_) { /* batal */ } installEvt = null; renderLearn(); }
   else if (a === 'noinstall') { store.set('noinstall', true); renderLearn(); }
@@ -1508,9 +1540,12 @@ document.addEventListener('click', async (e) => {
   else if (a === 'senddeck') openSendSheet(ED.deck);
   else if (a === 'skip') skipCard();
   else if (a === 'closebar') { BAR_OPEN = false; renderActionbar(); }
+  else if (a === 'closebab') closeBabPick();
   else if (a === 'custom') { if (!canCreate()) { toast('Gurumu belum mengizinkan membuat kartu sendiri.'); return; } ED.deck = null; ED.newOpen = true; ED.wantPublic = false; go('cards'); setTimeout(() => { const z = $('#ndz'); if (z) z.focus(); }, 50); }
   else if (a === 'lang') { S.lang = { id: 'en', en: 'both', both: 'id' }[S.lang] || 'id'; savePrefs(); b.textContent = LANG_LABEL[S.lang]; if (Q && Q.cur) { const cur = Q.cur; const f = document.querySelector('.face.front'), bk = document.querySelector('.face.bface'); if (bk) { bk.querySelectorAll('.m').forEach((x) => { x.textContent = mean(cur.c); }); } if (f && cur.m === 'arti') { const bi = f.querySelector('.bigid'); if (bi) bi.textContent = mean(cur.c); } } toast('Arti: ' + { id: 'bahasa Indonesia', en: 'English', both: 'Indonesia + English' }[S.lang]); }
   else if (a === 'ainew') { AICHAT = []; renderAI(); }
+  else if (a === 'setphoto') { pickImage(async (f) => { toast('Mengunggah foto…'); try { const url = await api.setPhoto(f); ME.photo = url; toast('Foto profil diganti.'); if (S.view === 'learn') renderLearn(); shell(); } catch (err) { toast(err.message); } }); }
+  else if (a === 'rmphoto') { try { await api.clearPhoto(); ME.photo = ''; toast('Foto dihapus.'); renderLearn(); } catch (err) { toast(err.message); } }
   else if (a === 'asklaoshi') { if (Q && Q.cur) openAiSheet(Q.cur.c); }
   else if (a === 'closeai') closeAiSheet();
   else if (ds.sheetq !== undefined) aiSheetSend(ds.sheetq);

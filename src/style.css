@@ -597,3 +597,37 @@ code { font: 600 13px ui-monospace, SFMono-Regular, Menlo, monospace; background
 .chip.ailah .mk { width: 18px; height: 18px; display: inline-block; vertical-align: -4px; }
 .cur { display: inline-block; width: 2px; height: 1.05em; background: var(--brand); margin-left: 1px; vertical-align: -2px; animation: blink 1s step-end infinite; }
 @keyframes blink { 50% { opacity: 0; } }
+
+/* ===== foto profil ===== */
+.avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; display: block; }
+.avatar.edit { position: relative; padding: 0; overflow: visible; border: 0; background: var(--brand-soft); color: var(--brand); cursor: pointer; }
+.avatar.edit > img { border-radius: 14px; }
+.avatar.edit .cam { position: absolute; right: -4px; bottom: -4px; width: 20px; height: 20px; border-radius: 50%; background: var(--brand); color: #fff; display: grid; place-items: center; box-shadow: 0 0 0 2px var(--surface); }
+.avatar.edit .cam .i { width: 12px; height: 12px; }
+.lv .who .avatar img, .avatar img { border-radius: inherit; }
+
+/* ===== kotak ketik AI lebih rapi ===== */
+.ai-bar { align-items: center; padding: 6px 6px 6px 8px; }
+.ai-bar textarea { line-height: 1.4; padding: 9px 8px; min-height: 24px; }
+.ai-bar textarea::placeholder { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ai-bar .btn { width: 46px; height: 46px; border-radius: 14px; }
+.ai-wrap { gap: 0; }
+.ai-msgs { padding-bottom: 14px; }
+@media (max-width: 640px) {
+  .ai-intro { padding: 8px 6px 16px; }
+  .ai-tips .chip { width: 100%; }
+}
+
+/* ===== HSK buka pelajaran + pilih bab ===== */
+.deck.hsk.open { outline: 3px solid #fff; outline-offset: -3px; }
+.hsk-open { margin: 4px 0 8px; }
+.hsk-open-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 10px 0 12px; }
+.hsk-open-bar b { font-size: 15px; }
+.babpick .box { max-height: calc(100dvh - 60px); overflow: auto; }
+.bab-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 10px; }
+.bab { aspect-ratio: 1; border-radius: 14px; border: 1px solid var(--line-2); background: var(--surface); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; transition: transform .12s, border-color .12s, background .12s; }
+.bab b { font-size: 22px; font-weight: 800; color: var(--brand); } .bab span { font-size: 11px; color: var(--muted); font-weight: 650; }
+.bab:hover, .bab:active { border-color: var(--brand); background: var(--brand-soft); transform: translateY(-2px); }
+
+.resume.last { border-color: var(--line-2); background: var(--surface); }
+.resume.last .ic { background: var(--surface-2); color: var(--brand); }

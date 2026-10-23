@@ -133,6 +133,7 @@ const MIGRATIONS = [
   `CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, kind TEXT NOT NULL, text TEXT NOT NULL, created_at INTEGER NOT NULL, seen_at INTEGER)`,
   `CREATE INDEX IF NOT EXISTS messages_user ON messages(user_id, seen_at)`,
   `ALTER TABLE deliveries ADD COLUMN sender_id TEXT`,
+  `ALTER TABLE users ADD COLUMN photo TEXT NOT NULL DEFAULT ''`,
 ];
 const SCHEMA_VERSION = '5';
 const RUSH_RATE_MS = 1200, RUSH_QUIZ_MS = 700;
@@ -198,7 +199,7 @@ async function getSettings(db) {
 }
 
 /* ---------------- auth ---------------- */
-const pubUser = (u) => ({ id: u.id, role: u.role, username: u.username, display_name: u.display_name, class_name: u.class_name, active: !!u.active, can_create: u.role === 'teacher' || !!u.can_create });
+const pubUser = (u) => ({ id: u.id, role: u.role, username: u.username, display_name: u.display_name, class_name: u.class_name, active: !!u.active, can_create: u.role === 'teacher' || !!u.can_create, photo: u.photo ? '/api/img/' + u.photo : '' });
 const isTeacher = (u) => u.role === 'teacher';
 function deckVisible(u, d, settings, delivered) {
   if (isTeacher(u) || (d.owner_id && d.owner_id === u.id)) return true;
@@ -395,6 +396,26 @@ export async function onRequest(ctx) {
     const needTeacher = () => { if (!teacher) fail(403, 'Khusus guru.'); };
 
     if (path === '/me' && method === 'GET') return json(pubUser(user));
+    if (path === '/me/photo' && method === 'POST') {
+      if (!(await usageOk(db, 'pf:' + user.id, 15, DAY))) fail(429, 'Terlalu sering ganti foto hari ini. Coba lagi besok.');
+      const len = Number(req.headers.get('Content-Length') || 0);
+      if (len > 512 * 1024) fail(413, 'Foto maksimal 500 KB.');
+      const buf = new Uint8Array(await req.arrayBuffer());
+      if (buf.length > 512 * 1024 || buf.length < 16) fail(413, 'Foto tidak valid atau terlalu besar.');
+      const type = sniffImage(buf);
+      if (!type) fail(415, 'Pakai foto PNG, JPG, WEBP, atau GIF.');
+      if ((await db.prepare('SELECT COUNT(*) AS n FROM images').first('n')) >= 5000) fail(400, 'Batas foto tercapai.');
+      const id = randHex(16);
+      await db.batch([
+        db.prepare('INSERT INTO images (id, type, data, created_at) VALUES (?1,?2,?3,?4)').bind(id, type, buf, now()),
+        db.prepare('UPDATE users SET photo = ?2 WHERE id = ?1').bind(user.id, id),
+      ]);
+      return json({ photo: '/api/img/' + id });
+    }
+    if (path === '/me/photo/clear' && method === 'POST') {
+      await db.prepare("UPDATE users SET photo = '' WHERE id = ?1").bind(user.id).run();
+      return json({ ok: true });
+    }
 
     if (path.startsWith('/img/') && method === 'GET') {
       const id = path.slice(5);
@@ -861,7 +882,7 @@ export async function onRequest(ctx) {
     if (path === '/t/live' && method === 'GET') {
       needTeacher();
       const t = now();
-      const rows = (await db.prepare(`SELECT r.*, u.display_name, u.class_name,
+      const rows = (await db.prepare(`SELECT r.*, u.display_name, u.class_name, u.photo,
           (SELECT COUNT(*) FROM answers a WHERE a.run_id = r.id AND a.first_try = 1) AS done,
           (SELECT created_at FROM messages m WHERE m.user_id = r.user_id ORDER BY created_at DESC LIMIT 1) AS msg_at,
           (SELECT seen_at FROM messages m WHERE m.user_id = r.user_id ORDER BY created_at DESC LIMIT 1) AS msg_seen
@@ -869,7 +890,7 @@ export async function onRequest(ctx) {
         WHERE (r.finished_at IS NULL AND r.last_seen > ?1) OR r.finished_at > ?2
         ORDER BY r.started_at DESC LIMIT 200`).bind(t - 15 * 60e3, t - 30 * 60e3).all()).results;
       return json({ now: t, runs: rows.map((r) => ({ ...fmtRun(r), name: r.display_name, class_name: r.class_name, planned: r.planned, done: r.done,
-        state: r.state, state_since: r.state_since, last_seen: r.last_seen, msg_at: r.msg_at, msg_seen: r.msg_seen })) });
+        state: r.state, state_since: r.state_since, last_seen: r.last_seen, msg_at: r.msg_at, msg_seen: r.msg_seen, photo: r.photo ? '/api/img/' + r.photo : '' })) });
     }
 
     fail(404, 'Tidak ditemukan.');
