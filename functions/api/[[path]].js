@@ -465,25 +465,33 @@ export async function onRequest(ctx) {
         + 'Kalau murid bertanya perbedaan dua kata/tata bahasa: jelaskan ringkas poin bedanya, lalu beri contoh untuk masing-masing. '
         + 'Jawaban singkat, rapi, pakai poin bila perlu. Jangan mengarang; kalau ragu, katakan dengan jujur. '
         + 'Hanya bahas pembelajaran bahasa Mandarin; jika ditanya hal lain, ajak kembali ke topik belajar Mandarin dengan sopan.';
-      // proven model (dipakai terjemahan) didahulukan, lalu cadangan
-      const MODELS = ['@cf/meta/llama-3.1-8b-instruct', '@cf/qwen/qwen1.5-14b-chat-awq', '@cf/meta/llama-3-8b-instruct', '@cf/qwen/qwen2.5-7b-instruct'];
-      let reply = '', lastErr = '', used = '';
+      // daftar model kandidat (yang pertama berhasil dipakai)
+      const MODELS = (typeof b.model === 'string' && /^@cf\/[\w./-]+$/.test(b.model)) ? [b.model] : [
+        '@cf/meta/llama-3.1-8b-instruct',
+        '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+        '@cf/meta/llama-3.2-3b-instruct',
+        '@cf/qwen/qwen1.5-14b-chat-awq',
+        '@cf/mistral/mistral-7b-instruct-v0.2',
+        '@cf/meta/llama-3-8b-instruct',
+      ];
+      let reply = '', used = '';
+      const tries = [];
       const chat = [{ role: 'system', content: sys }, ...msgs];
       for (const model of MODELS) {
+        const nm = model.split('/').pop();
         try {
           const res = await env.AI.run(model, { messages: chat, max_tokens: 640 });
           let v = res && typeof res === 'object' ? (res.response !== undefined ? res.response : res.result !== undefined ? res.result : res.output_text) : res;
           if (v && typeof v === 'object') v = v.response || v.text || v.output || '';
           reply = String(v || '').trim();
           if (reply) { used = model; break; }
-          lastErr = 'kosong dari ' + model;
-        } catch (e) { lastErr = (model.split('/').pop()) + ': ' + String((e && e.message) || e).slice(0, 140); }
+          tries.push(nm + ': kosong');
+        } catch (e) { tries.push(nm + ': ' + String((e && e.message) || e).replace(/\s+/g, ' ').slice(0, 90)); }
       }
       reply = reply.slice(0, 4000);
       if (!reply) {
-        // tampilkan sebab asli supaya mudah diperbaiki (khusus guru lebih detail)
-        const d = teacher && lastErr ? ' [' + lastErr + ']' : '';
-        fail(502, 'AI belum bisa menjawab.' + d + ' Coba lagi, atau pastikan Workers AI aktif.');
+        const d = teacher && tries.length ? ' [' + tries.join(' | ') + ']' : '';
+        fail(502, 'AI belum bisa menjawab.' + d);
       }
       return json({ reply, model: teacher ? used : undefined });
     }

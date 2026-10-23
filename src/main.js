@@ -5,7 +5,7 @@ import { api } from './api/http.js';
 import { hbars, lineChart } from './charts.js';
 
 const APP = 'Alvaro Mandarin Flashcard Tamer';
-const APP_VERSION = '2026.10.24-ai2';
+const APP_VERSION = '2026.10.24-ai3';
 const BUILD = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev';
 
 /* ================= helpers ================= */
