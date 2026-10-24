@@ -258,6 +258,47 @@ check('Ganti password murid membuat sesi lama keluar', st == 200 and S1.req('GET
 check('Guru tidak bisa diubah lewat menu murid', T.req('POST', '/api/t/students', {'action': 'delete', 'id': me['id']})[0] == 404)
 check('Header keamanan halaman (CSP)', "frame-ancestors 'none'" in (Client().req('GET', '/')[2].get('Content-Security-Policy') or ''))
 
+# ---- Sosial: beranda flashcard (posting kartu) ----
+SA, SB, SX = Client(), Client(), Client()
+_sfx = str(int(time.time() * 1000))[-7:]
+_una, _unb = 'dewi' + _sfx, 'eka' + _sfx
+_c = T.req('GET', '/api/content')[1]['settings']
+T.req('POST', '/api/t/settings', {**_c, 'all_can_create': True})
+_, pa, _ = T.req('POST', '/api/t/students', {'action': 'create', 'display_name': 'Dewi', 'username': _una, 'class_name': '3A'})
+_, pb, _ = T.req('POST', '/api/t/students', {'action': 'create', 'display_name': 'Eka', 'username': _unb, 'class_name': '3A'})
+SA.req('POST', '/api/login', {'username': _una, 'password': pa['password']})
+SB.req('POST', '/api/login', {'username': _unb, 'password': pb['password']})
+# Dewi buat deck + kartu, ajukan publik
+st, dk, _ = SA.req('POST', '/api/deck', {'zh': 'Kata Kerjaku', 'idn': 'kata kerja', 'color': '#e8513f', 'public': False})
+did = dk.get('id')
+SA.req('POST', '/api/cards/bulk', {'deck_id': did, 'cards': [{'h': '跑', 'p': 'pǎo', 'm': 'lari'}, {'h': '跳', 'p': 'tiào', 'm': 'lompat'}]})
+check('Sosial: deck pribadi belum tampil di beranda', all(p['id'] != did for p in SA.req('GET', '/api/feed')[1]))
+SA.req('POST', '/api/deck/submit', {'id': did, 'public': True})
+check('Sosial: deck menunggu guru belum tampil di beranda teman', all(p['id'] != did for p in SB.req('GET', '/api/feed')[1]))
+check('Sosial: profil sendiri lihat postingan pending', any(p['id'] == did and p['status'] == 'pending' for p in SA.req('GET', '/api/u/' + pa['id'])[1]['posts']))
+# Guru setujui
+_, pend, _ = T.req('GET', '/api/t/pending') if False else (0, None, None)
+T.req('POST', '/api/t/approve', {'id': did, 'approve': True})
+feedB = SB.req('GET', '/api/feed')[1]
+post = next((p for p in feedB if p['id'] == did), None)
+check('Sosial: deck disetujui tampil di beranda teman', post is not None, feedB)
+check('Sosial: postingan bawa penulis + jumlah kartu', bool(post) and post['author'] == 'Dewi' and post['n'] == 2, post)
+check('Sosial: contoh hanzi ikut di postingan', bool(post) and '跑' in post.get('sample', []), post)
+# Eka suka postingan Dewi
+st, lk, _ = SB.req('POST', '/api/like', {'deck_id': did, 'like': True})
+check('Sosial: murid bisa menyukai postingan', st == 200 and lk['likes'] == 1 and lk['liked'] is True, lk)
+check('Sosial: suka idempoten (tak dobel)', SB.req('POST', '/api/like', {'deck_id': did, 'like': True})[1]['likes'] == 1)
+check('Sosial: liked tercermin untuk yang menyukai', next((p for p in SB.req('GET', '/api/feed')[1] if p['id'] == did), {}).get('liked') is True)
+check('Sosial: murid lain tak ikut ter-like', next((p for p in SA.req('GET', '/api/feed')[1] if p['id'] == did), {}).get('liked') in (False, None))
+check('Sosial: total suka tampil di profil penulis', SB.req('GET', '/api/u/' + pa['id'])[1]['total_likes'] == 1)
+check('Sosial: batal suka mengurangi hitungan', SB.req('POST', '/api/like', {'deck_id': did, 'like': False})[1]['likes'] == 0)
+check('Sosial: tanpa login tak bisa lihat beranda', SX.req('GET', '/api/feed')[0] == 401)
+check('Sosial: tanpa login tak bisa menyukai', SX.req('POST', '/api/like', {'deck_id': did, 'like': True})[0] == 401)
+check('Sosial: suka deck tak ada ditolak', SB.req('POST', '/api/like', {'deck_id': 'tidakada', 'like': True})[0] == 404)
+check('Sosial: profil id ngawur ditolak', SB.req('GET', '/api/u/xxx')[0] == 404)
+check('Sosial: profil guru tak bisa dibuka sebagai murid', SB.req('GET', '/api/u/' + me['id'])[0] == 404)
+T.req('POST', '/api/t/settings', {**_c, 'all_can_create': False})
+
 fails = 0
 for ok, name, d in results:
     print(('LULUS ' if ok else 'GAGAL ') + name + ('' if ok else f'  → {str(d)[:200]}')); fails += (not ok)

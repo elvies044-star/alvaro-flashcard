@@ -134,8 +134,12 @@ const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS messages_user ON messages(user_id, seen_at)`,
   `ALTER TABLE deliveries ADD COLUMN sender_id TEXT`,
   `ALTER TABLE users ADD COLUMN photo TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE users ADD COLUMN level INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE runs ADD COLUMN cur_card TEXT`,
+  `CREATE TABLE IF NOT EXISTS likes (user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, deck_id TEXT NOT NULL REFERENCES decks(id) ON DELETE CASCADE, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, deck_id))`,
+  `CREATE INDEX IF NOT EXISTS likes_deck ON likes(deck_id)`,
 ];
-const SCHEMA_VERSION = '6';
+const SCHEMA_VERSION = '8';
 const RUSH_RATE_MS = 1200, RUSH_QUIZ_MS = 700;
 const DEFAULT_SETTINGS = { modes: ['pic', 'han', 'arti', 'mix'], default_mode: 'pic', student_can_choose: true, quiz_enabled: true, hidden_decks: [] };
 let ready = null;
@@ -191,7 +195,7 @@ function cleanSettings(s) {
   const modes = Array.isArray(s.modes) ? FRONT_MODES.filter((m) => s.modes.includes(m)) : FRONT_MODES.slice();
   const ms = modes.length ? modes : ['pic'];
   const hidden = Array.isArray(s.hidden_decks) ? [...new Set(s.hidden_decks.filter((x) => typeof x === 'string' && /^[a-z0-9_]{2,32}$/.test(x)))].slice(0, 300) : [];
-  return { modes: ms, default_mode: ms.includes(s.default_mode) ? s.default_mode : ms[0], student_can_choose: s.student_can_choose !== false, quiz_enabled: s.quiz_enabled !== false, mw_quiz: s.mw_quiz !== false, all_can_create: s.all_can_create !== false, ai_laoshi: s.ai_laoshi !== false, ai_name: (typeof s.ai_name === 'string' ? s.ai_name.replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 20) : '') || 'Laoshi', hidden_decks: hidden };
+  return { modes: ms, default_mode: ms.includes(s.default_mode) ? s.default_mode : ms[0], student_can_choose: s.student_can_choose !== false, quiz_enabled: s.quiz_enabled !== false, mw_quiz: s.mw_quiz !== false, all_can_create: s.all_can_create !== false, ai_laoshi: s.ai_laoshi !== false, ai_name: (typeof s.ai_name === 'string' ? s.ai_name.replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 20) : '') || 'Laoshi', admin_phone: (typeof s.admin_phone === 'string' ? s.admin_phone.replace(/[^0-9+]/g, '').slice(0, 20) : ''), hidden_decks: hidden };
 }
 async function getSettings(db) {
   const row = await db.prepare('SELECT data FROM settings WHERE id = 1').first('data');
@@ -199,7 +203,7 @@ async function getSettings(db) {
 }
 
 /* ---------------- auth ---------------- */
-const pubUser = (u) => ({ id: u.id, role: u.role, username: u.username, display_name: u.display_name, class_name: u.class_name, active: !!u.active, can_create: u.role === 'teacher' || !!u.can_create, photo: u.photo ? '/api/img/' + u.photo : '' });
+const pubUser = (u) => ({ id: u.id, role: u.role, username: u.username, display_name: u.display_name, class_name: u.class_name, active: !!u.active, can_create: u.role === 'teacher' || !!u.can_create, photo: u.photo ? '/api/img/' + u.photo : '', level: u.level || 0 });
 const isTeacher = (u) => u.role === 'teacher';
 function deckVisible(u, d, settings, delivered) {
   if (isTeacher(u) || (d.owner_id && d.owner_id === u.id)) return true;
@@ -344,7 +348,9 @@ export async function onRequest(ctx) {
     /* ----- tanpa login ----- */
     if (path === '/setup' && method === 'GET') {
       const has = await db.prepare("SELECT 1 FROM users WHERE role = 'teacher' LIMIT 1").first();
-      return json({ needsSetup: !has, configured: !!env.SETUP_CODE });
+      let admin = '';
+      try { admin = (JSON.parse(await db.prepare('SELECT data FROM settings WHERE id = 1').first('data')) || {}).admin_phone || ''; } catch (_) { /* kosong */ }
+      return json({ needsSetup: !has, configured: !!env.SETUP_CODE, admin_phone: typeof admin === 'string' ? admin.replace(/[^0-9+]/g, '').slice(0, 20) : '' });
     }
     if (path === '/setup' && method === 'POST') {
       if (!env.SETUP_CODE || String(env.SETUP_CODE).length < 8) fail(500, 'SETUP_CODE belum diatur di Cloudflare (minimal 8 karakter).');
@@ -415,6 +421,18 @@ export async function onRequest(ctx) {
     if (path === '/me/photo/clear' && method === 'POST') {
       await db.prepare("UPDATE users SET photo = '' WHERE id = ?1").bind(user.id).run();
       return json({ ok: true });
+    }
+    if (path === '/me/name' && method === 'POST') {
+      const b = await body(2048);
+      const nm = str(b.display_name, 40, { required: true, label: 'Nama' });
+      await db.prepare('UPDATE users SET display_name = ?2 WHERE id = ?1').bind(user.id, nm).run();
+      return json(pubUser({ ...user, display_name: nm }));
+    }
+    if (path === '/me/level' && method === 'POST') {
+      const b = await body(512);
+      const lv = Math.max(0, Math.min(3, Math.round(Number(b.level) || 0)));
+      await db.prepare('UPDATE users SET level = ?2 WHERE id = ?1').bind(user.id, lv).run();
+      return json({ ok: true, level: lv });
     }
 
     if (path.startsWith('/img/') && method === 'GET') {
@@ -516,6 +534,48 @@ export async function onRequest(ctx) {
       }
       return json({ reply, model: teacher ? used : undefined });
     }
+    if (path === '/feed' && method === 'GET') {
+      const rows = (await db.prepare(`SELECT d.id, d.zh, d.idn, d.color, d.owner_id, d.created_at, u.display_name AS author, u.photo AS author_photo,
+          (SELECT COUNT(*) FROM cards c WHERE c.deck_id = d.id) AS n,
+          (SELECT COUNT(*) FROM likes l WHERE l.deck_id = d.id) AS likes,
+          (SELECT 1 FROM likes l WHERE l.deck_id = d.id AND l.user_id = ?1) AS liked,
+          (SELECT group_concat(h, ' ') FROM (SELECT h FROM cards WHERE deck_id = d.id ORDER BY sort, created_at LIMIT 5)) AS sample
+        FROM decks d JOIN users u ON u.id = d.owner_id
+        WHERE d.owner_id IS NOT NULL AND d.status = 'public'
+        ORDER BY d.created_at DESC LIMIT 100`).bind(user.id).all()).results;
+      return json(rows.map((r) => ({ id: r.id, zh: r.zh, idn: r.idn, color: /^#[0-9a-f]{6}$/i.test(r.color) ? r.color : '#1f3fbf', owner_id: r.owner_id, mine: r.owner_id === user.id, author: r.author || 'Murid', author_photo: r.author_photo ? '/api/img/' + r.author_photo : '', n: r.n, likes: r.likes, liked: !!r.liked, sample: (r.sample || '').split(' ').filter(Boolean).slice(0, 5) })));
+    }
+    if (path === '/like' && method === 'POST') {
+      const b = await body(1024);
+      const d = await db.prepare("SELECT id, owner_id, status FROM decks WHERE id = ?1").bind(String(b.deck_id || '')).first();
+      if (!d || !d.owner_id || d.status !== 'public') fail(404, 'Postingan tidak ditemukan.');
+      if (b.like === false) { await db.prepare('DELETE FROM likes WHERE user_id = ?1 AND deck_id = ?2').bind(user.id, d.id).run(); }
+      else {
+        if (!(await usageOk(db, 'like:' + user.id, 300, DAY))) fail(429, 'Terlalu banyak suka hari ini.');
+        await db.prepare('INSERT OR IGNORE INTO likes (user_id, deck_id, created_at) VALUES (?1,?2,?3)').bind(user.id, d.id, now()).run();
+      }
+      const likes = await db.prepare('SELECT COUNT(*) AS n FROM likes WHERE deck_id = ?1').bind(d.id).first('n');
+      return json({ likes, liked: b.like !== false });
+    }
+    if (path.startsWith('/u/') && method === 'GET') {
+      const id = path.slice(3);
+      if (!HEX32.test(id)) fail(404, 'Tidak ditemukan.');
+      const u = await db.prepare("SELECT id, display_name, photo, class_name, role FROM users WHERE id = ?1").bind(id).first();
+      if (!u || u.role !== 'student') fail(404, 'Profil tidak ditemukan.');
+      // postingan publik; kalau profil sendiri, tampilkan juga yang pribadi/menunggu
+      const own = id === user.id || isTeacher(user);
+      const rows = (await db.prepare(`SELECT d.id, d.zh, d.idn, d.color, d.status, d.created_at,
+          (SELECT COUNT(*) FROM cards c WHERE c.deck_id = d.id) AS n,
+          (SELECT COUNT(*) FROM likes l WHERE l.deck_id = d.id) AS likes,
+          (SELECT 1 FROM likes l WHERE l.deck_id = d.id AND l.user_id = ?2) AS liked,
+          (SELECT group_concat(h, ' ') FROM (SELECT h FROM cards WHERE deck_id = d.id ORDER BY sort LIMIT 5)) AS sample
+        FROM decks d WHERE d.owner_id = ?1 ${'' } ORDER BY d.created_at DESC LIMIT 100`).bind(id, user.id).all()).results
+        .filter((r) => own || r.status === 'public');
+      const totalLikes = rows.reduce((t, r) => t + (r.likes || 0), 0);
+      return json({ id: u.id, name: u.display_name, photo: u.photo ? '/api/img/' + u.photo : '', class_name: u.class_name || '', mine: id === user.id,
+        posts: rows.map((r) => ({ id: r.id, zh: r.zh, idn: r.idn, color: /^#[0-9a-f]{6}$/i.test(r.color) ? r.color : '#1f3fbf', status: r.status, n: r.n, likes: r.likes, liked: !!r.liked, sample: (r.sample || '').split(' ').filter(Boolean).slice(0, 5) })),
+        total_posts: rows.filter((r) => r.status === 'public').length, total_likes: totalLikes });
+    }
     if (path === '/classmates' && method === 'GET') {
       const rows = (await db.prepare("SELECT id, display_name, class_name FROM users WHERE role = 'student' AND active = 1 AND id <> ?1 ORDER BY class_name, display_name LIMIT 500").bind(user.id).all()).results;
       return json(rows);
@@ -540,6 +600,9 @@ export async function onRequest(ctx) {
       const r = await db.prepare('SELECT * FROM runs WHERE id = ?1 AND user_id = ?2').bind(b.sid, user.id).first();
       if (!r || r.finished_at || r.started_at < now() - 6 * 3600e3) return json({ ok: false, ended_by: r ? r.ended_by : null });
       const st = b.state === 'away' ? 'away' : 'active', t = now();
+      if (st === 'active' && typeof b.card === 'string' && b.card.length <= 64 && b.card !== r.cur_card) {
+        await db.prepare('UPDATE runs SET cur_card = ?2 WHERE id = ?1').bind(r.id, b.card).run();
+      }
       if (st === 'away' && r.state !== 'away' && r.away_count < 1000) {
         await db.prepare("UPDATE runs SET state = 'away', state_since = ?2, away_count = away_count + 1, last_seen = ?2 WHERE id = ?1").bind(r.id, t).run();
       } else if (st === 'active' && r.state === 'away') {
@@ -883,6 +946,7 @@ export async function onRequest(ctx) {
       needTeacher();
       const t = now();
       const rows = (await db.prepare(`SELECT r.*, u.display_name, u.class_name, u.photo,
+          (SELECT c.h || '\u001f' || c.p || '\u001f' || c.m FROM cards c WHERE c.id = r.cur_card) AS cur,
           (SELECT COUNT(*) FROM answers a WHERE a.run_id = r.id AND a.first_try = 1) AS done,
           (SELECT created_at FROM messages m WHERE m.user_id = r.user_id ORDER BY created_at DESC LIMIT 1) AS msg_at,
           (SELECT seen_at FROM messages m WHERE m.user_id = r.user_id ORDER BY created_at DESC LIMIT 1) AS msg_seen
@@ -890,7 +954,8 @@ export async function onRequest(ctx) {
         WHERE (r.finished_at IS NULL AND r.last_seen > ?1) OR r.finished_at > ?2
         ORDER BY r.started_at DESC LIMIT 200`).bind(t - 15 * 60e3, t - 30 * 60e3).all()).results;
       return json({ now: t, runs: rows.map((r) => ({ ...fmtRun(r), name: r.display_name, class_name: r.class_name, planned: r.planned, done: r.done,
-        state: r.state, state_since: r.state_since, last_seen: r.last_seen, msg_at: r.msg_at, msg_seen: r.msg_seen, photo: r.photo ? '/api/img/' + r.photo : '' })) });
+        state: r.state, state_since: r.state_since, last_seen: r.last_seen, msg_at: r.msg_at, msg_seen: r.msg_seen, photo: r.photo ? '/api/img/' + r.photo : '',
+        cur: (!r.finished_at && r.cur_card && r.state === 'active') ? (() => { const x = String(r.cur || '').split('\u001f'); return x[0] ? { h: x[0], p: x[1] || '', m: x[2] || '' } : null; })() : null })) });
     }
 
     fail(404, 'Tidak ditemukan.');

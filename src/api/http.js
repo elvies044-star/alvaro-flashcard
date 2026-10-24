@@ -21,10 +21,9 @@ async function call(method, path, body, raw = false) {
 
 // Perkecil foto di browser sebelum diunggah (maks 480 px)
 async function shrink(file) {
-  if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type)) throw new Error('Pakai foto PNG, JPG, WEBP, atau GIF.');
-  if (file.size > 15 * 1024 * 1024) throw new Error('Foto terlalu besar.');
+  if (file.size > 25 * 1024 * 1024) throw new Error('Foto terlalu besar (maks 25 MB).');
   let bmp;
-  try { bmp = await createImageBitmap(file); } catch (_) { throw new Error('Foto tidak bisa dibaca.'); }
+  try { bmp = await createImageBitmap(file); } catch (_) { throw new Error('Format foto ini tidak didukung browser (mis. HEIC dari iPhone). Coba simpan/convert ke JPG atau PNG dulu.'); }
   const k = Math.min(1, 480 / Math.max(bmp.width, bmp.height));
   const cv = document.createElement('canvas');
   cv.width = Math.max(1, Math.round(bmp.width * k)); cv.height = Math.max(1, Math.round(bmp.height * k));
@@ -46,9 +45,9 @@ export const api = {
   content: () => call('GET', '/content'),
   async srs() { return (await call('GET', '/srs')) || {}; },
   startSession: async (decks, mode, planned) => (await call('POST', '/run/start', { decks, mode, planned })).id,
-  presence(sid, state) {
+  presence(sid, state, card) {
     try {
-      return fetch('/api/run/presence', { method: 'POST', keepalive: true, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sid, state }) }).then((r) => r.json()).catch(() => null);
+      return fetch('/api/run/presence', { method: 'POST', keepalive: true, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sid, state, card }) }).then((r) => r.json()).catch(() => null);
     } catch (_) { return Promise.resolve(null); }
   },
   quizOptions: (sid, card, kind) => call('POST', '/run/quiz', { sid, card, kind }),
@@ -73,6 +72,8 @@ export const api = {
   async uploadImage(file) { const b = await shrink(file); return (await call('POST', '/image', b, true)).url; },
   async setPhoto(file) { const b = await shrink(file); return (await call('POST', '/me/photo', b, true)).photo; },
   clearPhoto: () => call('POST', '/me/photo/clear', {}),
+  setName: (display_name) => call('POST', '/me/name', { display_name }),
+  setLevel: (level) => call('POST', '/me/level', { level }),
 
   // guru
   changePassword: (oldPw, newPw) => call('POST', '/password', { old: oldPw, new: newPw }),
@@ -87,6 +88,9 @@ export const api = {
   endRun: (p) => call('POST', '/t/end-run', p),
   deliverMine: (deck_id, to) => call('POST', '/deliver', { deck_id, to }),
   classmates: () => call('GET', '/classmates'),
+  feed: () => call('GET', '/feed'),
+  like: (deck_id, like) => call('POST', '/like', { deck_id, like }),
+  userProfile: (id) => call('GET', '/u/' + encodeURIComponent(id)),
   aiAsk: (messages) => call('POST', '/ai/ask', { messages }),
   deliver: (deck_id, to) => call('POST', '/t/deliver', { deck_id, to }),
   message: (text, kind, to) => call('POST', '/t/message', { text, kind, to }),

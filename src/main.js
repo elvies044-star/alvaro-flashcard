@@ -5,7 +5,7 @@ import { api } from './api/http.js';
 import { hbars, lineChart } from './charts.js';
 
 const APP = 'Alvaro Mandarin Flashcard Tamer';
-const APP_VERSION = '2026.10.24-ai5';
+const APP_VERSION = '2026.10.25-sosial';
 const BUILD = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev';
 
 /* ================= helpers ================= */
@@ -23,7 +23,7 @@ const scoreCls = (v) => (v >= 75 ? 'g' : v >= 50 ? 'w' : 'b');
 const scoreTag = (v) => `<span class="score ${scoreCls(v ?? 0)}">${v ?? 0}</span>`;
 const initial = (n) => esc(([...(n || '?')][0] || '?').toUpperCase());
 const avaHTML = (name, photo, cls) => `<div class="avatar ${cls || ''}" aria-hidden="true">${photo ? `<img src="${esc(photo)}" alt="">` : initial(name)}</div>`;
-function pickImage(cb) { const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/png,image/jpeg,image/webp,image/gif'; i.onchange = () => { const f = i.files && i.files[0]; if (f) cb(f); }; i.click(); }
+function pickImage(cb) { const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; i.onchange = () => { const f = i.files && i.files[0]; if (f) cb(f); }; i.click(); }
 
 const ICON = {
   learn: '<rect x="3" y="5" width="13" height="16" rx="2"/><path d="M8 3h11a2 2 0 0 1 2 2v13"/>',
@@ -50,6 +50,8 @@ const ICON = {
   book2: '<path d="M4 4h11a2 2 0 0 1 2 2v14H6a2 2 0 0 1-2-2z"/><path d="M9 4v14"/>',
   gift: '<rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18M12 8S10.5 3 8 3a2.5 2.5 0 0 0 0 5h4zM12 8s1.5-5 4-5a2.5 2.5 0 0 1 0 5h-4z"/>',
   chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  social: '<circle cx="12" cy="8" r="3.2"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/><path d="M19 4.5l.7 1.6 1.8.2-1.3 1.2.4 1.8-1.6-.9-1.6.9.4-1.8-1.3-1.2 1.8-.2z"/>',
+  heart: '<path d="M12 20s-7-4.6-9.2-9A4.5 4.5 0 0 1 12 6.5 4.5 4.5 0 0 1 21.2 11C19 15.4 12 20 12 20z"/>',
   split: '<rect x="3" y="4" width="7" height="16" rx="2"/><rect x="14" y="4" width="7" height="16" rx="2"/>',
   bulb: '<path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2V17h6v-.3c0-.8.4-1.5 1-2A7 7 0 0 0 12 2z"/>',
   bolt: '<path d="M13 2L3 14h9l-1 8 10-12h-9z"/>', flag: '<path d="M4 22V4M4 4h13l-2 4 2 4H4"/>',
@@ -96,6 +98,9 @@ if (!S.split || typeof S.split !== 'object') S.split = { on: false, size: 10, pa
 const savePrefs = () => store.set('prefs', { mode: S.mode, quiz: S.quiz, auto: S.auto, sfx: S.sfx, all: S.all, sel: S.sel, view: ['study', 'done'].includes(S.view) ? 'learn' : S.view, ttab: S.ttab, hints: S.hints, kind: S.kind, split: S.split, lang: S.lang });
 let ME = null, SET = null, DECKS = [], CARDS = [], SRS = {}, Q = null, STUDENTS = [], AI_ON = false;
 const aiName = () => (SET && SET.ai_name) || 'Laoshi';
+let ADMIN_PHONE = '';
+const waLink = (p) => { const d = String(p || '').replace(/[^0-9]/g, '').replace(/^0/, '62'); return d ? 'https://wa.me/' + d : ''; };
+const adminHTML = () => { const w = waLink(ADMIN_PHONE); return w ? `<p class="note" style="text-align:center">Butuh bantuan? <a href="${w}" target="_blank" rel="noopener" class="adminlink">Hubungi admin</a></p>` : ''; };
 const isTeacher = () => !!ME && ME.role === 'teacher';
 const canCreate = () => !!ME && (ME.role === 'teacher' || !!ME.can_create);
 
@@ -103,11 +108,12 @@ function cleanSettings(s) {
   s = s || {};
   const modes = Array.isArray(s.modes) ? MODES.filter((m) => s.modes.includes(m)) : MODES.slice();
   const ms = modes.length ? modes : ['pic'];
-  return { modes: ms, default_mode: ms.includes(s.default_mode) ? s.default_mode : ms[0], student_can_choose: s.student_can_choose !== false, quiz_enabled: s.quiz_enabled !== false, mw_quiz: s.mw_quiz !== false, all_can_create: s.all_can_create !== false, ai_laoshi: s.ai_laoshi !== false, ai_name: (typeof s.ai_name === 'string' && s.ai_name.trim()) ? s.ai_name.trim().slice(0, 20) : 'Laoshi', hidden_decks: Array.isArray(s.hidden_decks) ? s.hidden_decks.filter((x) => typeof x === 'string') : [] };
+  return { modes: ms, default_mode: ms.includes(s.default_mode) ? s.default_mode : ms[0], student_can_choose: s.student_can_choose !== false, quiz_enabled: s.quiz_enabled !== false, mw_quiz: s.mw_quiz !== false, all_can_create: s.all_can_create !== false, ai_laoshi: s.ai_laoshi !== false, admin_phone: (typeof s.admin_phone === 'string' ? s.admin_phone.replace(/[^0-9+]/g, '').slice(0, 20) : ''), ai_name: (typeof s.ai_name === 'string' && s.ai_name.trim()) ? s.ai_name.trim().slice(0, 20) : 'Laoshi', hidden_decks: Array.isArray(s.hidden_decks) ? s.hidden_decks.filter((x) => typeof x === 'string') : [] };
 }
 function applyContent(c) {
   SET = cleanSettings(c.settings);
   AI_ON = !!c.ai;
+  if (SET && SET.admin_phone) ADMIN_PHONE = SET.admin_phone;
   if (c.me) ME = c.me;
   CARDS = (c.cards || []).filter((x) => x && typeof x.id === 'string' && typeof x.h === 'string');
   const by = {};
@@ -135,7 +141,7 @@ const meanAns = (c) => (S.lang === 'en' ? c.en || c.m : c.m);
 
 /* ================= shell ================= */
 function navItems() {
-  const n = [['learn', 'learn', 'Belajar'], ['hist', 'hist', 'Riwayat']];
+  const n = [['learn', 'learn', 'Belajar'], ['hist', 'hist', 'Riwayat'], ['social', 'social', 'Sosial']];
   if (AI_ON) n.push(['ai', 'laoshi', 'AI ' + aiName()]);
   if (canCreate()) n.push(['cards', 'edit', isTeacher() ? 'Kartu' : 'Kartu saya']);
   if (isTeacher()) n.push(['teach', 'teach', 'Guru']);
@@ -156,10 +162,10 @@ function go(v) {
   if (v === 'teach' && !isTeacher()) v = 'learn';
   if (v === 'cards' && !canCreate()) v = 'learn';
   if (v === 'ai' && !AI_ON) v = 'learn';
-  if (!['learn', 'hist', 'cards', 'teach', 'ai'].includes(v)) v = 'learn';
+  if (!['learn', 'hist', 'cards', 'teach', 'ai', 'social'].includes(v)) v = 'learn';
   stopLive();
   S.view = v; savePrefs(); shell(); window.scrollTo(0, 0);
-  ({ learn: renderLearn, hist: renderHist, cards: renderCards, teach: renderTeach, ai: renderAI })[v]();
+  ({ learn: renderLearn, hist: renderHist, cards: renderCards, teach: renderTeach, ai: renderAI, social: renderFeed })[v]();
 }
 
 /* ================= masuk ================= */
@@ -170,11 +176,11 @@ function renderLogin(msg = '') {
     <label class="field" for="lp">Password<input id="lp" name="password" type="password" autocomplete="current-password" maxlength="128" required></label>
     <div class="err" id="lerr" role="alert">${esc(msg)}</div>
     <button class="btn lg" type="submit" id="lbtn">Masuk</button>
-    <p class="note" style="text-align:center">Belum punya akun? Akun dibuat oleh gurumu.</p><p class="ver">Versi ${APP_VERSION}</p>`);
+    <p class="note" style="text-align:center">Belum punya akun? Akun dibuat oleh gurumu.</p>${adminHTML()}<p class="ver">Versi ${APP_VERSION}</p>`);
   $('#authForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = $('#lbtn'); btn.disabled = true; $('#lerr').textContent = '';
-    try { ME = await api.login($('#lu').value, $('#lp').value); await loadAll(); go(S.view); }
+    try { ME = await api.login($('#lu').value, $('#lp').value); await loadAll(); enterApp(); }
     catch (err) { $('#lerr').textContent = err.message; btn.disabled = false; $('#lp').value = ''; $('#lp').focus(); }
   });
 }
@@ -291,7 +297,7 @@ function renderLearn() {
       ${mwOn() ? `<div class="seg" role="group" aria-label="Jenis latihan"><button data-lkind="card" aria-pressed="${kindNow() === 'card'}">Flashcard</button><button data-lkind="mw" aria-pressed="${kindNow() === 'mw'}">Kuis 量词</button></div>` : ''}
       <button class="chip" data-act="split" aria-pressed="${S.split.on}">${ic('split')} Atur sesi</button>
       <button class="chip" data-act="sendsheet">${ic('send')} Kirim kartu</button>
-
+      ${!isTeacher() && 'Notification' in window ? `<button class="chip" data-act="reminder" aria-pressed="${store.get('remind', false)}">${ic('alert')} Pengingat</button>` : ''}
     </div>
     ${S.split.on ? `<div class="splitbox">
       <label class="field" for="spSize">Kartu per sesi<input id="spSize" type="number" inputmode="numeric" min="1" max="500" value="${S.split.size}"></label>
@@ -511,6 +517,7 @@ function renderStudy() {
     <div class="keys">Spasi: balik · 1–4: jawab atau nilai · S: dengarkan · H: clue · N: lewati</div>
   </div>`;
   bindTilt();
+  if (Q && Q.sid) api.presence(Q.sid, PRES.state === 'away' ? 'away' : 'active', c.id); // mirror kartu ke guru
   if (m === 'han' && S.auto) speak(c.h);
   if (canQuiz) loadQuiz(c, m);
 }
@@ -951,6 +958,78 @@ function renderAI() {
   if (!aiBusy) ta.focus();
 }
 
+/* ================= Sosial (feed flashcard) ================= */
+let FEED = null, feedUser = null;
+const sampleHTML = (arr) => (arr && arr.length ? `<div class="post-samp">${arr.map((h) => `<span class="han">${esc(h)}</span>`).join('')}</div>` : '');
+function postCard(p, showAuthor) {
+  const pend = p.status && p.status !== 'public';
+  return `<article class="post" style="--pc:${p.color}">
+    ${showAuthor ? `<button class="post-top" data-profile="${esc(p.owner_id)}">${avaHTML(p.author, p.author_photo, 'sm')}<b>${esc(p.author)}</b>${p.mine ? '<span class="post-me">kamu</span>' : ''}</button>` : ''}
+    <div class="post-body">
+      <div class="post-deck han">${esc(p.zh)}</div>
+      ${p.idn ? `<div class="post-sub">${esc(p.idn)}</div>` : ''}
+      ${sampleHTML(p.sample)}
+      <div class="post-foot">
+        <span class="post-n">${p.n} kartu</span>
+        ${pend ? `<span class="pill warn" style="margin-left:auto"><span class="d"></span>${p.status === 'pending' ? 'Menunggu guru' : 'Pribadi'}</span>`
+          : `<button class="likebtn ${p.liked ? 'on' : ''}" data-like="${esc(p.id)}" aria-pressed="${!!p.liked}" aria-label="Suka">${ic('heart')}<b>${p.likes || 0}</b></button>
+             <button class="btn sm" data-studypost="${esc(p.id)}">${ic('play')} Belajar</button>`}
+      </div>
+    </div>
+  </article>`;
+}
+async function renderFeed() {
+  feedUser = null;
+  $('#actionbar').hidden = true; document.documentElement.style.setProperty('--c', 'var(--brand)');
+  const head = `<div class="page-head"><div><p class="eyebrow">Sosial</p><h1 class="h1">Beranda flashcard</h1><p class="sub">Postingan kartu dari teman-teman sekelas.</p></div>
+    ${isTeacher() ? '' : `<button class="chip" data-profile="${esc(ME.id)}">${ic('social')} Profilku</button>`}</div>`;
+  $('#view').innerHTML = head + '<div class="panel"><p class="note">Memuat beranda…</p></div>';
+  try { FEED = await api.feed(); } catch (e) { toast(e.message); FEED = FEED || []; }
+  if (S.view !== 'social' || feedUser) return;
+  const canPost = !isTeacher() && canCreate();
+  const tip = canPost
+    ? 'Mau memposting? Buat kartu di menu <b>Kartu saya</b>, lalu jadikan <b>publik</b>. Postingan tampil di sini setelah disetujui guru.'
+    : 'Postingan muncul dari kartu murid yang sudah disetujui guru.';
+  $('#view').innerHTML = head
+    + (FEED.length ? `<div class="feed">${FEED.map((p) => postCard(p, true)).join('')}</div>`
+      : `<div class="panel empty"><b>Belum ada postingan</b>${tip}</div>`)
+    + (FEED.length ? `<p class="note" style="text-align:center;margin:14px 0 4px">${tip}</p>` : '')
+    + `<p class="ver">Versi ${APP_VERSION}</p>`;
+}
+async function renderProfile(id) {
+  feedUser = id; S.view = 'social';
+  $('#actionbar').hidden = true; window.scrollTo(0, 0);
+  $('#view').innerHTML = '<div class="panel"><p class="note">Memuat profil…</p></div>';
+  let u;
+  try { u = await api.userProfile(id); } catch (e) { toast(e.message); return renderFeed(); }
+  if (S.view !== 'social' || feedUser !== id) return;
+  $('#view').innerHTML = `<div class="prof-head"><button class="btn ghost sm" data-backfeed>${ic('back')} Beranda</button></div>
+    <div class="prof-card"><div class="avatar lg">${u.photo ? `<img src="${esc(u.photo)}" alt="">` : initial(u.name)}</div>
+      <div class="prof-meta"><h1 class="h1">${esc(u.name)}${u.mine ? ' <span class="post-me">kamu</span>' : ''}</h1>
+        <p class="sub">${esc(u.class_name || 'Tanpa kelas')}</p>
+        <div class="prof-stats"><span><b>${u.total_posts}</b> postingan</span><span>${ic('heart')} <b>${u.total_likes}</b> suka</span></div></div></div>
+    ${u.mine ? '<p class="note" style="margin:2px 0 12px">Postingan publik tampil untuk semua. Yang menunggu/pribadi hanya kamu dan guru yang lihat.</p>' : ''}
+    ${u.posts.length ? `<div class="feed">${u.posts.map((p) => postCard({ ...p, owner_id: id }, false)).join('')}</div>`
+      : `<div class="panel empty"><b>Belum ada postingan</b>${u.mine ? 'Buat kartu lalu jadikan publik untuk memposting.' : 'Murid ini belum punya postingan publik.'}</div>`}`;
+}
+async function studyPost(id) {
+  let cs = CARDS.filter((c) => c.deck_id === id);
+  if (!cs.length) { await reloadContent(); cs = CARDS.filter((c) => c.deck_id === id); }
+  if (!cs.length) { toast('Kartu belum tersedia. Coba lagi sebentar.'); return; }
+  S.view = 'study'; await startStudy(cs);
+}
+async function toggleLike(id, btn) {
+  const want = !btn.classList.contains('on');
+  btn.disabled = true;
+  try {
+    const r = await api.like(id, want);
+    const setOne = (b) => { b.classList.toggle('on', r.liked); b.setAttribute('aria-pressed', r.liked); b.querySelector('b').textContent = r.likes; if (r.liked) fx(b, 'fx-right'); };
+    document.querySelectorAll(`[data-like="${CSS.escape(id)}"]`).forEach(setOne);
+    if (FEED) { const p = FEED.find((x) => x.id === id); if (p) { p.liked = r.liked; p.likes = r.likes; } }
+  } catch (e) { toast(e.message); }
+  btn.disabled = false;
+}
+
 /* ================= Riwayat ================= */
 async function renderHist() {
   $('#actionbar').hidden = true; document.documentElement.style.setProperty('--c', 'var(--brand)');
@@ -1264,6 +1343,7 @@ async function tLive() {
       ${active.length ? `<div class="live">${active.map((r) => `<div class="lv ${awayNow(r) ? 'away' : ''}">
         <div class="who">${avaHTML(r.name, r.photo, '')}<div><b>${esc(r.name)}</b><span>${esc(r.class_name || 'Tanpa kelas')} · <span class="han">${esc(r.decks.map(nm).join('、'))}</span>${r.mode === 'mw' ? ' · 量词' : ''}</span></div></div>
         <div>${status(r)}</div>
+        ${r.cur ? `<div class="mirror" title="Kartu yang sedang dilihat murid"><span class="han">${esc(r.cur.h)}</span><span class="py">${esc(r.cur.p)}</span><span class="mn">${esc(r.cur.m)}</span></div>` : ''}
         <div class="prog"><i style="width:${r.planned ? Math.min(100, (r.done / r.planned) * 100) : 0}%"></i></div>
         <div class="foot"><span>${r.done}${r.planned ? `/${r.planned}` : ''} kartu · mulai ${new Date(r.started_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span><span style="color:${r.away_count ? 'var(--bad)' : 'inherit'}">Keluar ${r.away_count}× · ${dur(r.away_ms + (r.state === 'away' ? now - (r.state_since || now) : 0))}</span><span style="color:${r.rush ? 'var(--warn, #b8860b)' : 'inherit'}">Asal tekan ${r.rush}× · clue ${r.clues}</span></div>
         <div class="acts"><button class="chip" data-warn="${esc(r.student_id)}">${ic('alert')} Peringatkan</button><button class="chip" data-chatto="${esc(r.student_id)}">${ic('chat')} Pesan</button><button class="chip danger" data-endrun="${esc(r.id)}" data-armed="${LIVE_ARM === r.id ? 1 : 0}">${ic('stop')} ${LIVE_ARM === r.id ? 'Ketuk lagi' : 'Akhiri sesi'}</button></div>
@@ -1423,10 +1503,25 @@ function tSettings() {
       <div class="row">${shared.map((d) => `<button class="chip" data-cfgdeck="${esc(d.id)}" aria-pressed="${!DRAFT.hidden_decks.includes(d.id)}"><span class="han">${esc(d.zh)}</span> ${esc(d.idn)}</button>`).join('')}</div></div>
   </div>
   <div class="row" style="margin-top:16px"><button class="btn" data-act="savecfg">${ic('check')} Simpan pengaturan</button><span class="note" id="cfgnote"></span></div>
+  <form class="panel stack" id="acctForm" style="margin-top:20px;max-width:560px" novalidate><h2 class="h3">Akun guru & admin</h2>
+    <div class="formgrid"><label class="field" for="gname">Nama guru<input id="gname" maxlength="40" value="${esc(ME.display_name)}"></label>
+    <label class="field" for="gadmin">Nomor admin (WhatsApp)<input id="gadmin" inputmode="tel" maxlength="20" value="${esc(DRAFT.admin_phone || '')}" placeholder="08xxxxxxxxxx"></label></div>
+    <p class="note">Nomor admin muncul di halaman masuk murid sebagai tombol "Hubungi admin" (lupa password, dll). Kosongkan untuk menyembunyikan.</p>
+    <div><button class="btn" type="submit">${ic('check')} Simpan nama & admin</button></div><p class="note" id="acctnote"></p></form>
   <form class="panel stack" id="pwForm" style="margin-top:20px;max-width:560px" novalidate><h2 class="h3">Ganti password guru</h2>
     <div class="formgrid"><label class="field" for="po">Password lama<input id="po" type="password" autocomplete="current-password" maxlength="128"></label>
     <label class="field" for="pn">Password baru (min. 10)<input id="pn" type="password" autocomplete="new-password" maxlength="128"></label></div>
     <div><button class="btn secondary" type="submit">${ic('key')} Ganti password</button></div><p class="note" id="pwnote"></p></form>`;
+  $('#acctForm').addEventListener('submit', async (e) => {
+    e.preventDefault(); const n = $('#acctnote'); const nm = $('#gname').value.trim(); const ph = $('#gadmin').value.replace(/[^0-9+]/g, '').slice(0, 20);
+    if (!nm) { n.textContent = 'Nama tidak boleh kosong.'; return; }
+    n.textContent = 'Menyimpan…';
+    try {
+      if (nm !== ME.display_name) { const u = await api.setName(nm); ME = u; }
+      DRAFT.admin_phone = ph; const c = cleanSettings(DRAFT); await api.saveSettings(c); SET = c;
+      n.textContent = 'Tersimpan.'; toast('Nama & nomor admin disimpan.'); shell();
+    } catch (err) { n.textContent = err.message; }
+  });
   $('#pwForm').addEventListener('submit', async (e) => {
     e.preventDefault(); const n = $('#pwnote');
     if ($('#pn').value.length < 10) { n.textContent = 'Password baru minimal 10 karakter.'; return; }
@@ -1444,7 +1539,7 @@ function leaveStudy() {
 let endArmed = 0, LAST_TAP = { id: null, t: 0 };
 document.addEventListener('click', async (e) => {
   if (!e.target.closest('#emojiPop') && !e.target.closest('[data-emo]')) closeEmoji();
-  const b = e.target.closest('[data-sheetq],[data-aitip],[data-dl],[data-hsk],[data-studyhsk],[data-babpick],[data-babgo],[data-vis],[data-pstu],[data-lkind],[data-part],[data-pickstu],[data-mkind],[data-warn],[data-chatto],[data-endrun],[data-endall],[data-nav],[data-pick],[data-act],[data-mode],[data-rate],[data-t],[data-ttab],[data-sact],[data-stu],[data-cfgmode],[data-cfgtog],[data-cfgdeck],[data-edeck],[data-etab],[data-ncolor],[data-rcolor],[data-emo],[data-pick-emo],[data-rm],[data-approve]');
+  const b = e.target.closest('[data-profile],[data-like],[data-studypost],[data-backfeed],[data-onb],[data-onbans],[data-sheetq],[data-aitip],[data-dl],[data-hsk],[data-studyhsk],[data-babpick],[data-babgo],[data-vis],[data-pstu],[data-lkind],[data-part],[data-pickstu],[data-mkind],[data-warn],[data-chatto],[data-endrun],[data-endall],[data-nav],[data-pick],[data-act],[data-mode],[data-rate],[data-t],[data-ttab],[data-sact],[data-stu],[data-cfgmode],[data-cfgtog],[data-cfgdeck],[data-edeck],[data-etab],[data-ncolor],[data-rcolor],[data-emo],[data-pick-emo],[data-rm],[data-approve]');
   if (!b) { const fc = e.target.closest('#fc'); if (fc && Q && Q.cur && Q.cur.answered) flip(); return; }
   const ds = b.dataset;
   if (ds.nav) { leaveStudy(); go(ds.nav); return; }
@@ -1467,6 +1562,10 @@ document.addEventListener('click', async (e) => {
     try { const r = await api.endRun(ds.endall ? { all: true } : { sid: ds.endrun }); toast(`${r.ended} sesi diakhiri. Murid langsung melihat pemberitahuan.`); if (LIVE_DRAW) LIVE_DRAW(); } catch (err) { toast(err.message); }
     return;
   }
+  if (ds.profile) { stopLive(); S.view = 'social'; savePrefs(); shell(); renderProfile(ds.profile); return; }
+  if (ds.backfeed !== undefined) { renderFeed(); return; }
+  if (ds.like) { toggleLike(ds.like, b); return; }
+  if (ds.studypost) { studyPost(ds.studypost); return; }
   if (ds.aitip !== undefined) { aiSend(ds.aitip); return; }
   if (ds.dl !== undefined) { e.preventDefault(); e.stopPropagation(); downloadTable(ds.dl); return; }
   if (ds.hsk !== undefined) { const lv = +ds.hsk; HSK_OPEN = HSK_OPEN === lv ? 0 : lv; renderLearn(); if (HSK_OPEN) setTimeout(() => { const o = document.querySelector('.hsk-open'); if (o) o.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60); return; }
@@ -1532,6 +1631,11 @@ document.addEventListener('click', async (e) => {
     endArmed = 0; renderDone(true);
   }
   else if (a === 'resume') resumeRun();
+  else if (ds.onb !== undefined) { finishOnboard(+ds.onb); return; }
+  else if (ds.onbans !== undefined) { onbAnswer(ds.onbans); return; }
+  else if (a === 'onbtest') { startOnbTest(); }
+  else if (a === 'onbskip') { store.set('onb_' + ME.id, true); go('learn'); }
+  else if (a === 'reminder') { toggleReminder(); }
   else if (a === 'studylast') { const r = store.get('lastsess', null); if (!r) return; const ids = (r.decks || []).filter((id) => studyDecks().some((x) => x.id === id)); if (!ids.length) { toast('Kategorinya sudah tidak ada.'); return; } S.sel = ids; S.kind = r.kind === 'mw' && mwOn() ? 'mw' : 'card'; S.split.on = false; savePrefs(); startStudy(); }
   else if (a === 'clue') useClue();
   else if (a === 'install' && installEvt) { installEvt.prompt(); try { await installEvt.userChoice; } catch (_) { /* batal */ } installEvt = null; renderLearn(); }
@@ -1631,16 +1735,141 @@ function installHTML() {
     <div class="row">${installEvt ? `<button class="btn sm" data-act="install">Pasang</button>` : ''}<button class="icon-btn" data-act="noinstall" aria-label="Tutup">${ic('x')}</button></div></div>`;
 }
 
+/* ================= onboarding: tentukan level ================= */
+const needsOnboard = () => !isTeacher() && (ME.level || 0) === 0 && !store.get('onb_' + ME.id, false);
+function enterApp() {
+  if (needsOnboard()) renderOnboard(); else go(S.view);
+  startInbox(); startReminders();
+}
+function finishOnboard(lv) {
+  store.set('onb_' + ME.id, true);
+  if (lv) { ME.level = lv; api.setLevel(lv).catch(() => {}); S.sel = ['hsk' + lv]; HSK_OPEN = lv; S.kind = 'card'; S.split.on = false; savePrefs(); }
+  go('learn');
+  if (lv) setTimeout(() => { const o = document.querySelector('.hsk-open'); if (o) o.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 120);
+}
+let ONB = null;
+const LVL_DESC = { 1: 'Pemula · sapaan, angka, keluarga, benda sehari-hari', 2: 'Dasar+ · kegiatan, waktu, tempat, perasaan', 3: 'Menengah · cerita, pendapat, kalimat panjang' };
+function renderOnboard() {
+  hideShell();
+  $('#view').innerHTML = `<div class="onb"><div class="onb-box">
+    <h1 class="h1">Selamat datang, ${esc(ME.display_name)}! 🎉</h1>
+    <p class="sub">Mau mulai dari mana? Kamu bisa ganti kapan saja nanti.</p>
+    <div class="onb-opts">
+      <button class="onb-card zero" data-onb="1"><span class="t">Dari nol</span><span class="d">Belum pernah belajar — mulai HSK 级1</span></button>
+      ${[1, 2, 3].map((lv) => `<button class="onb-card lv${lv}" data-onb="${lv}"><span class="badge">HSK 级${lv}</span><span class="t">Saya di level ini</span><span class="d">${LVL_DESC[lv]}</span></button>`).join('')}
+    </div>
+    <div class="row" style="justify-content:center;margin-top:16px"><button class="btn" data-act="onbtest">${ic('sparkle')} Tes singkat (6 soal)</button><button class="btn ghost" data-act="onbskip">Lewati</button></div>
+    <p class="note" style="text-align:center;margin-top:10px">Tes singkat opsional — menebak level dari 6 pertanyaan.</p>
+  </div></div>`;
+}
+function startOnbTest() {
+  const pool = (lv) => DECKS.filter((d) => d.hskLevel === lv && !d.hskLesson).flatMap((d) => d.cards).filter((c) => c.m);
+  const pick = (arr, n) => shuffle(arr).slice(0, n);
+  const qs = [];
+  for (const lv of [1, 2, 3]) {
+    for (const c of pick(pool(lv), 2)) {
+      const others = shuffle(pool(lv).filter((x) => x.m !== c.m)).slice(0, 3).map((x) => x.m);
+      qs.push({ lv, h: c.h, p: c.p, answer: c.m, opts: shuffle([c.m, ...others]) });
+    }
+  }
+  ONB = { qs, idx: 0, correct: 0, byLv: { 1: 0, 2: 0, 3: 0 } };
+  renderOnbTest();
+}
+function renderOnbTest() {
+  if (ONB.idx >= ONB.qs.length) { onbResult(); return; }
+  const q = ONB.qs[ONB.idx];
+  hideShell();
+  $('#view').innerHTML = `<div class="onb"><div class="onb-box">
+    <div class="onb-prog"><i style="width:${(ONB.idx / ONB.qs.length) * 100}%"></i></div>
+    <p class="eyebrow" style="text-align:center">Soal ${ONB.idx + 1} dari ${ONB.qs.length}</p>
+    <div class="onb-q"><div class="han">${esc(q.h)}</div><div class="py">${esc(q.p)}</div><div class="ask">Apa artinya?</div></div>
+    <div class="onb-ans">${q.opts.map((o) => `<button class="onb-o" data-onbans="${esc(o)}">${esc(o)}</button>`).join('')}</div>
+    <div class="row" style="justify-content:center;margin-top:10px"><button class="btn ghost sm" data-act="onbskip">Lewati tes</button></div>
+  </div></div>`;
+}
+function onbAnswer(ans) {
+  const q = ONB.qs[ONB.idx];
+  const ok = ans === q.answer;
+  if (ok) { ONB.correct++; ONB.byLv[q.lv]++; }
+  const btns = document.querySelectorAll('.onb-o');
+  btns.forEach((b) => { b.disabled = true; if (b.dataset.onbans === q.answer) b.classList.add('right'); else if (b.dataset.onbans === ans) b.classList.add('wrong'); });
+  if (ok) SFX.right(); else SFX.wrong();
+  setTimeout(() => { ONB.idx++; renderOnbTest(); }, 750);
+}
+function onbResult() {
+  let lv = 1;
+  if (ONB.correct >= 5) lv = 3; else if (ONB.correct >= 3) lv = 2; else lv = 1;
+  if (ONB.byLv[3] >= 1 && ONB.correct >= 4) lv = 3;
+  hideShell();
+  $('#view').innerHTML = `<div class="onb"><div class="onb-box" style="text-align:center">
+    <div class="ring" style="--p:${Math.round(ONB.correct / ONB.qs.length * 100)}"><div>${ONB.correct}/${ONB.qs.length}</div></div>
+    <h1 class="h1">Rekomendasi: <span class="han">HSK 级${lv}</span></h1>
+    <p class="sub">Dari ${ONB.qs.length} soal, kamu benar ${ONB.correct}. Mulai dari 级${lv} ya — bisa diganti kapan saja.</p>
+    <div class="row" style="justify-content:center;margin-top:14px"><button class="btn lg" data-onb="${lv}">${ic('play')} Mulai HSK 级${lv}</button></div>
+    <div class="row" style="justify-content:center;margin-top:8px">${[1, 2, 3].filter((x) => x !== lv).map((x) => `<button class="chip" data-onb="${x}">Pilih 级${x} saja</button>`).join('')}</div>
+  </div></div>`;
+}
+
+/* ================= pengingat (notifikasi) ================= */
+const REMIND_MSGS = [
+  '📚 Laoshi kangen! Yuk latihan 5 kartu Mandarin hari ini 加油!',
+  '🐼 Si panda nunggu kamu belajar hanzi. Buka Flashcard Tamer yuk!',
+  '✍️ 今天学了吗? Sudah belajar hari ini belum? Ketuk untuk mulai.',
+  '🔥 Jaga api semangatmu! Belajar 1 pelajaran biar makin jago.',
+  '⭐ Sedikit tiap hari = pintar selamanya. Ayo buka kartumu!',
+  '🎯 Target hari ini: kalahkan kartu kemarin. Bisa!',
+  '🍜 Istirahat sebentar, lalu santap 5 kosakata baru. 好吃!',
+  '🚀 10 menit sekarang > 2 jam besok. Mulai belajar yuk!',
+];
+function remindOn() { return store.get('remind', false) && 'Notification' in window && Notification.permission === 'granted'; }
+async function toggleReminder() {
+  if (!('Notification' in window)) { toast('HP/browser ini tidak mendukung notifikasi.'); return; }
+  if (store.get('remind', false)) { store.set('remind', false); toast('Pengingat dimatikan.'); if (S.view === 'learn') renderLearn(); return; }
+  let perm = Notification.permission;
+  if (perm !== 'granted') perm = await Notification.requestPermission();
+  if (perm !== 'granted') { toast('Izin notifikasi belum diberikan.'); return; }
+  store.set('remind', true); store.set('remindAt', store.get('remindAt', 19));
+  toast('Pengingat dinyalakan. Kami ingatkan kalau kamu belum belajar.');
+  notify(REMIND_MSGS[0], true); // contoh langsung
+  if (S.view === 'learn') renderLearn();
+}
+async function notify(msg, force) {
+  if (!remindOn()) return;
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const body = msg || REMIND_MSGS[(Math.random() * REMIND_MSGS.length) | 0];
+    if (reg && reg.showNotification) await reg.showNotification('Flashcard Tamer', { body, icon: '/icon-192.png', badge: '/icon-192.png', tag: 'reminder', renotify: true });
+    else new Notification('Flashcard Tamer', { body, icon: '/icon-192.png' });
+    if (!force) store.set('lastNotif', Date.now());
+  } catch (_) { /* abaikan */ }
+}
+const studiedToday = () => { const r = store.get('lastsess', null); return r && new Date(r.at).toDateString() === new Date().toDateString(); };
+let remindT = 0;
+function startReminders() {
+  clearInterval(remindT);
+  if (isTeacher()) return;
+  const check = () => {
+    if (!remindOn()) return;
+    const at = store.get('remindAt', 19); const now = new Date();
+    const last = store.get('lastNotif', 0);
+    const sameDay = new Date(last).toDateString() === now.toDateString();
+    if (now.getHours() >= at && !studiedToday() && !sameDay) notify();
+  };
+  remindT = setInterval(check, 5 * 60 * 1000); setTimeout(check, 8000);
+  // saat app ditinggal, jadwalkan pengingat ringan (best-effort)
+  window.addEventListener('visibilitychange', () => { if (document.hidden && remindOn() && !studiedToday()) { /* best-effort: beberapa HP tetap jalankan timer sebentar */ setTimeout(() => notify(), 60 * 60 * 1000); } });
+}
+
 /* ================= mulai ================= */
 (async function boot() {
   document.title = APP;
   $('#view').innerHTML = '<div class="auth"><p class="note">Memuat…</p></div>';
   try { ME = await api.profile(); } catch (_) { ME = null; }
   if (!ME) {
-    try { const st = await api.setupStatus(); if (st && st.needsSetup) { renderSetup(st.configured); return; } } catch (_) { /* tampilkan login */ }
+    try { const st = await api.setupStatus(); if (st) ADMIN_PHONE = st.admin_phone || ''; if (st && st.needsSetup) { renderSetup(st.configured); return; } } catch (_) { /* tampilkan login */ }
     renderLogin(); return;
   }
   try { await loadAll(); } catch (e) { renderLogin(e.message); return; }
-  go(S.view);
+  enterApp();
   checkVersion();
 })();
