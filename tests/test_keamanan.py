@@ -299,6 +299,76 @@ check('Sosial: profil id ngawur ditolak', SB.req('GET', '/api/u/xxx')[0] == 404)
 check('Sosial: profil guru tak bisa dibuka sebagai murid', SB.req('GET', '/api/u/' + me['id'])[0] == 404)
 T.req('POST', '/api/t/settings', {**_c, 'all_can_create': False})
 
+# ---- Speaking: deck percakapan harian ----
+_ct = SA.req('GET', '/api/content')[1]
+_dmap = {d['id']: d for d in _ct['decks']}
+_sp1 = [c for c in _ct['cards'] if c['deck_id'] == 'speak1']
+_sp2 = [c for c in _ct['cards'] if c['deck_id'] == 'speak2']
+check('Speaking: deck pemula & menengah ada', 'speak1' in _dmap and 'speak2' in _dmap, list(_dmap)[:5])
+check('Speaking: 30 kartu pemula', len(_sp1) == 30, len(_sp1))
+check('Speaking: 50 kartu menengah', len(_sp2) == 50, len(_sp2))
+check('Speaking: kartu punya respon (s/sp/si)', bool(_sp1) and _sp1[0].get('s') and _sp1[0].get('sp') and _sp1[0].get('si'), _sp1[0] if _sp1 else None)
+check('Speaking: pinyin ada untuk ungkapan', bool(_sp1) and bool(_sp1[0].get('p')), _sp1[0].get('p') if _sp1 else None)
+
+# ---- Sematkan kartu (pin) ----
+_pc = _sp1[0]['id'] if _sp1 else 'speak1:1'
+check('Pin: awalnya belum ada sematan', SA.req('GET', '/api/content')[1].get('pins') == [])
+check('Pin: sematkan kartu', SA.req('POST', '/api/pin', {'card_id': _pc, 'pin': True})[0] == 200)
+check('Pin: sematan muncul di content', _pc in SA.req('GET', '/api/content')[1].get('pins', []))
+check('Pin: idempoten', SA.req('POST', '/api/pin', {'card_id': _pc, 'pin': True})[0] == 200 and SA.req('GET', '/api/content')[1]['pins'].count(_pc) == 1)
+check('Pin: sematan milik sendiri (murid lain tak kebagian)', _pc not in SB.req('GET', '/api/content')[1].get('pins', []))
+check('Pin: lepas sematan', SA.req('POST', '/api/pin', {'card_id': _pc, 'pin': False})[0] == 200 and _pc not in SA.req('GET', '/api/content')[1].get('pins', []))
+check('Pin: kartu tak ada ditolak', SA.req('POST', '/api/pin', {'card_id': 'tidakada', 'pin': True})[0] == 404)
+check('Pin: tanpa login ditolak', SX.req('POST', '/api/pin', {'card_id': _pc, 'pin': True})[0] == 401)
+
+# ---- Cerita (stories) ----
+_st = SA.req('GET', '/api/stories')[1]
+_ids = {s['id']: s for s in _st}
+check('Cerita: 2 cerita bawaan ada', 'story_b1' in _ids and 'story_b2' in _ids, list(_ids))
+check('Cerita: level pemula & hsk2', _ids.get('story_b1', {}).get('level') == 1 and _ids.get('story_b2', {}).get('level') == 2)
+check('Cerita: murid bisa baca isi', bool(SA.req('GET', '/api/story/story_b1')[1].get('body')))
+check('Cerita: tanpa login ditolak', SX.req('GET', '/api/stories')[0] == 401)
+check('Cerita: murid tak bisa tambah cerita', SA.req('POST', '/api/t/story', {'title': 'X', 'level': 1, 'body': '你好'})[0] == 403)
+_scr = T.req('POST', '/api/t/story', {'title': 'Cerita Tes', 'level': 3, 'body': '我喜欢学中文。'})
+check('Cerita: guru menambah cerita', _scr[0] == 200 and _scr[1].get('id'), _scr[1])
+_newid = _scr[1].get('id')
+check('Cerita: cerita baru tampil untuk murid', any(s['id'] == _newid for s in SA.req('GET', '/api/stories')[1]))
+check('Cerita: guru edit cerita', T.req('POST', '/api/t/story', {'id': _newid, 'title': 'Cerita Tes 2', 'level': 4, 'body': '我爱中文。'})[0] == 200 and SA.req('GET', '/api/story/' + _newid)[1]['level'] == 4)
+check('Cerita: judul kosong ditolak', T.req('POST', '/api/t/story', {'title': '', 'level': 1, 'body': '你好'})[0] == 400)
+check('Cerita: guru hapus cerita', T.req('POST', '/api/t/story/delete', {'id': _newid})[0] == 200 and all(s['id'] != _newid for s in SA.req('GET', '/api/stories')[1]))
+check('Cerita: hapus cerita tak ada ditolak', T.req('POST', '/api/t/story/delete', {'id': 'tidakada'})[0] == 404)
+
+# ---- Isi rumpang (cloze) ----
+_hc = next((c for c in _ct['cards'] if c['deck_id'].startswith('hsk1') and c.get('h')), None)
+_cid = _hc['id'] if _hc else 'speak1:1'
+_ch = _hc['h'] if _hc else '你好'
+_sent = '这是' + _ch + '。'
+check('Cloze: murid tak bisa set kalimat', SA.req('POST', '/api/cloze/set', {'card_id': _cid, 's': _sent, 'si': 'arti'})[0] == 403)
+check('Cloze: kalimat tanpa kata target ditolak', T.req('POST', '/api/cloze/set', {'card_id': _cid, 's': '这是一个句子。', 'si': 'x'})[0] == 400)
+_csr = T.req('POST', '/api/cloze/set', {'card_id': _cid, 's': _sent, 'si': 'Ini ' + _ch})
+check('Cloze: guru set kalimat manual', _csr[0] == 200 and _csr[1].get('s') == _sent, _csr[1])
+_cg = SA.req('POST', '/api/cloze', {'card_id': _cid})
+check('Cloze: murid dapat kalimat + jawaban', _cg[0] == 200 and _cg[1].get('s') == _sent and _cg[1].get('answer') == _ch, _cg[1])
+check('Cloze: sumber manual tercatat', _cg[1].get('source') == 'manual')
+# kartu tanpa kalimat manual & tanpa AI → 503 (AI tidak ada di lokal)
+_hc2 = next((c for c in _ct['cards'] if c['deck_id'].startswith('hsk1') and c['id'] != _cid), None)
+if _hc2:
+    _no = SA.req('POST', '/api/cloze', {'card_id': _hc2['id']})
+    check('Cloze: tanpa kalimat & tanpa AI ditolak rapi (503)', _no[0] == 503, _no)
+check('Cloze: kartu tak ada ditolak', SA.req('POST', '/api/cloze', {'card_id': 'tidakada'})[0] == 404)
+check('Cloze: tanpa login ditolak', SX.req('POST', '/api/cloze', {'card_id': _cid})[0] == 401)
+
+# ---- Beku (freeze deck / kartu) ----
+check('Beku: awalnya kosong', SA.req('GET', '/api/content')[1].get('frozen', {}).get('decks') == [])
+check('Beku: murid bekukan deck', SA.req('POST', '/api/freeze', {'kind': 'deck', 'id': 'speak1', 'freeze': True})[0] == 200)
+check('Beku: deck beku tampil di content', 'speak1' in SA.req('GET', '/api/content')[1].get('frozen', {}).get('decks', []))
+check('Beku: milik sendiri (murid lain tak kebagian)', 'speak1' not in SB.req('GET', '/api/content')[1].get('frozen', {}).get('decks', []))
+check('Beku: bekukan kartu', SA.req('POST', '/api/freeze', {'kind': 'card', 'id': _cid, 'freeze': True})[0] == 200 and _cid in SA.req('GET', '/api/content')[1]['frozen']['cards'])
+check('Beku: pecahkan (cairkan) deck', SA.req('POST', '/api/freeze', {'kind': 'deck', 'id': 'speak1', 'freeze': False})[0] == 200 and 'speak1' not in SA.req('GET', '/api/content')[1]['frozen']['decks'])
+check('Beku: deck tak ada ditolak', SA.req('POST', '/api/freeze', {'kind': 'deck', 'id': 'tidakada', 'freeze': True})[0] == 404)
+check('Beku: kartu tak ada ditolak', SA.req('POST', '/api/freeze', {'kind': 'card', 'id': 'tidakada', 'freeze': True})[0] == 404)
+check('Beku: tanpa login ditolak', SX.req('POST', '/api/freeze', {'kind': 'deck', 'id': 'speak1', 'freeze': True})[0] == 401)
+
 fails = 0
 for ok, name, d in results:
     print(('LULUS ' if ok else 'GAGAL ') + name + ('' if ok else f'  → {str(d)[:200]}')); fails += (not ok)

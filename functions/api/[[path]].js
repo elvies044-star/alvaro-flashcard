@@ -13,6 +13,8 @@
 // =====================================================================
 import builtin from '../../src/data/builtin.json';
 import hsk from '../../src/data/hsk.json';
+import speaking from '../../src/data/speaking.json';
+import stories from '../../src/data/stories.json';
 import { translateLines, cleanEmoji, CJK, toPinyin, enOf } from '../../server/translate.js';
 
 const DAY = 864e5;
@@ -23,12 +25,27 @@ const FRONT_MODES = ['pic', 'han', 'arti', 'mix'];
 const COMMON_MW = ['个', '本', '支', '张', '把', '只', '条', '头', '辆', '件', '双', '块', '朵', '棵', '杯', '瓶', '碗', '台', '座', '片', '颗', '根', '匹', '架', '艘', '盏', '扇', '部', '顶', '副', '枚', '位', '家', '所'];
 const USERNAME_RE = /^[a-z0-9._]{3,24}$/;
 const HEX32 = /^[a-f0-9]{32}$/;
-const BUILTIN_VERSION = `hsk1-v${builtin.decks.length}-${builtin.cards.length}-${hsk.decks.length}-${hsk.cards.length}-${builtin.cards.reduce((t, c) => (t + c.id.length * 7 + c.m.length) % 1e9, 0)}`;
+const BUILTIN_VERSION = `hsk1-v${builtin.decks.length}-${builtin.cards.length}-${hsk.decks.length}-${hsk.cards.length}-sp${speaking.decks.length}.${speaking.cards.length}-st${stories.stories.length}-${builtin.cards.reduce((t, c) => (t + c.id.length * 7 + c.m.length) % 1e9, 0)}`;
 const enc = new TextEncoder();
 const now = () => Date.now();
 
 class HttpError extends Error { constructor(status, msg) { super(msg); this.status = status; } }
 const fail = (status, msg) => { throw new HttpError(status, msg); };
+const AI_MODELS = ['@cf/meta/llama-3.1-8b-instruct', '@cf/meta/llama-3.3-70b-instruct-fp8-fast', '@cf/meta/llama-3.2-3b-instruct', '@cf/qwen/qwen1.5-14b-chat-awq', '@cf/mistral/mistral-7b-instruct-v0.2'];
+async function runAI(env, messages, max = 300) {
+  if (!env || !env.AI) return '';
+  for (const model of AI_MODELS) {
+    try {
+      const res = await env.AI.run(model, { messages, max_tokens: max });
+      let v = res && typeof res === 'object' ? (res.response !== undefined ? res.response : res.result !== undefined ? res.result : res.output_text) : res;
+      if (v && typeof v === 'object') v = v.response || v.text || v.output || '';
+      const out = String(v || '').trim();
+      if (out) return out;
+    } catch (_) { /* coba model berikutnya */ }
+  }
+  return '';
+}
+function parseJsonLoose(t) { if (!t) return null; const i = t.indexOf('{'), j = t.lastIndexOf('}'); if (i < 0 || j <= i) return null; try { return JSON.parse(t.slice(i, j + 1)); } catch (_) { return null; } }
 
 function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), {
@@ -106,6 +123,9 @@ const SCHEMA = [
   `CREATE INDEX IF NOT EXISTS answers_time ON answers(created_at)`,
   `CREATE TABLE IF NOT EXISTS quiz_pending (run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE, card_id TEXT NOT NULL, correct TEXT NOT NULL, tokens TEXT NOT NULL, answered INTEGER NOT NULL DEFAULT 0, result INTEGER, PRIMARY KEY (run_id, card_id))`,
   `CREATE TABLE IF NOT EXISTS images (id TEXT PRIMARY KEY, type TEXT NOT NULL, data BLOB NOT NULL, created_at INTEGER NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS stories (id TEXT PRIMARY KEY, title TEXT NOT NULL, level INTEGER NOT NULL DEFAULT 1, body TEXT NOT NULL, author_id TEXT, builtin INTEGER NOT NULL DEFAULT 0, sort INTEGER NOT NULL DEFAULT 100, created_at INTEGER NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS cloze (card_id TEXT PRIMARY KEY, s TEXT NOT NULL, si TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT 'ai', created_at INTEGER NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS frozen (user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, kind TEXT NOT NULL, ref_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, kind, ref_id))`,
 ];
 const MIGRATIONS = [
   `ALTER TABLE users ADD COLUMN can_create INTEGER NOT NULL DEFAULT 0`,
@@ -138,8 +158,9 @@ const MIGRATIONS = [
   `ALTER TABLE runs ADD COLUMN cur_card TEXT`,
   `CREATE TABLE IF NOT EXISTS likes (user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, deck_id TEXT NOT NULL REFERENCES decks(id) ON DELETE CASCADE, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, deck_id))`,
   `CREATE INDEX IF NOT EXISTS likes_deck ON likes(deck_id)`,
+  `CREATE TABLE IF NOT EXISTS pins (user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, card_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, card_id))`,
 ];
-const SCHEMA_VERSION = '8';
+const SCHEMA_VERSION = '9';
 const RUSH_RATE_MS = 1200, RUSH_QUIZ_MS = 700;
 const DEFAULT_SETTINGS = { modes: ['pic', 'han', 'arti', 'mix'], default_mode: 'pic', student_can_choose: true, quiz_enabled: true, hidden_decks: [] };
 let ready = null;
@@ -184,6 +205,26 @@ async function seedBuiltin(db) {
     stmts.push(db.prepare(`INSERT INTO cards (id, deck_id, h, p, m, mw, alt, opp, s, sp, si, pic, builtin, sort, created_at, en) VALUES (?1,?2,?3,?4,?5,?6,'[]','','','','',?7,1,?8,?9,?10)
       ON CONFLICT(id) DO UPDATE SET h=excluded.h, p=excluded.p, m=excluded.m, mw=excluded.mw, pic=excluded.pic, sort=excluded.sort, en=excluded.en`)
       .bind(c.id, c.deck_id, c.h, c.p || '', c.m, c.mw || '', c.pic || '', c.sort, t, c.en || ''));
+  }
+  // kategori Percakapan / Speaking (ungkapan harian + cara respon)
+  for (const d of speaking.decks) {
+    if (del.has('deck:' + d.id)) continue;
+    stmts.push(db.prepare(`INSERT INTO decks (id, zh, py, idn, color, kind, builtin, sort, created_at) VALUES (?1,?2,?3,?4,?5,?6,1,?7,?8)
+      ON CONFLICT(id) DO UPDATE SET zh=excluded.zh, py=excluded.py, idn=excluded.idn, color=excluded.color, kind=excluded.kind, sort=excluded.sort`)
+      .bind(d.id, d.zh, d.py || '', d.idn, d.color, d.kind || 'speak', d.sort, t));
+  }
+  for (const c of speaking.cards) {
+    if (del.has(c.id) || del.has('deck:' + c.deck_id)) continue;
+    stmts.push(db.prepare(`INSERT INTO cards (id, deck_id, h, p, m, mw, alt, opp, s, sp, si, pic, builtin, sort, created_at, en) VALUES (?1,?2,?3,?4,?5,'','[]','',?6,?7,?8,'',1,?9,?10,'')
+      ON CONFLICT(id) DO UPDATE SET h=excluded.h, p=excluded.p, m=excluded.m, s=excluded.s, sp=excluded.sp, si=excluded.si, sort=excluded.sort`)
+      .bind(c.id, c.deck_id, c.h, c.p || '', c.m, c.s || '', c.sp || '', c.si || '', c.sort, t));
+  }
+  // cerita bawaan
+  for (const st of stories.stories) {
+    if (del.has('story:' + st.id)) continue;
+    stmts.push(db.prepare(`INSERT INTO stories (id, title, level, body, author_id, builtin, sort, created_at) VALUES (?1,?2,?3,?4,NULL,1,?5,?6)
+      ON CONFLICT(id) DO UPDATE SET title=excluded.title, level=excluded.level, body=excluded.body, sort=excluded.sort`)
+      .bind(st.id, st.title, st.level || 1, st.body, st.sort || 0, t));
   }
   for (let i = 0; i < stmts.length; i += 50) await db.batch(stmts.slice(i, i + 50));
   await db.prepare("INSERT INTO meta (k, v) VALUES ('builtin', ?1) ON CONFLICT(k) DO UPDATE SET v = excluded.v").bind(BUILTIN_VERSION).run();
@@ -450,7 +491,107 @@ export async function onRequest(ctx) {
       const ok = new Set(decks.map((d) => d.id));
       const cards = (await db.prepare('SELECT id, deck_id, h, p, m, en, mw, alt, opp, s, sp, si, pic, builtin, sort FROM cards ORDER BY deck_id, sort, created_at').all()).results
         .filter((c) => ok.has(c.deck_id)).map((c) => ({ ...c, en: c.en || enOf(c.h), alt: (() => { try { return JSON.parse(c.alt); } catch (_) { return []; } })(), builtin: !!c.builtin }));
-      return json({ settings, decks: decks.map((d) => ({ ...d, builtin: !!d.builtin, mine: d.owner_id === user.id, editable: canEditDeck(user, d), owner_name: d.owner_id ? d.owner_name || 'Murid' : null, delivered_at: dmap.get(d.id) || null, delivered_from: dmap.from.get(d.id) || null })), cards, me: pubUser(user), ai: settings.ai_laoshi !== false && !!env.AI });
+      const pins = (await db.prepare('SELECT card_id FROM pins WHERE user_id = ?1').bind(user.id).all()).results.map((r) => r.card_id).filter((id) => cards.some((c) => c.id === id));
+      const frz = (await db.prepare('SELECT kind, ref_id FROM frozen WHERE user_id = ?1').bind(user.id).all()).results;
+      const frozen = { decks: frz.filter((r) => r.kind === 'deck').map((r) => r.ref_id).filter((id) => ok.has(id)), cards: frz.filter((r) => r.kind === 'card').map((r) => r.ref_id).filter((id) => cards.some((c) => c.id === id)) };
+      return json({ settings, decks: decks.map((d) => ({ ...d, builtin: !!d.builtin, mine: d.owner_id === user.id, editable: canEditDeck(user, d), owner_name: d.owner_id ? d.owner_name || 'Murid' : null, delivered_at: dmap.get(d.id) || null, delivered_from: dmap.from.get(d.id) || null })), cards, pins, frozen, me: pubUser(user), ai: settings.ai_laoshi !== false && !!env.AI });
+    }
+    if (path === '/pin' && method === 'POST') {
+      const b = await body(1024);
+      const cid = String(b.card_id || '');
+      const c = await db.prepare('SELECT id FROM cards WHERE id = ?1').bind(cid).first();
+      if (!c) fail(404, 'Kartu tidak ditemukan.');
+      if (b.pin === false) { await db.prepare('DELETE FROM pins WHERE user_id = ?1 AND card_id = ?2').bind(user.id, cid).run(); }
+      else {
+        if (!(await usageOk(db, 'pin:' + user.id, 1000, DAY))) fail(429, 'Terlalu banyak sematan hari ini.');
+        await db.prepare('INSERT OR IGNORE INTO pins (user_id, card_id, created_at) VALUES (?1,?2,?3)').bind(user.id, cid, now()).run();
+      }
+      return json({ ok: true, pinned: b.pin !== false });
+    }
+    if (path === '/freeze' && method === 'POST') {
+      const b = await body(1024);
+      const kind = b.kind === 'card' ? 'card' : 'deck';
+      const id = String(b.id || '');
+      if (kind === 'deck') { if (!(await db.prepare('SELECT id FROM decks WHERE id = ?1').bind(id).first())) fail(404, 'Kategori tidak ditemukan.'); }
+      else { if (!(await db.prepare('SELECT id FROM cards WHERE id = ?1').bind(id).first())) fail(404, 'Kartu tidak ditemukan.'); }
+      if (b.freeze === false) { await db.prepare('DELETE FROM frozen WHERE user_id = ?1 AND kind = ?2 AND ref_id = ?3').bind(user.id, kind, id).run(); }
+      else {
+        if (!(await usageOk(db, 'frz:' + user.id, 2000, DAY))) fail(429, 'Terlalu banyak perubahan hari ini.');
+        await db.prepare('INSERT OR IGNORE INTO frozen (user_id, kind, ref_id, created_at) VALUES (?1,?2,?3,?4)').bind(user.id, kind, id, now()).run();
+      }
+      return json({ ok: true, frozen: b.freeze !== false });
+    }
+    if (path === '/cloze' && method === 'POST') {
+      const b = await body(1024);
+      const card = await db.prepare('SELECT id, h, p, m, s, si FROM cards WHERE id = ?1').bind(String(b.card_id || '')).first();
+      if (!card) fail(404, 'Kartu tidak ditemukan.');
+      const cached = await db.prepare('SELECT s, si, source FROM cloze WHERE card_id = ?1').bind(card.id).first();
+      if (cached) return json({ s: cached.s, si: cached.si, answer: card.h, source: cached.source });
+      // 1) manual: pakai kalimat contoh kartu kalau memuat kata target
+      if (card.s && card.s.includes(card.h)) {
+        await db.prepare("INSERT OR REPLACE INTO cloze (card_id, s, si, source, created_at) VALUES (?1,?2,?3,'card',?4)").bind(card.id, card.s, card.si || '', now()).run();
+        return json({ s: card.s, si: card.si || '', answer: card.h, source: 'card' });
+      }
+      // 2) AI buat otomatis
+      if (!env.AI) fail(503, 'Kartu ini belum punya kalimat contoh. Minta guru menambahkan, atau nyalakan Worker AI.');
+      if (!(await usageOk(db, 'cloze:' + user.id, teacher ? 400 : 120, DAY))) fail(429, 'Batas kalimat isian per hari tercapai.');
+      const sys = 'Kamu guru bahasa Mandarin. Buat SATU kalimat Mandarin pendek, alami, dan mudah (level HSK dasar) yang memuat kata yang diberikan persis apa adanya. Lalu beri terjemahan Indonesianya. Balas HANYA JSON tanpa penjelasan: {"s":"<kalimat yang memuat kata itu>","si":"<arti kalimat dalam bahasa Indonesia>"}';
+      const prompt = `Kata: ${card.h}（${card.p || ''}）arti: ${card.m}. Buat kalimatnya.`;
+      const out = await runAI(env, [{ role: 'system', content: sys }, { role: 'user', content: prompt }], 240);
+      const j = parseJsonLoose(out);
+      if (!j || typeof j.s !== 'string' || !j.s.includes(card.h)) fail(502, 'AI belum bisa membuat kalimat. Coba lagi.');
+      const sOut = j.s.slice(0, 200), siOut = (typeof j.si === 'string' ? j.si : '').slice(0, 200);
+      await db.prepare("INSERT OR REPLACE INTO cloze (card_id, s, si, source, created_at) VALUES (?1,?2,?3,'ai',?4)").bind(card.id, sOut, siOut, now()).run();
+      return json({ s: sOut, si: siOut, answer: card.h, source: 'ai' });
+    }
+    if (path === '/cloze/set' && method === 'POST') {
+      if (!isTeacher(user)) fail(403, 'Hanya guru.');
+      const b = await body(2048);
+      const card = await db.prepare('SELECT id, h FROM cards WHERE id = ?1').bind(String(b.card_id || '')).first();
+      if (!card) fail(404, 'Kartu tidak ditemukan.');
+      const sOut = str(b.s, 200, { required: true, label: 'Kalimat' });
+      if (!sOut.includes(card.h)) fail(400, `Kalimat harus memuat kata "${card.h}".`);
+      const siOut = str(b.si, 200, { label: 'Arti' }) || '';
+      await db.prepare("INSERT OR REPLACE INTO cloze (card_id, s, si, source, created_at) VALUES (?1,?2,?3,'manual',?4)").bind(card.id, sOut, siOut, now()).run();
+      return json({ ok: true, s: sOut, si: siOut, answer: card.h, source: 'manual' });
+    }
+    if (path === '/stories' && method === 'GET') {
+      const rows = (await db.prepare(`SELECT s.id, s.title, s.level, s.builtin, s.author_id, s.created_at, LENGTH(s.body) AS len, u.display_name AS author
+        FROM stories s LEFT JOIN users u ON u.id = s.author_id ORDER BY s.sort, s.created_at`).all()).results;
+      return json(rows.map((r) => ({ id: r.id, title: r.title, level: r.level, builtin: !!r.builtin, author: r.author_id ? (r.author || 'Guru') : null, len: r.len })));
+    }
+    if (path.startsWith('/story/') && method === 'GET') {
+      const id = path.slice(7);
+      const r = await db.prepare(`SELECT s.*, u.display_name AS author FROM stories s LEFT JOIN users u ON u.id = s.author_id WHERE s.id = ?1`).bind(id).first();
+      if (!r) fail(404, 'Cerita tidak ditemukan.');
+      return json({ id: r.id, title: r.title, level: r.level, body: r.body, builtin: !!r.builtin, author: r.author_id ? (r.author || 'Guru') : null });
+    }
+    if (path === '/t/story' && method === 'POST') {
+      if (!isTeacher(user)) fail(403, 'Hanya guru.');
+      const b = await body(20000);
+      const title = str(b.title, 80, { required: true, label: 'Judul' });
+      const bodyText = str(b.body, 8000, { required: true, label: 'Isi cerita' });
+      const level = Math.max(1, Math.min(6, parseInt(b.level, 10) || 1));
+      if (b.id) {
+        const ex = await db.prepare('SELECT id FROM stories WHERE id = ?1').bind(String(b.id)).first();
+        if (!ex) fail(404, 'Cerita tidak ditemukan.');
+        await db.prepare('UPDATE stories SET title = ?2, level = ?3, body = ?4 WHERE id = ?1').bind(String(b.id), title, level, bodyText).run();
+        return json({ ok: true, id: String(b.id) });
+      }
+      const id = 's_' + randHex(10);
+      await db.prepare('INSERT INTO stories (id, title, level, body, author_id, builtin, sort, created_at) VALUES (?1,?2,?3,?4,?5,0,?6,?7)')
+        .bind(id, title, level, bodyText, user.id, 500 + now() % 1000, now()).run();
+      return json({ ok: true, id });
+    }
+    if (path === '/t/story/delete' && method === 'POST') {
+      if (!isTeacher(user)) fail(403, 'Hanya guru.');
+      const b = await body(1024);
+      const r = await db.prepare('SELECT id, builtin FROM stories WHERE id = ?1').bind(String(b.id || '')).first();
+      if (!r) fail(404, 'Cerita tidak ditemukan.');
+      const st = [db.prepare('DELETE FROM stories WHERE id = ?1').bind(r.id)];
+      if (r.builtin) st.push(db.prepare('INSERT OR IGNORE INTO deleted_builtin (id) VALUES (?1)').bind('story:' + r.id));
+      await db.batch(st);
+      return json({ ok: true });
     }
     if (path === '/srs' && method === 'GET') {
       const rows = (await db.prepare('SELECT card_id, due, last FROM srs WHERE user_id = ?1').bind(user.id).all()).results;

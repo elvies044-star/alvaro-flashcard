@@ -693,3 +693,98 @@ code { font: 600 13px ui-monospace, SFMono-Regular, Menlo, monospace; background
 .prof-stats { display: flex; gap: 18px; margin-top: 8px; color: var(--muted); font-size: 14px; }
 .prof-stats b { color: var(--text); font-size: 16px; }
 .prof-stats .i { width: 16px; height: 16px; fill: var(--bad); color: var(--bad); vertical-align: -3px; }
+
+/* ===== Sematkan + Speaking + Petunjuk ===== */
+.pinbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--warn-soft); border: 1px solid var(--line); border-radius: 16px; padding: 10px 14px; margin-bottom: 14px; }
+.chip.pinchip.on { background: var(--warn-soft); border-color: var(--warn); color: var(--warn); }
+.chip.pinchip.on .i { fill: currentColor; }
+.pill.speak-tag { background: color-mix(in srgb, var(--dc, #8b5cf6) 16%, transparent); color: var(--dc, #8b5cf6); }
+.deck.speak-deck { border-color: color-mix(in srgb, var(--dc) 35%, var(--line)); }
+.deck.speak-deck .zh { color: var(--dc); }
+.extra.resp { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; margin-top: 10px; }
+.resp-lbl { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; letter-spacing: .02em; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
+.resp-lbl .i { width: 15px; height: 15px; }
+.say.sm { width: 26px; height: 26px; margin-left: auto; }
+.say.sm .i { width: 15px; height: 15px; }
+/* Petunjuk */
+.guide-sheet { max-width: 520px; }
+.guide-list { list-style: none; margin: 6px 0 16px; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.guide-list li { display: flex; gap: 12px; align-items: flex-start; }
+.guide-list .g-ic { flex: none; width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: var(--brand-soft); color: var(--brand); }
+.guide-list .g-ic .i { width: 20px; height: 20px; }
+.guide-list b { display: block; margin-bottom: 2px; }
+.guide-list p { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.5; }
+
+/* ===== Cerita (reader) ===== */
+.stories { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.story-tile { position: relative; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 14px; display: flex; flex-direction: column; gap: 8px; cursor: pointer; transition: border-color .15s, box-shadow .2s, transform .2s var(--ease); overflow: hidden; }
+.story-tile::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--sc); }
+.story-tile:hover { border-color: var(--line-2); box-shadow: var(--sh-2); transform: translateY(-2px); }
+.story-lvl { align-self: flex-start; font-size: 11px; font-weight: 800; color: var(--sc); background: color-mix(in srgb, var(--sc) 15%, transparent); padding: 2px 9px; border-radius: 999px; }
+.story-title { font-size: 20px; font-weight: 800; }
+.story-meta { color: var(--muted); font-size: 12.5px; display: flex; align-items: center; gap: 5px; }
+.story-meta .i { width: 14px; height: 14px; }
+.reader { max-width: 680px; margin: 0 auto; }
+.reader-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.reader-top .chip.on { background: color-mix(in srgb, var(--sc) 16%, transparent); border-color: var(--sc); color: var(--sc); }
+.reader-head { margin-bottom: 14px; }
+.reader-head .story-lvl { --sc: var(--sc); margin-bottom: 6px; }
+.reader-body { display: flex; flex-direction: column; gap: 14px; }
+.sent { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+.sent-h { font-size: 24px; line-height: 1.7; }
+.sent-h.withpy { line-height: 2.6; }
+.sent .w { display: inline-flex; flex-direction: column; align-items: center; cursor: pointer; border-radius: 7px; padding: 0 2px; transition: background .12s; vertical-align: bottom; }
+.sent .w:hover, .sent .w:active { background: color-mix(in srgb, var(--sc) 16%, transparent); }
+.sent .w .rt { display: flex; gap: 2px; font-size: 12px; line-height: 1.1; font-style: normal; height: 14px; }
+.sent .w .rt i { font-style: normal; }
+.sent .w .rb { font-weight: 600; }
+.sent .px { color: var(--muted); }
+.t1 { color: #e8513f; } .t2 { color: #16a34a; } .t3 { color: #2563eb; } .t4 { color: #9333ea; } .t5 { color: #94a3b8; }
+.sent-tools { display: flex; gap: 6px; margin-top: 8px; }
+.icon-btn.sm { width: 30px; height: 30px; }
+.icon-btn.sm .i { width: 16px; height: 16px; }
+.sent-tr { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); color: var(--text); font-size: 14px; }
+/* word sheet */
+.word-sheet { max-width: 420px; }
+.word-h { font-size: 40px; font-weight: 800; line-height: 1.1; }
+.word-p { color: var(--muted); font-size: 16px; margin-top: 2px; }
+.word-m { font-size: 17px; margin-top: 10px; }
+/* teacher stories */
+.stform { display: flex; flex-direction: column; gap: 10px; }
+.stform textarea { font-family: inherit; }
+.stlist { display: flex; flex-direction: column; gap: 8px; }
+.strow { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; background: var(--surface-2); border-radius: 12px; }
+
+/* ===== Isi rumpang (cloze) ===== */
+.cloze-front { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 10px 6px; }
+.cloze-sent { font-size: 28px; line-height: 1.6; font-weight: 700; text-align: center; }
+.blankbox { display: inline-block; min-width: 56px; padding: 0 8px; border-bottom: 3px solid var(--c, var(--brand)); color: var(--c, var(--brand)); font-weight: 800; }
+.blankbox.ok { color: var(--good); border-color: var(--good); }
+.blankbox.no { color: var(--bad); border-color: var(--bad); }
+.cloze-py { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 10px; font-size: 14px; }
+.cloze-py i { font-style: normal; }
+.cloze-mean { color: var(--muted); font-size: 15px; text-align: center; max-width: 90%; }
+.cloze-ctrl { display: flex; gap: 8px; }
+.cloze-ctrl #clozeIn { flex: 1; min-width: 0; padding: 12px 14px; border: 1.5px solid var(--line-2); border-radius: 12px; font-size: 18px; background: var(--surface); color: var(--text); }
+.cloze-ctrl #clozeIn:focus { outline: none; border-color: var(--brand); }
+.cloze-mc { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.cloze-mc .qo { font-size: 20px; }
+.cloze-reveal { text-align: center; margin-bottom: 10px; font-size: 16px; }
+.cloze-reveal .han { font-size: 22px; font-weight: 800; }
+.cloze-reveal .rp { color: var(--muted); }
+
+/* ===== Beku (freeze) ===== */
+.deck .frz { position: absolute; bottom: 10px; right: 46px; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; color: var(--muted); background: var(--surface-2); z-index: 4; transition: background .15s, color .15s; }
+.deck .frz .i { width: 16px; height: 16px; }
+.deck .frz:hover { background: #38bdf8; color: #fff; }
+.deck.frozen { align-items: flex-start; gap: 8px; opacity: .92; background: linear-gradient(160deg, color-mix(in srgb, #7dd3fc 22%, var(--surface)), var(--surface)); border-color: color-mix(in srgb, #38bdf8 40%, var(--line)); }
+.frz-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 800; color: #0284c7; background: color-mix(in srgb, #38bdf8 20%, transparent); padding: 3px 10px; border-radius: 999px; }
+.frz-badge .i { width: 14px; height: 14px; }
+.deck.frozen .zh { color: var(--text); }
+.deck.frozen .btn.sm { margin-top: 4px; }
+.frozen-cards { display: flex; flex-wrap: wrap; gap: 8px; }
+.frz-chip { display: inline-flex; align-items: center; gap: 7px; background: color-mix(in srgb, #38bdf8 12%, var(--surface)); border: 1px solid color-mix(in srgb, #38bdf8 35%, var(--line)); border-radius: 12px; padding: 7px 11px; cursor: pointer; transition: background .15s; }
+.frz-chip:hover { background: color-mix(in srgb, #38bdf8 22%, var(--surface)); }
+.frz-chip .han { font-size: 18px; font-weight: 700; }
+.frz-chip .fm { color: var(--muted); font-size: 13px; }
+.frz-chip .i { width: 15px; height: 15px; color: #0284c7; }

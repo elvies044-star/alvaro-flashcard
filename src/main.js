@@ -3,9 +3,10 @@ import IMG from './data/images.json';
 import MW from './data/mw.json';
 import { api } from './api/http.js';
 import { hbars, lineChart } from './charts.js';
+import { pinyin as pyPro } from 'pinyin-pro';
 
 const APP = 'Alvaro Mandarin Flashcard Tamer';
-const APP_VERSION = '2026.10.25-sosial';
+const APP_VERSION = '2026.10.27-beku';
 const BUILD = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev';
 
 /* ================= helpers ================= */
@@ -52,6 +53,11 @@ const ICON = {
   chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
   social: '<circle cx="12" cy="8" r="3.2"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/><path d="M19 4.5l.7 1.6 1.8.2-1.3 1.2.4 1.8-1.6-.9-1.6.9.4-1.8-1.3-1.2 1.8-.2z"/>',
   heart: '<path d="M12 20s-7-4.6-9.2-9A4.5 4.5 0 0 1 12 6.5 4.5 4.5 0 0 1 21.2 11C19 15.4 12 20 12 20z"/>',
+  pin: '<path d="M9 3h6l-1 6 3 3v2H7v-2l3-3-1-6z"/><path d="M12 14v7"/>',
+  speak: '<path d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9l-4 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/><path d="M8 9h8M8 12h5"/>',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 4.5 1.5c0 1.5-2 2-2 3.5"/><path d="M12 17h.01"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/>',
+  snow: '<path d="M12 2v20M4 6l16 12M20 6L4 18"/><path d="M12 2l-2.5 2.5M12 2l2.5 2.5M12 22l-2.5-2.5M12 22l2.5-2.5"/>',
   split: '<rect x="3" y="4" width="7" height="16" rx="2"/><rect x="14" y="4" width="7" height="16" rx="2"/>',
   bulb: '<path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2V17h6v-.3c0-.8.4-1.5 1-2A7 7 0 0 0 12 2z"/>',
   bolt: '<path d="M13 2L3 14h9l-1 8 10-12h-9z"/>', flag: '<path d="M4 22V4M4 4h13l-2 4 2 4H4"/>',
@@ -96,7 +102,7 @@ const COLORS = ['#1f3fbf', '#2fa3d6', '#16a34a', '#0f9f74', '#e0b51b', '#f08a24'
 const S = Object.assign({ mode: 'pic', quiz: true, auto: true, sfx: true, all: false, sel: [], view: 'learn', ttab: 'live', hints: true, kind: 'card', lang: 'id', split: { on: false, size: 10, part: 0 } }, store.get('prefs', {}));
 if (!S.split || typeof S.split !== 'object') S.split = { on: false, size: 10, part: 0 };
 const savePrefs = () => store.set('prefs', { mode: S.mode, quiz: S.quiz, auto: S.auto, sfx: S.sfx, all: S.all, sel: S.sel, view: ['study', 'done'].includes(S.view) ? 'learn' : S.view, ttab: S.ttab, hints: S.hints, kind: S.kind, split: S.split, lang: S.lang });
-let ME = null, SET = null, DECKS = [], CARDS = [], SRS = {}, Q = null, STUDENTS = [], AI_ON = false;
+let ME = null, SET = null, DECKS = [], CARDS = [], SRS = {}, Q = null, STUDENTS = [], AI_ON = false, PINS = new Set(), FRZ_DECKS = new Set(), FRZ_CARDS = new Set();
 const aiName = () => (SET && SET.ai_name) || 'Laoshi';
 let ADMIN_PHONE = '';
 const waLink = (p) => { const d = String(p || '').replace(/[^0-9]/g, '').replace(/^0/, '62'); return d ? 'https://wa.me/' + d : ''; };
@@ -118,8 +124,32 @@ function applyContent(c) {
   CARDS = (c.cards || []).filter((x) => x && typeof x.id === 'string' && typeof x.h === 'string');
   const by = {};
   for (const card of CARDS) (by[card.deck_id] ||= []).push(card);
-  DECKS = (c.decks || []).filter((d) => d && typeof d.id === 'string').map((d) => { const hm = /^hsk([123])(?:_l(\d+))?$/.exec(d.id); return { ...d, color: /^#[0-9a-f]{6}$/i.test(d.color) ? d.color : '#1f3fbf', cards: by[d.id] || [], hskLevel: hm ? +hm[1] : 0, hskLesson: hm && hm[2] ? +hm[2] : 0 }; });
+  DECKS = (c.decks || []).filter((d) => d && typeof d.id === 'string').map((d) => { const hm = /^hsk([123])(?:_l(\d+))?$/.exec(d.id); const sm = /^speak(\d+)$/.exec(d.id); return { ...d, color: /^#[0-9a-f]{6}$/i.test(d.color) ? d.color : '#1f3fbf', cards: by[d.id] || [], hskLevel: hm ? +hm[1] : 0, hskLesson: hm && hm[2] ? +hm[2] : 0, speak: d.kind === 'speak' || !!sm, speakLevel: sm ? +sm[1] : 0 }; });
+  PINS = new Set(Array.isArray(c.pins) ? c.pins : []);
+  FRZ_DECKS = new Set(c.frozen && Array.isArray(c.frozen.decks) ? c.frozen.decks : []);
+  FRZ_CARDS = new Set(c.frozen && Array.isArray(c.frozen.cards) ? c.frozen.cards : []);
+  LEX = new Map();
+  for (const card of CARDS) { if (card.h && !LEX.has(card.h)) LEX.set(card.h, { p: card.p || '', m: card.m || '' }); }
 }
+let LEX = new Map();
+const HAN_RE = /[一-鿿]/;
+// pinyin ber-nada untuk sebuah kata (pakai pinyin-pro)
+function pyOf(w) { try { return pyPro(w, { type: 'array' }).join(' '); } catch (_) { return ''; } }
+function toneOf(ch) { try { const a = pyPro(ch, { toneType: 'num', type: 'array' }); const m = /([1-5])/.exec(a[0] || ''); return m ? +m[1] : 5; } catch (_) { return 5; } }
+// pecah teks jadi token kata (cocokkan kosakata terpanjang dari LEX) + tanda baca
+function segHan(text) {
+  const out = []; const chars = [...text];
+  for (let i = 0; i < chars.length;) {
+    if (!HAN_RE.test(chars[i])) { out.push({ t: 'x', s: chars[i] }); i++; continue; }
+    let matched = null;
+    for (let len = Math.min(4, chars.length - i); len >= 2; len--) { const sub = chars.slice(i, i + len).join(''); if (LEX.has(sub)) { matched = sub; break; } }
+    const w = matched || chars[i];
+    out.push({ t: 'w', s: w }); i += [...w].length;
+  }
+  return out;
+}
+const isSpeak = (c) => { const d = deckOf(c.deck_id); return !!(d && d.speak); };
+const pinnedCards = () => CARDS.filter((c) => PINS.has(c.id) && studyDecks().some((d) => d.id === c.deck_id));
 // Untuk belajar: guru tidak ikut melihat kategori pribadi murid
 const studyDecks = () => DECKS.filter((d) => d.cards.length && (!isTeacher() || !d.owner_id || d.status === 'public'));
 const deckOf = (id) => DECKS.find((d) => d.id === id);
@@ -148,12 +178,13 @@ function navItems() {
   return n;
 }
 function shell() {
-  const cur = (v) => S.view === v || (['study', 'done'].includes(S.view) && v === 'learn');
+  const cur = (v) => S.view === v || (['study', 'done', 'story'].includes(S.view) && v === 'learn');
   const pend = pendingCount();
   const btns = navItems().map(([v, i, l]) => `<button data-nav="${v}" ${cur(v) ? 'aria-current="page"' : ''}>${ic(i)}<span>${l}</span>${v === 'teach' && pend ? `<span class="dot">${pend}</span>` : ''}</button>`).join('');
   $('.top').hidden = false;
   $('#topin').innerHTML = `<div class="brand">${logoHTML()}<span class="sep"></span><span class="name">Flashcard Tamer <span>· Mandarin</span></span></div>
     <nav class="nav" aria-label="Menu utama">${btns}</nav>
+    <button class="icon-btn" data-guide aria-label="Petunjuk" title="Petunjuk pemakaian">${ic('help')}</button>
     <button class="icon-btn" data-act="logout" aria-label="Keluar akun" title="Keluar akun">${ic('out')}</button>`;
   const bn = $('#bottomnav'); bn.hidden = false; bn.innerHTML = btns;
 }
@@ -206,16 +237,21 @@ function renderSetup(configured) {
 async function loadAll() {
   applyContent(await api.content());
   try { SRS = await api.srs(); } catch (_) { SRS = {}; }
+  try { STORIES = await api.stories(); } catch (_) { STORIES = []; }
   if (!S.sel.length) S.sel = studyDecks().slice(0, 1).map((d) => d.id);
   startInbox();
 }
+let STORIES = [], STORY = null;
 async function reloadContent() { applyContent(await api.content()); }
 
 /* ================= Belajar ================= */
 const mwOn = () => SET.mw_quiz !== false;
-const kindNow = () => (S.kind === 'mw' && mwOn() ? 'mw' : 'card');
+const kindNow = () => (S.kind === 'mw' && mwOn() ? 'mw' : S.kind === 'cloze' ? 'cloze' : 'card');
 const forKind = (cs) => (kindNow() === 'mw' ? cs.filter((c) => c.mw) : cs);
-const poolCards = () => forKind(studyDecks().filter((d) => S.sel.includes(d.id)).flatMap((d) => d.cards));
+const isFrozenDeck = (d) => FRZ_DECKS.has(typeof d === 'string' ? d : d.id);
+const usable = (cards) => cards.filter((c) => !FRZ_CARDS.has(c.id) && !FRZ_DECKS.has(c.deck_id));
+const liveCards = (d) => usable(d.cards);
+const poolCards = () => forKind(usable(studyDecks().filter((d) => S.sel.includes(d.id) && !isFrozenDeck(d)).flatMap((d) => d.cards)));
 const selCards = poolCards;
 const isPriv = (d) => !isTeacher() && (d.mine || !!d.delivered_at);
 const isNewGift = (d) => !!d.delivered_at && Date.now() - d.delivered_at < 3 * 864e5 && !d.cards.some((c) => SRS[c.id]);
@@ -242,11 +278,21 @@ function hskCard(d) {
     <div class="id">${n} kosakata · ${lessonsOf(d.hskLevel)} pelajaran</div>
     <div class="meta"><span class="dotc"></span>${open ? 'Pelajaran terbuka di bawah ↓' : 'Ketuk untuk lihat semua pelajaran'}</div></button>`;
 }
+const frzBtn = (d) => `<span class="frz" role="button" tabindex="0" data-freezedeck="${esc(d.id)}" aria-label="Bekukan kategori" title="Bekukan: sembunyikan dari belajar sampai dipecahkan">${ic('snow')}</span>`;
+function frozenDeckCard(d) {
+  return `<div class="deck frozen" style="--dc:${d.color}">
+    <div class="frz-badge">${ic('snow')} Beku</div>
+    <div class="zh">${esc(d.zh)}</div><div class="id">${esc(d.idn)}</div>
+    <div class="meta">${d.cards.length} kartu · tidak dipakai untuk belajar</div>
+    <button class="btn sm" data-unfreezedeck="${esc(d.id)}">${ic('snow')} Pecahkan (cairkan)</button></div>`;
+}
 function deckCard(d) {
   if (d.hskLevel && !d.hskLesson) return hskCard(d);
-  const due = d.cards.filter(isDue).length, sched = d.cards.length - due, on = S.sel.includes(d.id);
-  const mwN = d.cards.filter((c) => c.mw).length;
-  const pics = d.cards.filter(hasPic).slice(0, 3).map(picHTML).join('') || `<span class="hz">${esc(d.cards[0]?.h || '')}</span>`;
+  if (isFrozenDeck(d)) return frozenDeckCard(d);
+  const live = liveCards(d), nFrz = d.cards.length - live.length;
+  const due = live.filter(isDue).length, sched = live.length - due, on = S.sel.includes(d.id);
+  const mwN = live.filter((c) => c.mw).length;
+  const pics = live.filter(hasPic).slice(0, 3).map(picHTML).join('') || `<span class="hz">${esc((live[0] || d.cards[0] || {}).h || '')}</span>`;
   const tags = [];
   if (isPriv(d)) tags.push(`<span class="pill priv">${ic('key')} Pribadi</span>`);
   const fromWho = d.delivered_from ? esc(d.delivered_from) : 'guru';
@@ -254,11 +300,14 @@ function deckCard(d) {
   else if (d.owner_id) tags.push(`<span class="pill mute">Buatan ${d.mine ? 'kamu' : esc(d.owner_name || 'murid')}</span>`);
   if (isTeacher() && !d.owner_id && d.status === 'private') tags.push('<span class="pill priv">Hanya untuk penerima kiriman</span>');
   if (d.hskLesson) tags.push(`<span class="pill hsk-tag">HSK3.0 级${d.hskLevel}·${d.hskLesson}</span>`);
-  return `<button class="deck ${isPriv(d) ? 'mine' : ''} ${d.hskLesson ? 'hsk-lesson lv' + d.hskLevel : ''}" data-pick="${esc(d.id)}" aria-pressed="${on}" style="--dc:${d.color}"><span class="chk">${ic('check')}</span>${dlBtn(d)}
+  if (d.speak) tags.push(`<span class="pill speak-tag">${ic('speak')} Speaking</span>`);
+  if (nFrz) tags.push(`<span class="pill mute">${ic('snow')} ${nFrz} beku</span>`);
+  const total = live.length || d.cards.length;
+  return `<button class="deck ${isPriv(d) ? 'mine' : ''} ${d.speak ? 'speak-deck' : ''} ${d.hskLesson ? 'hsk-lesson lv' + d.hskLevel : ''}" data-pick="${esc(d.id)}" aria-pressed="${on}" style="--dc:${d.color}"><span class="chk">${ic('check')}</span>${dlBtn(d)}${frzBtn(d)}
     <div class="pics">${pics}</div><div class="zh">${esc(d.zh)}</div><div class="id">${esc(d.idn)}</div>
     ${tags.length ? `<div class="tags">${tags.join('')}</div>` : ''}
-    <div class="bar"><i style="width:${(sched / d.cards.length) * 100}%"></i></div>
-    <div class="meta"><span class="dotc"></span>${kindNow() === 'mw' ? `${mwN} kartu ber-量词` : `${due} siap · ${d.cards.length} kartu`}</div></button>`;
+    <div class="bar"><i style="width:${total ? (sched / total) * 100 : 0}%"></i></div>
+    <div class="meta"><span class="dotc"></span>${kindNow() === 'mw' ? `${mwN} kartu ber-量词` : `${due} siap · ${live.length} kartu`}</div></button>`;
 }
 function lastSessHTML() {
   const r = store.get('lastsess', null); if (!r || !ME || (savedRun() && RESUME_OK)) return '';
@@ -280,9 +329,12 @@ function renderLearn() {
   Q = null; if (S.view !== 'learn') BAR_OPEN = false; document.documentElement.style.setProperty('--c', 'var(--brand)');
   const ds = studyDecks(); S.sel = S.sel.filter((id) => ds.some((d) => d.id === id));
   if (S.kind === 'mw' && !mwOn()) S.kind = 'card';
-  const dueAll = ds.flatMap((d) => d.cards).filter(isDue).length;
+  const dueAll = ds.filter((d) => !isFrozenDeck(d)).flatMap((d) => liveCards(d)).filter(isDue).length;
   const priv = ds.filter(isPriv).sort((a, b) => (b.delivered_at || b.created_at || 0) - (a.delivered_at || a.created_at || 0));
-  const rest = ds.filter((d) => !isPriv(d) && !d.hskLevel);
+  const rest = ds.filter((d) => !isPriv(d) && !d.hskLevel && !d.speak);
+  const speakDecks = ds.filter((d) => d.speak).sort((a, b) => (a.speakLevel || 0) - (b.speakLevel || 0));
+  const pinned = pinnedCards();
+  const frozenCardList = CARDS.filter((c) => FRZ_CARDS.has(c.id) && !isFrozenDeck(c.deck_id) && studyDecks().some((d) => d.id === c.deck_id));
   const hskLevels = ds.filter((d) => d.hskLevel && !d.hskLesson).sort((a, b) => a.hskLevel - b.hskLevel);
   const hskLessons = ds.filter((d) => d.hskLesson && d.hskLevel === HSK_OPEN).sort((a, b) => a.hskLesson - b.hskLesson);
   const ps = S.split.on ? parts() : [], dp = doneParts(), pool = poolCards().length;
@@ -293,8 +345,10 @@ function renderLearn() {
     ${installHTML()}
     <div id="resumeBox">${resumeHTML()}</div>
     ${lastSessHTML()}
+    ${pinned.length ? `<div class="sec-title">${ic('pin')} Disematkan · ${pinned.length}</div>
+      <div class="pinbar"><p class="note" style="flex:1;min-width:140px">Kartu yang kamu sematkan untuk diulang. Belajar khusus kartu ini.</p><button class="btn sm" data-studypinned>${ic('play')} Belajar sematan</button></div>` : ''}
     <div class="learnbar">
-      ${mwOn() ? `<div class="seg" role="group" aria-label="Jenis latihan"><button data-lkind="card" aria-pressed="${kindNow() === 'card'}">Flashcard</button><button data-lkind="mw" aria-pressed="${kindNow() === 'mw'}">Kuis 量词</button></div>` : ''}
+      <div class="seg" role="group" aria-label="Jenis latihan"><button data-lkind="card" aria-pressed="${kindNow() === 'card'}">Flashcard</button>${mwOn() ? `<button data-lkind="mw" aria-pressed="${kindNow() === 'mw'}">Kuis 量词</button>` : ''}<button data-lkind="cloze" aria-pressed="${kindNow() === 'cloze'}">Isi rumpang</button></div>
       <button class="chip" data-act="split" aria-pressed="${S.split.on}">${ic('split')} Atur sesi</button>
       <button class="chip" data-act="sendsheet">${ic('send')} Kirim kartu</button>
       ${!isTeacher() && 'Notification' in window ? `<button class="chip" data-act="reminder" aria-pressed="${store.get('remind', false)}">${ic('alert')} Pengingat</button>` : ''}
@@ -305,12 +359,17 @@ function renderLearn() {
       <label class="field" for="spCount">Jumlah sesi<input id="spCount" type="number" inputmode="numeric" min="1" max="100" value="${Math.max(1, ps.length)}"></label>
       <p class="note" style="flex:1;min-width:180px;padding-bottom:10px">${pool} kartu dari kategori yang dipilih. Pilih sesi yang mau dipelajari sekarang.</p>
       <div class="parts">${ps.map((p, i) => `<button class="part ${dp.includes(i) ? 'ok' : ''}" data-part="${i}" aria-pressed="${S.split.part === i}">Sesi ${i + 1}<small>${dp.includes(i) ? '✓ selesai · ' : ''}${p.length} kartu</small></button>`).join('') || '<span class="note">Pilih kategori dulu.</span>'}</div>
-    </div>` : `<p class="note" style="margin:-6px 0 16px">${kindNow() === 'mw' ? 'Kuis 量词: tebak kata satuan yang tepat untuk tiap benda, misalnya 一<b>本</b>书.' : 'Ketuk kategori untuk memilih. <b>Ketuk 2× cepat</b> untuk membuka tombol Mulai. Nilai 1 & 2 diulang di sesi ini, 3 muncul besok, 4 muncul 3 hari lagi.'}</p>`}
+    </div>` : `<p class="note" style="margin:-6px 0 16px">${kindNow() === 'mw' ? 'Kuis 量词: tebak kata satuan yang tepat untuk tiap benda, misalnya 一<b>本</b>书.' : kindNow() === 'cloze' ? 'Isi rumpang: lengkapi kalimat dengan kata yang tepat — ketik (pinyin/hanzi) atau pilih. Arti kalimat ditampilkan di depan. Kalimat dibuat otomatis jika belum ada.' : 'Ketuk kategori untuk memilih. <b>Ketuk 2× cepat</b> untuk membuka tombol Mulai. Nilai 1 & 2 diulang di sesi ini, 3 muncul besok, 4 muncul 3 hari lagi.'}</p>`}
     ${hskLevels.length ? `<div class="sec-title">${ic('book2')} HSK 3.0</div><div class="decks hsk-row">${hskLevels.map(hskCard).join('')}</div>
       ${HSK_OPEN && hskLessons.length ? `<div class="hsk-open"><div class="hsk-open-bar"><b>级${HSK_OPEN} · ${hskLessons.length} pelajaran</b><span class="spacer"></span><button class="btn sm" data-studyhsk="${HSK_OPEN}">${ic('play')} Belajar semua</button><button class="chip" data-babpick="${HSK_OPEN}">${ic('list')} Per bab</button><button class="chip" data-hsk="${HSK_OPEN}">${ic('x')} Tutup</button></div>
         <div class="decks">${hskLessons.map(deckCard).join('')}</div></div>` : '<p class="note" style="margin:-4px 0 14px">Ketuk salah satu kartu HSK di atas untuk membuka semua pelajarannya.</p>'}` : ''}
+    ${speakDecks.length ? `<div class="sec-title">${ic('speak')} Percakapan harian</div><div class="decks">${speakDecks.map(deckCard).join('')}</div>` : ''}
+    ${STORIES && STORIES.length ? `<div class="sec-title">${ic('book2')} Cerita</div><div class="stories">${STORIES.map(storyTile).join('')}</div>` : ''}
     ${!isTeacher() || priv.length ? `<div class="sec-title">${ic('key')} Pribadi${priv.length ? ' · ' + priv.length : ''}</div><div class="decks">${!isTeacher() ? `<button class="deck custom" data-act="custom" aria-label="Buat kartu sendiri"><span class="plus">${ic('plus')}</span><b>Custom</b><span>Buat kartu sendiri</span></button>` : ''}${priv.map(deckCard).join('')}</div>${rest.length ? '<div class="sec-title">Kategori kelas</div>' : ''}` : ''}
     <div class="decks">${rest.map(deckCard).join('') || (priv.length ? '' : '<div class="panel empty"><b>Belum ada kategori</b>Gurumu belum menampilkan kategori untukmu.</div>')}</div>
+    ${frozenCardList.length ? `<div class="sec-title">${ic('snow')} Kata beku · ${frozenCardList.length}</div>
+      <div class="frozen-cards">${frozenCardList.map((c) => `<button class="frz-chip" data-unfreezecard="${esc(c.id)}" title="Pecahkan (cairkan)"><span class="han">${esc(c.h)}</span><span class="fm">${esc(mean(c))}</span>${ic('snow')}</button>`).join('')}</div>
+      <p class="note" style="margin-top:6px">Ketuk kata untuk mencairkannya agar muncul lagi saat belajar.</p>` : ''}
     <p class="ver">Versi ${APP_VERSION}</p>`;
   const sz = $('#spSize'), ct = $('#spCount');
   if (sz) {
@@ -462,7 +521,7 @@ async function startStudy(cards) {
   if (savedRun()) await endSaved(); // sesi lama yang ditinggal ditutup dulu
   BAR_OPEN = false;
   const kind = cards ? 'card' : kindNow();
-  const mode = kind === 'mw' ? 'mw' : effMode();
+  const mode = kind === 'mw' ? 'mw' : kind === 'cloze' ? 'han' : effMode();
   const decks = [...new Set(cs.map((c) => c.deck_id))];
   let sid;
   try { sid = await api.startSession(decks, mode, cs.length); }
@@ -472,16 +531,18 @@ async function startStudy(cards) {
   PRES.state = 'active'; saveRun();
   S.view = 'study'; $('#actionbar').hidden = true; shell(); startBeat(); window.scrollTo(0, 0); renderStudy();
 }
-function cardMode(c) { if (Q && Q.kind === 'mw') return 'mw'; let m = effMode(); if (m === 'mix') m = ['pic', 'han', 'arti'][(Math.random() * 3) | 0]; if (m === 'pic' && !hasPic(c)) m = 'han'; return m; }
+function cardMode(c) { if (Q && Q.kind === 'mw') return 'mw'; if (Q && Q.kind === 'cloze') return 'cloze'; if (isSpeak(c)) return 'arti'; let m = effMode(); if (m === 'mix') m = ['pic', 'han', 'arti'][(Math.random() * 3) | 0]; if (m === 'pic' && !hasPic(c)) m = 'han'; return m; }
 function frontHTML(c, m) {
   if (m === 'mw') return `${hasPic(c) ? `<div class="big" style="width:min(40%,150px)">${picHTML(c)}</div>` : ''}<div class="mwq">一<span class="blank">个</span>${esc(c.h)}</div><div class="mwq-sub">${esc(c.p)} · ${esc(mean(c))}</div><div class="q">Kata satuannya apa?</div>`;
   if (m === 'han') return `<div class="bighan">${esc(c.h)}</div><div class="q">Apa artinya?</div>`;
   if (m === 'arti') return `<div class="bigid">${esc(mean(c))}</div><div class="q">Bahasa Mandarinnya apa?</div>`;
+  if (m === 'cloze') return `<div class="cloze-front" id="clozeFront"><div class="note">Menyusun kalimat…</div></div>`;
   return `<div class="big">${picHTML(c)}</div><div class="q">Ini apa dalam bahasa Mandarin?</div>`;
 }
 function backHTML(c) {
   const L = [...c.h].length; let extra = '';
   if (c.mw) { const d = MW[c.mw] || ['', 0, '']; extra = `<div class="extra"><div class="z">一<b>${esc(c.mw)}</b>${esc(c.h)}</div>${d[0] ? `<div class="y">${yi(c.mw)} ${esc(d[0])} ${esc(c.p)}</div>` : ''}${c.alt && c.alt.length ? `<div class="a">juga: ${c.alt.map((a) => '一' + esc(a) + esc(c.h)).join(' / ')}</div>` : ''}</div>`; }
+  else if (c.s && isSpeak(c)) extra = `<div class="extra resp"><div class="resp-lbl">${ic('speak')} Cara menjawab<button class="say sm" data-sayresp aria-label="Dengarkan jawaban">${ic('sound')}</button></div><div class="s">${esc(c.s)}</div><div class="y">${esc(c.sp)}</div><div class="a">${esc(c.si)}</div></div>`;
   else if (c.s) extra = `<div class="extra">${c.opp ? `<div class="z">↔ <b>${esc(c.opp)}</b></div>` : ''}<div class="s">${esc(c.s)}</div><div class="y">${esc(c.sp)}</div><div class="a">${esc(c.si)}</div></div>`;
   return `${hasPic(c) ? `<div class="sm">${picHTML(c)}</div>` : ''}<div class="h ${L >= 5 ? 'l5' : L === 4 ? 'l4' : ''}">${esc(c.h)}</div>${c.p ? `<div class="p">${esc(c.p)}</div>` : ''}<div class="m">${esc(mean(c))}</div>${extra}`;
 }
@@ -490,8 +551,9 @@ function renderStudy() {
   if (!Q.queue.length) { renderDone(); return; }
   const c = Q.queue[0], d = deckOf(c.deck_id) || { zh: '', color: '#1f3fbf', cards: [] }, m = cardMode(c);
   const isMw = Q.kind === 'mw';
-  const canQuiz = isMw || (SET.quiz_enabled && S.quiz && d.cards.length >= 4);
-  Q.cur = { c, m, t0: performance.now(), hidden: 0, answered: !canQuiz, flipped: false, sug: 0 };
+  const isCloze = m === 'cloze';
+  const canQuiz = !isCloze && (isMw || (SET.quiz_enabled && S.quiz && d.cards.length >= 4));
+  Q.cur = { c, m, t0: performance.now(), hidden: 0, answered: !canQuiz && !isCloze, flipped: false, sug: 0 };
   document.documentElement.style.setProperty('--c', d.color);
   $('#view').innerHTML = `<div class="study">
     <div class="study-top"><button class="btn ghost sm" data-act="quit">${ic('back')} Kategori</button><div class="progress"><i style="width:${(Q.done / Q.total) * 100}%"></i></div><span class="count">${Q.part ? `Sesi ${Q.part.idx + 1} · ` : ''}${Q.done}/${Q.total}</span><button class="btn ghost sm end" data-act="endrun" title="Akhiri sesi sekarang">${ic('stop')} <span>Akhiri</span></button></div>
@@ -499,27 +561,31 @@ function renderStudy() {
     <div id="awayBanner" class="away-banner" role="status" ${Q.awayCount ? '' : 'hidden'}>${Q.awayCount ? `${ic('alert')}<span>Kamu sudah keluar dari aplikasi ${Q.awayCount} kali di sesi ini. Gurumu bisa melihatnya.</span>` : ''}</div>
     <div class="study-opts">
       ${isMw ? '<span class="pill priv">Kuis 量词</span>' : ''}
-      ${!isMw && SET.student_can_choose && SET.modes.length > 1 ? `<div class="seg" role="group" aria-label="Sisi depan kartu">${SET.modes.map((x) => `<button data-mode="${x}" aria-pressed="${effMode() === x}">${MODE_LABEL[x]}</button>`).join('')}</div>` : ''}
+      ${isCloze ? '<span class="pill priv">Isi rumpang</span>' : ''}
+      ${!isMw && !isCloze && SET.student_can_choose && SET.modes.length > 1 ? `<div class="seg" role="group" aria-label="Sisi depan kartu">${SET.modes.map((x) => `<button data-mode="${x}" aria-pressed="${effMode() === x}">${MODE_LABEL[x]}</button>`).join('')}</div>` : ''}
       <span class="spacer"></span>
-      <button class="chip clue-btn" data-act="clue" ${Q.clues > 0 ? '' : 'disabled'} title="Clue: huruf depan jawaban. Dapat clue baru tiap ${CLUE_STREAK} jawaban benar berturut-turut.">${ic('bulb')} Clue <b>${Q.clues}</b></button>
-      <button class="chip" data-act="lang" title="Bahasa arti">${LANG_LABEL[S.lang] || 'ID'}</button>
-      ${SET.quiz_enabled && !isMw ? `<button class="chip" data-act="quiz" aria-pressed="${S.quiz}">Tebak</button>` : ''}
+      ${!isCloze ? `<button class="chip clue-btn" data-act="clue" ${Q.clues > 0 ? '' : 'disabled'} title="Clue: huruf depan jawaban. Dapat clue baru tiap ${CLUE_STREAK} jawaban benar berturut-turut.">${ic('bulb')} Clue <b>${Q.clues}</b></button>
+      <button class="chip" data-act="lang" title="Bahasa arti">${LANG_LABEL[S.lang] || 'ID'}</button>` : ''}
+      <button class="chip pinchip ${PINS.has(c.id) ? 'on' : ''}" data-pincard aria-pressed="${PINS.has(c.id)}" title="Sematkan kartu ini untuk diulang">${ic('pin')} <span>Sematkan</span></button>
+      <button class="chip" data-freezecard title="Bekukan kata ini — tidak muncul lagi sampai dicairkan">${ic('snow')} <span>Belum berguna</span></button>
+      ${SET.quiz_enabled && !isMw && !isCloze ? `<button class="chip" data-act="quiz" aria-pressed="${S.quiz}">Tebak</button>` : ''}
       <button class="chip" data-act="auto" aria-pressed="${S.auto}" aria-label="Ucapan otomatis" title="Ucapan otomatis">${ic('sound')}</button>
       <button class="chip" data-act="sfx" aria-pressed="${S.sfx}" aria-label="Efek suara" title="Efek suara">${ic(S.sfx ? 'sparkle' : 'mute')}</button>
       ${AI_ON ? `<button class="chip ailah" data-act="asklaoshi" title="Tanya ${esc(aiName())} soal kartu ini">${monkey()} ${esc(aiName())}</button>` : ''}
     </div>
     <div class="stage"><div class="tilt" id="tilt"><div class="fc" id="fc" tabindex="0" role="button" aria-label="Kartu. Ketuk untuk membalik">
-      <div class="face front"><div class="tag"><span class="dotc" style="--dc:${d.color}"></span>${esc(d.zh)}</div>${frontHTML(c, m)}<div class="clue" id="clueBox" hidden></div><div class="hint">${canQuiz ? 'Pilih jawaban di bawah' : 'Ketuk kartu untuk membalik'}</div></div>
+      <div class="face front"><div class="tag"><span class="dotc" style="--dc:${d.color}"></span>${esc(d.zh)}</div>${frontHTML(c, m)}<div class="clue" id="clueBox" hidden></div><div class="hint">${canQuiz ? 'Pilih jawaban di bawah' : isCloze ? 'Isi jawaban di bawah' : 'Ketuk kartu untuk membalik'}</div></div>
       <div class="face bface"><div class="tag"><span class="dotc" style="--dc:${d.color}"></span>${esc(d.zh)}</div><button class="say" data-act="say" aria-label="Dengarkan pengucapan">${ic('sound')}</button>${backHTML(c)}</div>
     </div></div></div>
-    <div id="ctrl">${canQuiz ? `<div class="quiz" aria-busy="true">${'<button class="qo skeleton" disabled>…</button>'.repeat(4)}</div>` : `<button class="btn lg flipbtn" data-act="flip">${ic('flip')} Balik kartu</button>`}</div>
+    <div id="ctrl">${canQuiz ? `<div class="quiz" aria-busy="true">${'<button class="qo skeleton" disabled>…</button>'.repeat(4)}</div>` : isCloze ? '<p class="note" style="text-align:center">Menyusun kalimat…</p>' : `<button class="btn lg flipbtn" data-act="flip">${ic('flip')} Balik kartu</button>`}</div>
     <div class="skiprow"><button class="btn ghost sm" data-act="skip" title="Lewati kartu ini (muncul lagi di akhir sesi)">Lewati kartu ${ic('play')}</button></div>
-    <div class="keys">Spasi: balik · 1–4: jawab atau nilai · S: dengarkan · H: clue · N: lewati</div>
+    <div class="keys">${isCloze ? 'Enter: periksa · 1–4: nilai · S: dengarkan · N: lewati' : 'Spasi: balik · 1–4: jawab atau nilai · S: dengarkan · H: clue · N: lewati'}</div>
   </div>`;
   bindTilt();
   if (Q && Q.sid) api.presence(Q.sid, PRES.state === 'away' ? 'away' : 'active', c.id); // mirror kartu ke guru
   if (m === 'han' && S.auto) speak(c.h);
   if (canQuiz) loadQuiz(c, m);
+  if (isCloze) setupCloze(c, d);
 }
 /* ---- lewati kartu: pindah ke akhir antrean, tidak dinilai ---- */
 function skipCard() {
@@ -653,6 +719,77 @@ function rate(n) {
   const tilt = $('#tilt');
   ({ 1: () => { SFX.r1(); fx(tilt, 'fx-wrong'); }, 2: () => { SFX.r2(); fx(tilt, 'fx-lift'); }, 3: () => { SFX.r3(); fx(tilt, 'fx-right'); }, 4: () => { SFX.r4(); fx(tilt, 'fx-right'); burst(24); } })[n]();
   setTimeout(renderStudy, n === 1 ? 460 : 360);
+}
+/* ---- Isi rumpang (cloze) ---- */
+const CLOZE = new Map();
+const normPy = (t) => String(t || '').toLowerCase().replace(/[āáǎà]/g, 'a').replace(/[ēéěè]/g, 'e').replace(/[īíǐì]/g, 'i').replace(/[ōóǒò]/g, 'o').replace(/[ūúǔù]/g, 'u').replace(/[ǖǘǚǜ]/g, 'v').replace(/[^a-z0-9一-鿿]/g, '');
+const pyToneless = (h) => { try { return pyPro(h, { toneType: 'none', type: 'array' }).join(''); } catch (_) { return ''; } };
+function clozeSentence(s, answer) {
+  const i = s.indexOf(answer);
+  if (i < 0) return esc(s) + ' <span class="blankbox" id="blankBox">____</span>';
+  return esc(s.slice(0, i)) + `<span class="blankbox" id="blankBox">____</span>` + esc(s.slice(i + answer.length));
+}
+async function setupCloze(c, d) {
+  const cur = Q.cur;
+  let data = CLOZE.get(c.id);
+  if (!data) {
+    try { const r = await api.cloze(c.id); data = { s: r.s, si: r.si, answer: r.answer || c.h }; CLOZE.set(c.id, data); }
+    catch (e) { data = { s: '', si: mean(c), answer: c.h, fallback: true, err: e.message }; }
+  }
+  if (!Q || Q.cur !== cur) return;
+  cur.cloze = data;
+  const front = document.getElementById('clozeFront'); if (!front) return;
+  const lowpy = !isTeacher() && (ME && ME.level || 0) <= 1;
+  const sentHtml = data.s ? clozeSentence(data.s, data.answer) : `<span class="blankbox" id="blankBox">____</span>`;
+  const py = (data.s && lowpy) ? `<div class="cloze-py">${[...data.s].map((ch) => data.answer.includes(ch) ? '' : `<i class="t${toneOf(ch)}">${esc(pyOf(ch))}</i>`).join(' ')}</div>` : '';
+  front.innerHTML = `<div class="cloze-sent">${sentHtml}</div>${py}
+    ${!data.fallback && data.si ? `<div class="cloze-mean">${esc(data.si)}</div>` : ''}
+    ${data.fallback ? `<div class="q">Ketik kata Mandarin untuk: <b>${esc(mean(c))}</b></div>` : '<div class="q">Lengkapi kalimat di atas</div>'}`;
+  const ctrl = document.getElementById('ctrl'); if (!ctrl) return;
+  ctrl.innerHTML = `<div class="cloze-ctrl"><input id="clozeIn" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="ketik pinyin / hanzi…" aria-label="Jawaban">
+      <button class="btn" data-clozecheck>${ic('check')} Periksa</button></div>
+    <button class="btn ghost sm" data-clozemc style="margin-top:8px">${ic('list')} Lihat pilihan</button>
+    <div class="cloze-mc" id="clozeMC" hidden></div>`;
+  const inp = document.getElementById('clozeIn'); if (inp) inp.focus();
+  if (inp) inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); checkCloze(inp.value); } });
+}
+function clozeOptions(c, d) {
+  const pool = (d && d.cards || []).map((x) => x.h).filter((h) => h && h !== c.cloze.answer);
+  const uniq = [...new Set(pool)];
+  const sameLen = uniq.filter((h) => [...h].length === [...c.cloze.answer].length);
+  const pick = shuffle(sameLen.length >= 3 ? sameLen : uniq).slice(0, 3);
+  return shuffle([c.cloze.answer, ...pick]);
+}
+function showClozeMC() {
+  const cur = Q && Q.cur; if (!cur || !cur.cloze) return;
+  const box = document.getElementById('clozeMC'); if (!box) return;
+  if (!box.hidden) { box.hidden = true; return; }
+  const d = deckOf(cur.c.deck_id);
+  box.innerHTML = clozeOptions(cur.c, d).map((o) => `<button class="qo" data-clozepick="${esc(o)}"><span class="z">${esc(o)}</span></button>`).join('');
+  box.hidden = false;
+}
+function checkCloze(val) {
+  const cur = Q && Q.cur; if (!cur || !cur.cloze || cur.answered) return;
+  if (locked && locked()) { lockCtrl(); return; }
+  const ans = cur.cloze.answer;
+  const v = String(val || '').trim(); if (!v) return;
+  const correct = normPy(v) === normPy(ans) || normPy(v) === normPy(pyToneless(ans)) || v === ans;
+  revealCloze(correct);
+}
+function revealCloze(correct) {
+  const cur = Q.cur; cur.answered = true; cur.quizOk = correct; cur.sug = correct ? 3 : 1;
+  const blank = document.getElementById('blankBox'); if (blank) { blank.textContent = cur.cloze.answer; blank.classList.add(correct ? 'ok' : 'no'); }
+  const inp = document.getElementById('clozeIn'); if (inp) inp.disabled = true;
+  document.querySelectorAll('#clozeMC .qo').forEach((b) => { b.disabled = true; if (b.dataset.clozepick === cur.cloze.answer) b.classList.add('right'); });
+  const tilt = $('#tilt');
+  badgeFx(correct); gainStreak(correct);
+  if (correct) { SFX.right(); fx(tilt, 'fx-right'); if (Q.streak % 5 === 0) { burst(24); toast(`${Q.streak} benar berturut-turut!`); } }
+  else { SFX.wrong(); fx(tilt, 'fx-wrong'); try { if (navigator.vibrate) navigator.vibrate(120); } catch (_) { /* - */ } }
+  // tampilkan arti kata + rating
+  cur.flipped = true;
+  const info = `<div class="cloze-reveal"><span class="han">${esc(cur.cloze.answer)}</span> <span class="rp">${esc(cur.c.p || pyOf(cur.cloze.answer))}</span> · ${esc(mean(cur.c))}${correct ? '' : ' <span class="pill bad">belum tepat</span>'}</div>`;
+  $('#ctrl').innerHTML = info + `<div class="rate">${[1, 2, 3, 4].map((n) => `<button class="rb r${n} ${cur.sug === n ? 'sug' : ''}" data-rate="${n}"><span class="k">${n}</span><span class="l">${RATE[n].l}</span><span class="w">${RATE[n].w}</span></button>`).join('')}</div>`;
+  if (S.auto) speak(cur.cloze.s || cur.c.h);
 }
 function bindTilt() {
   const tilt = $('#tilt'); if (!tilt || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -1018,6 +1155,142 @@ async function studyPost(id) {
   if (!cs.length) { toast('Kartu belum tersedia. Coba lagi sebentar.'); return; }
   S.view = 'study'; await startStudy(cs);
 }
+async function togglePin(cardId, btn) {
+  const want = !PINS.has(cardId);
+  if (want) PINS.add(cardId); else PINS.delete(cardId);
+  if (btn) { btn.classList.toggle('on', want); btn.setAttribute('aria-pressed', want); if (want) fx(btn, 'fx-right'); }
+  toast(want ? 'Kartu disematkan.' : 'Sematan dilepas.');
+  try { await api.pin(cardId, want); } catch (e) { if (want) PINS.delete(cardId); else PINS.add(cardId); if (btn) { btn.classList.toggle('on', !want); btn.setAttribute('aria-pressed', !want); } toast(e.message); }
+}
+async function freezeDeck(id, freeze) {
+  if (freeze) FRZ_DECKS.add(id); else FRZ_DECKS.delete(id);
+  if (freeze) S.sel = S.sel.filter((x) => x !== id);
+  savePrefs(); renderLearn();
+  toast(freeze ? 'Kategori dibekukan. Pecahkan untuk memakainya lagi.' : 'Kategori dicairkan.');
+  try { await api.freeze('deck', id, freeze); } catch (e) { if (freeze) FRZ_DECKS.delete(id); else FRZ_DECKS.add(id); toast(e.message); renderLearn(); }
+}
+async function freezeCard(id, freeze) {
+  if (freeze) FRZ_CARDS.add(id); else FRZ_CARDS.delete(id);
+  toast(freeze ? 'Kata dibekukan — tidak muncul lagi di belajar.' : 'Kata dicairkan.');
+  try { await api.freeze('card', id, freeze); } catch (e) { if (freeze) FRZ_CARDS.delete(id); else FRZ_CARDS.add(id); toast(e.message); }
+}
+/* ================= Petunjuk pengguna baru ================= */
+const GUIDE = [
+  ['play', 'Pilih & belajar', 'Ketuk sebuah kategori untuk memilih, lalu <b>ketuk 2× cepat</b> untuk membuka tombol Mulai. Nilai 1–2 diulang, 3 muncul besok, 4 tiga hari lagi.'],
+  ['speak', 'Percakapan harian', 'Buka kategori <b>Speaking</b> untuk melatih ungkapan sehari-hari lengkap dengan cara meresponnya. Tekan tombol suara untuk mendengar pengucapan.'],
+  ['pin', 'Sematkan kartu', 'Saat belajar, ketuk <b>Sematkan</b> untuk menandai kartu sulit. Kartu tersematkan muncul di atas halaman Belajar untuk kamu ulang kapan saja.'],
+  ['edit', 'Isi rumpang', 'Di halaman Belajar pilih mode <b>Isi rumpang</b>: lengkapi kalimat dengan kata yang tepat (ketik pinyin/hanzi atau pilih). Arti kalimat ada di depan, dan kalimat dibuat otomatis.'],
+  ['book2', 'Cerita', 'Buka <b>Cerita</b> untuk membaca teks Mandarin. Ketuk kata mana pun untuk melihat arti & pinyin, dengar audionya, atau tambahkan ke kartumu.'],
+  ['social', 'Sosial', 'Di tab <b>Sosial</b> kamu bisa melihat kartu buatan teman, menyukainya, dan membuka profil mereka. Kartumu bisa tampil setelah disetujui guru.'],
+  ['laoshi', 'Tanya AI', 'Punya pertanyaan Mandarin? Buka tab AI atau tekan tombol AI saat belajar untuk minta contoh kalimat dan penjelasan perbedaan kata.'],
+  ['hist', 'Riwayat', 'Lihat perkembanganmu dan lanjutkan kartu kemarin dari tab Riwayat dan halaman Belajar.'],
+];
+function openGuide() {
+  if (document.getElementById('guideSheet')) return;
+  const steps = GUIDE.map(([i, t, d]) => `<li><span class="g-ic">${ic(i)}</span><div><b>${t}</b><p>${d}</p></div></li>`).join('');
+  const el = document.createElement('div'); el.id = 'guideSheet'; el.className = 'sheet-back';
+  el.innerHTML = `<div class="sheet guide-sheet" role="dialog" aria-modal="true" aria-label="Petunjuk">
+    <div class="sh-head"><div><p class="eyebrow">Selamat datang 👋</p><b>Cara memakai aplikasi</b></div><button class="icon-btn" data-guideclose aria-label="Tutup">${ic('x')}</button></div>
+    <ul class="guide-list">${steps}</ul>
+    <button class="btn lg" data-guideclose>${ic('check')} Mengerti, mulai belajar</button></div>`;
+  document.body.appendChild(el);
+  el.addEventListener('click', (e) => { if (e.target === el || e.target.closest('[data-guideclose]')) closeGuide(); });
+  if (ME) store.set('guide_' + ME.id, true);
+}
+function closeGuide() { const el = document.getElementById('guideSheet'); if (el) el.remove(); }
+/* ================= Cerita ================= */
+const STORY_LVL = { 1: 'Pemula', 2: 'HSK 2', 3: 'HSK 3', 4: 'HSK 4', 5: 'HSK 5', 6: 'HSK 6' };
+const lvlName = (n) => STORY_LVL[n] || ('Level ' + n);
+const STORY_COLORS = { 1: '#0ea5a4', 2: '#8b5cf6', 3: '#2f6df0', 4: '#e8513f', 5: '#f08a24', 6: '#db2777' };
+function storyTile(s) {
+  const col = STORY_COLORS[s.level] || '#1f3fbf';
+  return `<button class="story-tile" data-story="${esc(s.id)}" style="--sc:${col}">
+    <span class="story-lvl">${esc(lvlName(s.level))}</span>
+    <span class="story-title han">${esc(s.title)}</span>
+    <span class="story-meta">${ic('book2')} ${s.len} karakter${s.author ? ` · oleh ${esc(s.author)}` : ''}</span></button>`;
+}
+let LOWPY = false; // tampilkan pinyin ber-warna
+async function openStory(id) {
+  stopLive(); S.view = 'story'; shell(); window.scrollTo(0, 0);
+  $('#actionbar').hidden = true;
+  $('#view').innerHTML = '<div class="panel"><p class="note">Memuat cerita…</p></div>';
+  let s; try { s = await api.story(id); } catch (e) { toast(e.message); return go('learn'); }
+  if (S.view !== 'story') return;
+  STORY = s;
+  if (!isTeacher() && (ME.level || 0) <= 1) LOWPY = true; // pemula: pinyin otomatis nyala
+  renderStory();
+}
+function sentencesOf(body) {
+  const out = []; let cur = '';
+  for (const ch of [...body]) { cur += ch; if ('。！？\n'.includes(ch)) { if (cur.trim()) out.push(cur.trim()); cur = ''; } }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+function sentHTML(sent, si) {
+  const toks = segHan(sent).map((tk) => {
+    if (tk.t !== 'w') return `<span class="px">${esc(tk.s)}</span>`;
+    const chars = [...tk.s];
+    const ruby = LOWPY ? `<span class="rt">${chars.map((c) => `<i class="t${toneOf(c)}">${esc(pyOf(c))}</i>`).join('')}</span>` : '';
+    return `<span class="w" data-word="${esc(tk.s)}">${ruby}<span class="rb">${esc(tk.s)}</span></span>`;
+  }).join('');
+  return `<div class="sent" data-si="${si}"><div class="sent-h ${LOWPY ? 'withpy' : ''}">${toks}</div>
+    <div class="sent-tools"><button class="icon-btn sm" data-saysent="${si}" aria-label="Dengar kalimat">${ic('sound')}</button>${AI_ON && canCreate() ? `<button class="icon-btn sm" data-trsent="${si}" aria-label="Terjemahkan">${ic('globe')}</button>` : ''}</div>
+    <div class="sent-tr" id="tr${si}" hidden></div></div>`;
+}
+function renderStory() {
+  const s = STORY; if (!s) return go('learn');
+  const col = STORY_COLORS[s.level] || '#1f3fbf';
+  document.documentElement.style.setProperty('--c', col);
+  const sents = sentencesOf(s.body);
+  $('#view').innerHTML = `<div class="reader" style="--sc:${col}">
+    <div class="reader-top"><button class="btn ghost sm" data-backlearn>${ic('back')} Belajar</button>
+      <button class="chip ${LOWPY ? 'on' : ''}" data-togpy aria-pressed="${LOWPY}">拼 Pinyin</button>
+      <button class="chip" data-sayall>${ic('sound')} Dengar semua</button></div>
+    <div class="reader-head"><span class="story-lvl" style="--sc:${col}">${esc(lvlName(s.level))}</span><h1 class="h1 han">${esc(s.title)}</h1></div>
+    <div class="reader-body">${sents.map(sentHTML).join('')}</div>
+    <p class="note" style="text-align:center;margin-top:12px">Ketuk kata untuk arti & tambahkan ke kartu. Ketuk ikon suara untuk mendengar.</p>
+  </div>`;
+}
+function openWordSheet(word) {
+  closeWordSheet();
+  const info = LEX.get(word) || {};
+  const p = info.p || pyOf(word);
+  const m = info.m || '';
+  const el = document.createElement('div'); el.id = 'wordSheet'; el.className = 'sheet-back';
+  el.innerHTML = `<div class="sheet word-sheet" role="dialog" aria-modal="true">
+    <div class="sh-head"><div><div class="word-h han">${esc(word)}</div><div class="word-p">${esc(p)}</div></div><button class="icon-btn" data-wordclose aria-label="Tutup">${ic('x')}</button></div>
+    <div class="word-m" id="wordM">${m ? esc(m) : '<span class="note">Arti belum diketahui.</span>'}</div>
+    <div class="row" style="gap:8px;margin-top:12px"><button class="btn secondary" data-wordsay>${ic('sound')} Dengar</button>${canCreate() ? `<button class="btn" data-wordadd="${esc(word)}">${ic('plus')} Tambah ke kartu</button>` : ''}</div></div>`;
+  document.body.appendChild(el);
+  el.addEventListener('click', (e) => { if (e.target === el || e.target.closest('[data-wordclose]')) closeWordSheet(); if (e.target.closest('[data-wordsay]')) speak(word); if (e.target.closest('[data-wordadd]')) addWordToCards(word, info); });
+  if (!m && AI_ON && canCreate()) api.translate([word]).then((r) => { const it = (r.items || [])[0]; const mm = it && (it.m || it.idn || it.translation); if (mm) { const box = document.getElementById('wordM'); if (box) box.textContent = mm; STORY && LEX.set(word, { p, m: mm }); } }).catch(() => {});
+}
+function closeWordSheet() { const el = document.getElementById('wordSheet'); if (el) el.remove(); }
+async function addWordToCards(word, info) {
+  if (!canCreate()) { toast('Gurumu belum mengizinkan membuat kartu.'); return; }
+  const p = (info && info.p) || LEX.get(word)?.p || pyOf(word);
+  let m = (info && info.m) || LEX.get(word)?.m || '';
+  if (!m && AI_ON) { try { const r = await api.translate([word]); const it = (r.items || [])[0]; m = (it && (it.m || it.idn || it.translation)) || ''; } catch (_) { /* biar kosong */ } }
+  if (!m) m = p; // minimal ada isi
+  try {
+    let deck = DECKS.find((d) => d.mine && d.zh === 'Dari cerita');
+    if (!deck) { const r = await api.createDeck({ zh: 'Dari cerita', idn: 'Kata dari cerita', color: '#0ea5a4', public: false }); await reloadContent(); deck = DECKS.find((d) => d.id === r.id) || DECKS.find((d) => d.mine && d.zh === 'Dari cerita'); }
+    if (!deck) { toast('Gagal membuat kategori.'); return; }
+    if (deck.cards.some((c) => c.h === word)) { toast('Kata ini sudah ada di kartumu.'); closeWordSheet(); return; }
+    await api.bulkCards(deck.id, [{ h: word, p, m }]);
+    await reloadContent();
+    toast(`"${word}" ditambahkan ke kategori "Dari cerita".`);
+    closeWordSheet();
+  } catch (e) { toast(e.message); }
+}
+async function translateSent(si) {
+  const box = document.getElementById('tr' + si); if (!box) return;
+  if (!box.hidden) { box.hidden = true; return; }
+  const sent = sentencesOf(STORY.body)[si]; if (!sent) return;
+  box.hidden = false; box.textContent = 'Menerjemahkan…';
+  try { const r = await api.translate([sent]); const it = (r.items || [])[0]; box.textContent = (it && (it.m || it.idn || it.translation)) || 'Tidak ada terjemahan.'; }
+  catch (e) { box.textContent = e.message; }
+}
 async function toggleLike(id, btn) {
   const want = !btn.classList.contains('on');
   btn.disabled = true;
@@ -1261,7 +1534,7 @@ async function setPic(v) {
 const TF = Object.assign({ days: 30, cls: '', student: '' }, store.get('tf', {}));
 let armed = null, lastCred = null, SESS = [], liveT = 0, DRAFT = null;
 function stopLive() { clearInterval(liveT); liveT = 0; }
-const TTABS = [['live', 'eye', 'Pantau langsung'], ['students', 'users', 'Murid'], ['scores', 'chart', 'Skor'], ['progress', 'flag', 'Progres'], ['time', 'clock', 'Grafik waktu'], ['approve', 'inbox', 'Persetujuan'], ['settings', 'gear', 'Pengaturan']];
+const TTABS = [['live', 'eye', 'Pantau langsung'], ['students', 'users', 'Murid'], ['scores', 'chart', 'Skor'], ['progress', 'flag', 'Progres'], ['time', 'clock', 'Grafik waktu'], ['approve', 'inbox', 'Persetujuan'], ['stories', 'book2', 'Cerita'], ['settings', 'gear', 'Pengaturan']];
 async function renderTeach() {
   $('#actionbar').hidden = true; document.documentElement.style.setProperty('--c', 'var(--brand)');
   if (!TTABS.some(([k]) => k === S.ttab)) S.ttab = 'live';
@@ -1269,8 +1542,8 @@ async function renderTeach() {
   $('#view').innerHTML = `<div class="page-head"><div><p class="eyebrow">Panel guru</p><h1 class="h1">Halo, ${esc(ME.display_name)}</h1><p class="sub">Pengaturan dan kartu yang kamu ubah langsung berlaku untuk semua murid.</p></div></div>
     <div class="tabs" role="tablist">${TTABS.map(([k, i, l]) => `<button role="tab" data-ttab="${k}" aria-selected="${S.ttab === k}">${ic(i)} ${l}${k === 'approve' && pend ? `<span class="n">${pend}</span>` : ''}</button>`).join('')}</div><div id="tview"><p class="note">Memuat…</p></div>`;
   armed = null;
-  const tab = S.ttab, draw = () => ({ live: tLive, students: tStudents, scores: tScores, progress: tProgress, time: tTime, approve: tApprove, settings: tSettings })[tab]();
-  if (['settings', 'approve'].includes(tab)) { draw(); return; }
+  const tab = S.ttab, draw = () => ({ live: tLive, students: tStudents, scores: tScores, progress: tProgress, time: tTime, approve: tApprove, stories: tStories, settings: tSettings })[tab]();
+  if (['settings', 'approve', 'stories'].includes(tab)) { draw(); return; }
   try { STUDENTS = await api.students(); } catch (e) { toast(e.message); }
   if (S.view === 'teach' && S.ttab === tab) draw();
 }
@@ -1485,6 +1758,38 @@ function tApprove() {
 }
 
 /* ---- Pengaturan ---- */
+let STEDIT = null;
+async function tStories() {
+  const v = $('#tview');
+  v.innerHTML = '<p class="note">Memuat…</p>';
+  try { STORIES = await api.stories(); } catch (e) { toast(e.message); }
+  if (!(S.view === 'teach' && S.ttab === 'stories')) return;
+  const ed = STEDIT || { id: '', title: '', level: 1, body: '' };
+  const lvOpts = [1, 2, 3, 4, 5, 6].map((n) => `<option value="${n}" ${ed.level === n ? 'selected' : ''}>${lvlName(n)}</option>`).join('');
+  v.innerHTML = `<div class="panel">
+    <div class="panel-head"><h2 class="h3">${ed.id ? 'Edit cerita' : 'Tambah cerita'}</h2>${ed.id ? `<button class="btn ghost sm" data-stnew>${ic('plus')} Cerita baru</button>` : ''}</div>
+    <form id="stForm" class="stform">
+      <label class="field">Judul<input id="stTitle" maxlength="80" value="${esc(ed.title)}" placeholder="我的一天" required></label>
+      <label class="field">Level<select id="stLevel">${lvOpts}</select></label>
+      <label class="field">Isi cerita (teks Mandarin)<textarea id="stBody" rows="6" maxlength="8000" placeholder="Tempel teks cerita di sini…" required>${esc(ed.body)}</textarea></label>
+      <p class="note">Hanzi otomatis bisa ditekan murid untuk melihat arti, mendengar audio, dan menambahkannya ke kartu. Pilih level agar muncul di kelompok yang tepat.</p>
+      <div class="row"><button class="btn" type="submit">${ic('check')} ${ed.id ? 'Simpan perubahan' : 'Tambah cerita'}</button><span id="stNote" class="note"></span></div>
+    </form></div>
+    <div class="panel"><div class="panel-head"><h2 class="h3">Daftar cerita · ${STORIES.length}</h2></div>
+    ${STORIES.length ? `<div class="stlist">${STORIES.map((s) => `<div class="strow"><div><b class="han">${esc(s.title)}</b><span class="note"> ${esc(lvlName(s.level))} · ${s.len} karakter${s.builtin ? ' · bawaan' : s.author ? ' · ' + esc(s.author) : ''}</span></div>
+      <div class="row" style="gap:6px"><button class="btn ghost sm" data-stedit="${esc(s.id)}">${ic('edit')} Edit</button><button class="btn ghost sm" data-stdel="${esc(s.id)}">${ic('trash')} Hapus</button></div></div>`).join('')}</div>`
+      : '<p class="note">Belum ada cerita.</p>'}</div>`;
+  $('#stLevel').value = ed.level;
+  $('#stForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const payload = { title: $('#stTitle').value.trim(), level: +$('#stLevel').value, body: $('#stBody').value.trim() };
+    if (ed.id) payload.id = ed.id;
+    if (!payload.title || !payload.body) { $('#stNote').textContent = 'Judul dan isi wajib diisi.'; return; }
+    $('#stNote').textContent = 'Menyimpan…';
+    try { await api.saveStory(payload); STEDIT = null; toast(ed.id ? 'Cerita diperbarui.' : 'Cerita ditambahkan.'); tStories(); }
+    catch (err) { $('#stNote').textContent = err.message; }
+  });
+}
 function tSettings() {
   DRAFT = JSON.parse(JSON.stringify(SET));
   const shared = DECKS.filter((d) => !d.owner_id || d.status === 'public');
@@ -1539,7 +1844,7 @@ function leaveStudy() {
 let endArmed = 0, LAST_TAP = { id: null, t: 0 };
 document.addEventListener('click', async (e) => {
   if (!e.target.closest('#emojiPop') && !e.target.closest('[data-emo]')) closeEmoji();
-  const b = e.target.closest('[data-profile],[data-like],[data-studypost],[data-backfeed],[data-onb],[data-onbans],[data-sheetq],[data-aitip],[data-dl],[data-hsk],[data-studyhsk],[data-babpick],[data-babgo],[data-vis],[data-pstu],[data-lkind],[data-part],[data-pickstu],[data-mkind],[data-warn],[data-chatto],[data-endrun],[data-endall],[data-nav],[data-pick],[data-act],[data-mode],[data-rate],[data-t],[data-ttab],[data-sact],[data-stu],[data-cfgmode],[data-cfgtog],[data-cfgdeck],[data-edeck],[data-etab],[data-ncolor],[data-rcolor],[data-emo],[data-pick-emo],[data-rm],[data-approve]');
+  const b = e.target.closest('[data-freezecard],[data-freezedeck],[data-unfreezedeck],[data-unfreezecard],[data-clozecheck],[data-clozemc],[data-clozepick],[data-stedit],[data-stdel],[data-stnew],[data-story],[data-backlearn],[data-togpy],[data-sayall],[data-saysent],[data-trsent],[data-word],[data-pincard],[data-sayresp],[data-studypinned],[data-guide],[data-profile],[data-like],[data-studypost],[data-backfeed],[data-onb],[data-onbans],[data-sheetq],[data-aitip],[data-dl],[data-hsk],[data-studyhsk],[data-babpick],[data-babgo],[data-vis],[data-pstu],[data-lkind],[data-part],[data-pickstu],[data-mkind],[data-warn],[data-chatto],[data-endrun],[data-endall],[data-nav],[data-pick],[data-act],[data-mode],[data-rate],[data-t],[data-ttab],[data-sact],[data-stu],[data-cfgmode],[data-cfgtog],[data-cfgdeck],[data-edeck],[data-etab],[data-ncolor],[data-rcolor],[data-emo],[data-pick-emo],[data-rm],[data-approve]');
   if (!b) { const fc = e.target.closest('#fc'); if (fc && Q && Q.cur && Q.cur.answered) flip(); return; }
   const ds = b.dataset;
   if (ds.nav) { leaveStudy(); go(ds.nav); return; }
@@ -1562,6 +1867,31 @@ document.addEventListener('click', async (e) => {
     try { const r = await api.endRun(ds.endall ? { all: true } : { sid: ds.endrun }); toast(`${r.ended} sesi diakhiri. Murid langsung melihat pemberitahuan.`); if (LIVE_DRAW) LIVE_DRAW(); } catch (err) { toast(err.message); }
     return;
   }
+  if (ds.freezedeck !== undefined) { e.stopPropagation(); freezeDeck(ds.freezedeck, true); return; }
+  if (ds.unfreezedeck !== undefined) { freezeDeck(ds.unfreezedeck, false); return; }
+  if (ds.unfreezecard !== undefined) { freezeCard(ds.unfreezecard, false); renderLearn(); return; }
+  if (ds.freezecard !== undefined) {
+    if (!Q || !Q.cur) return; const id = Q.cur.c.id; freezeCard(id, true);
+    if (Q.queue[0] && Q.queue[0].id === id) { Q.queue.shift(); Q.total = Math.max(Q.done, Q.total - 1); }
+    renderStudy(); return;
+  }
+  if (ds.clozecheck !== undefined) { const inp = document.getElementById('clozeIn'); if (inp) checkCloze(inp.value); return; }
+  if (ds.clozemc !== undefined) { showClozeMC(); return; }
+  if (ds.clozepick) { checkCloze(ds.clozepick); return; }
+  if (ds.stnew !== undefined) { STEDIT = null; tStories(); return; }
+  if (ds.stedit) { try { STEDIT = await api.story(ds.stedit); window.scrollTo(0, 0); tStories(); } catch (err) { toast(err.message); } return; }
+  if (ds.stdel) { if (armed !== 'st:' + ds.stdel) { armed = 'st:' + ds.stdel; b.innerHTML = `${ic('trash')} Yakin?`; setTimeout(() => { if (armed === 'st:' + ds.stdel) { armed = null; tStories(); } }, 3000); return; } armed = null; try { await api.deleteStory(ds.stdel); if (STEDIT && STEDIT.id === ds.stdel) STEDIT = null; toast('Cerita dihapus.'); tStories(); } catch (err) { toast(err.message); } return; }
+  if (ds.story) { openStory(ds.story); return; }
+  if (ds.backlearn !== undefined) { go('learn'); return; }
+  if (ds.togpy !== undefined) { LOWPY = !LOWPY; renderStory(); return; }
+  if (ds.sayall !== undefined) { if (STORY) speak(STORY.body.replace(/\n/g, '，')); return; }
+  if (ds.saysent !== undefined) { const st = sentencesOf(STORY.body)[+ds.saysent]; if (st) speak(st); return; }
+  if (ds.trsent !== undefined) { translateSent(+ds.trsent); return; }
+  if (ds.word) { openWordSheet(ds.word); return; }
+  if (ds.pincard !== undefined) { e.stopPropagation(); if (Q && Q.cur) togglePin(Q.cur.c.id, b); return; }
+  if (ds.sayresp !== undefined) { e.stopPropagation(); if (Q && Q.cur && Q.cur.c.s) speak(Q.cur.c.s); return; }
+  if (ds.studypinned !== undefined) { const cs = pinnedCards(); if (!cs.length) { toast('Belum ada kartu disematkan.'); return; } S.split.on = false; S.kind = 'card'; savePrefs(); startStudy(cs); return; }
+  if (ds.guide !== undefined) { openGuide(); return; }
   if (ds.profile) { stopLive(); S.view = 'social'; savePrefs(); shell(); renderProfile(ds.profile); return; }
   if (ds.backfeed !== undefined) { renderFeed(); return; }
   if (ds.like) { toggleLike(ds.like, b); return; }
@@ -1682,7 +2012,7 @@ document.addEventListener('click', async (e) => {
   else if (a === 'savebulk') saveBulk();
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { closeEmoji(); closeAiSheet(); }
+  if (e.key === 'Escape') { closeEmoji(); closeAiSheet(); closeWordSheet(); closeGuide(); }
   if (S.view !== 'study' || !Q || !Q.cur || !$('#fc')) return;
   if (e.target.matches('input,select,textarea')) return;
   if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); if (Q.cur.answered) flip(); }
@@ -1737,14 +2067,15 @@ function installHTML() {
 
 /* ================= onboarding: tentukan level ================= */
 const needsOnboard = () => !isTeacher() && (ME.level || 0) === 0 && !store.get('onb_' + ME.id, false);
+const maybeGuide = () => { if (ME && !isTeacher() && !store.get('guide_' + ME.id, false)) setTimeout(openGuide, 500); };
 function enterApp() {
-  if (needsOnboard()) renderOnboard(); else go(S.view);
+  if (needsOnboard()) renderOnboard(); else { go(S.view); maybeGuide(); }
   startInbox(); startReminders();
 }
 function finishOnboard(lv) {
   store.set('onb_' + ME.id, true);
   if (lv) { ME.level = lv; api.setLevel(lv).catch(() => {}); S.sel = ['hsk' + lv]; HSK_OPEN = lv; S.kind = 'card'; S.split.on = false; savePrefs(); }
-  go('learn');
+  go('learn'); maybeGuide();
   if (lv) setTimeout(() => { const o = document.querySelector('.hsk-open'); if (o) o.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 120);
 }
 let ONB = null;
