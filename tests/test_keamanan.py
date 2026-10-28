@@ -369,6 +369,36 @@ check('Beku: deck tak ada ditolak', SA.req('POST', '/api/freeze', {'kind': 'deck
 check('Beku: kartu tak ada ditolak', SA.req('POST', '/api/freeze', {'kind': 'card', 'id': 'tidakada', 'freeze': True})[0] == 404)
 check('Beku: tanpa login ditolak', SX.req('POST', '/api/freeze', {'kind': 'deck', 'id': 'speak1', 'freeze': True})[0] == 401)
 
+# ---- Pembuat isi rumpang (editor) ----
+check('Editor rumpang: murid tak bisa lihat', SA.req('GET', '/api/t/cloze?deck=speak1')[0] == 403)
+_lst = T.req('GET', '/api/t/cloze?deck=speak1')
+check('Editor rumpang: guru lihat daftar kartu deck', _lst[0] == 200 and isinstance(_lst[1], list) and len(_lst[1]) == 30, _lst[0])
+check('Editor rumpang: deck tak ada ditolak', T.req('GET', '/api/t/cloze?deck=tidakada')[0] == 404)
+# set manual lalu muncul di daftar
+_cardA = _lst[1][0]['id'] if _lst[1] else 'speak1:1'
+_hA = _lst[1][0]['h'] if _lst[1] else '你好'
+T.req('POST', '/api/cloze/set', {'card_id': _cardA, 's': '见面说' + _hA, 'si': 'arti'})
+_lst2 = T.req('GET', '/api/t/cloze?deck=speak1')[1]
+_rowA = next((r for r in _lst2 if r['id'] == _cardA), {})
+check('Editor rumpang: kalimat tersimpan muncul di daftar', _rowA.get('s') == '见面说' + _hA and _rowA.get('source') == 'manual', _rowA)
+check('Editor rumpang: murid dapat kalimat itu', SA.req('POST', '/api/cloze', {'card_id': _cardA})[1].get('s') == '见面说' + _hA)
+check('Editor rumpang: guru hapus kalimat', T.req('POST', '/api/cloze/delete', {'card_id': _cardA})[0] == 200 and next((r for r in T.req('GET', '/api/t/cloze?deck=speak1')[1] if r['id'] == _cardA), {}).get('s') == '')
+check('Editor rumpang: murid tak bisa hapus', SA.req('POST', '/api/cloze/delete', {'card_id': _cardA})[0] == 403)
+
+# ---- Tambah cepat (bulk cloze) ----
+_r2 = T.req('GET', '/api/t/cloze?deck=speak1')[1]
+_a, _bb = _r2[0], _r2[1]
+_bulk = T.req('POST', '/api/cloze/bulk', {'items': [
+    {'card_id': _a['id'], 's': '测试' + _a['h'], 'si': 'uji'},
+    {'card_id': _bb['id'], 's': '测试' + _bb['h']},
+    {'card_id': _bb['id'], 's': 'kalimat tanpa kata target'},
+]})
+check('Tambah cepat: guru simpan massal', _bulk[0] == 200 and _bulk[1].get('saved') == 2, _bulk[1])
+check('Tambah cepat: kalimat tak memuat kata dilewati', len(_bulk[1].get('skipped', [])) == 1, _bulk[1])
+check('Tambah cepat: tersimpan & terbaca murid', SA.req('POST', '/api/cloze', {'card_id': _a['id']})[1].get('s') == '测试' + _a['h'])
+check('Tambah cepat: murid tak bisa', SA.req('POST', '/api/cloze/bulk', {'items': [{'card_id': _a['id'], 's': '测试' + _a['h']}]})[0] == 403)
+check('Tambah cepat: kosong ditolak', T.req('POST', '/api/cloze/bulk', {'items': []})[0] == 400)
+
 fails = 0
 for ok, name, d in results:
     print(('LULUS ' if ok else 'GAGAL ') + name + ('' if ok else f'  → {str(d)[:200]}')); fails += (not ok)

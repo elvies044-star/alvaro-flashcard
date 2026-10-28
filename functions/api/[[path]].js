@@ -544,6 +544,46 @@ export async function onRequest(ctx) {
       await db.prepare("INSERT OR REPLACE INTO cloze (card_id, s, si, source, created_at) VALUES (?1,?2,?3,'ai',?4)").bind(card.id, sOut, siOut, now()).run();
       return json({ s: sOut, si: siOut, answer: card.h, source: 'ai' });
     }
+    if (path === '/t/cloze' && method === 'GET') {
+      if (!isTeacher(user)) fail(403, 'Hanya guru.');
+      const deckId = url.searchParams.get('deck') || '';
+      if (!(await db.prepare('SELECT id FROM decks WHERE id = ?1').bind(deckId).first())) fail(404, 'Kategori tidak ditemukan.');
+      const rows = (await db.prepare(`SELECT c.id, c.h, c.p, c.m, z.s AS cs, z.si AS csi, z.source AS csrc
+        FROM cards c LEFT JOIN cloze z ON z.card_id = c.id WHERE c.deck_id = ?1 ORDER BY c.sort, c.created_at`).bind(deckId).all()).results;
+      return json(rows.map((r) => ({ id: r.id, h: r.h, p: r.p, m: r.m, s: r.cs || '', si: r.csi || '', source: r.csrc || '' })));
+    }
+    if (path === '/cloze/bulk' && method === 'POST') {
+      if (!isTeacher(user)) fail(403, 'Hanya guru.');
+      const b = await body(32 * 1024);
+      const items = Array.isArray(b.items) ? b.items.slice(0, 300) : [];
+      if (!items.length) fail(400, 'Tidak ada data.');
+      const ids = [...new Set(items.map((it) => String(it && it.card_id || '')).filter(Boolean))];
+      const hmap = new Map();
+      for (let i = 0; i < ids.length; i += 50) {
+        const chunk = ids.slice(i, i + 50);
+        const rows = (await db.prepare(`SELECT id, h FROM cards WHERE id IN (${chunk.map(() => '?').join(',')})`).bind(...chunk).all()).results;
+        for (const r of rows) hmap.set(r.id, r.h);
+      }
+      const stmts = []; let saved = 0; const skipped = [];
+      const t = now();
+      for (const it of items) {
+        const cid = String(it && it.card_id || ''); const h = hmap.get(cid);
+        const s = typeof it.s === 'string' ? it.s.trim().slice(0, 200) : '';
+        if (!h) { skipped.push({ card_id: cid, reason: 'kartu tak ada' }); continue; }
+        if (!s || !s.includes(h)) { skipped.push({ card_id: cid, reason: 'kalimat tak memuat kata' }); continue; }
+        const si = typeof it.si === 'string' ? it.si.trim().slice(0, 200) : '';
+        stmts.push(db.prepare("INSERT OR REPLACE INTO cloze (card_id, s, si, source, created_at) VALUES (?1,?2,?3,'manual',?4)").bind(cid, s, si, t));
+        saved++;
+      }
+      for (let i = 0; i < stmts.length; i += 50) await db.batch(stmts.slice(i, i + 50));
+      return json({ saved, skipped });
+    }
+    if (path === '/cloze/delete' && method === 'POST') {
+      if (!isTeacher(user)) fail(403, 'Hanya guru.');
+      const b = await body(1024);
+      await db.prepare('DELETE FROM cloze WHERE card_id = ?1').bind(String(b.card_id || '')).run();
+      return json({ ok: true });
+    }
     if (path === '/cloze/set' && method === 'POST') {
       if (!isTeacher(user)) fail(403, 'Hanya guru.');
       const b = await body(2048);

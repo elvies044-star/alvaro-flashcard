@@ -788,3 +788,34 @@ code { font: 600 13px ui-monospace, SFMono-Regular, Menlo, monospace; background
 .frz-chip .han { font-size: 18px; font-weight: 700; }
 .frz-chip .fm { color: var(--muted); font-size: 13px; }
 .frz-chip .i { width: 15px; height: 15px; color: #0284c7; }
+
+/* ===== Pembuat isi rumpang + Latihan ketik ===== */
+.clz-row { display: grid; grid-template-columns: 1fr; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; margin-bottom: 10px; background: var(--surface); }
+.clz-word { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.clz-word .han { font-size: 22px; font-weight: 800; }
+.clz-word span { color: var(--muted); font-size: 13px; }
+.clz-row input { padding: 10px 12px; border: 1.5px solid var(--line-2); border-radius: 10px; font-size: 15px; background: var(--surface); color: var(--text); font-family: inherit; }
+.clz-row input:focus { outline: none; border-color: var(--brand); }
+.clz-s { font-size: 18px !important; }
+.type-front { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.type-front .bighan { font-size: 64px; font-weight: 800; line-height: 1.1; }
+.type-front .bighan.small { font-size: 40px; }
+
+/* ===== Keranjang belajar (bucket) ===== */
+.bucket { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; margin: 0 0 14px; }
+.bucket.empty { background: transparent; border-style: dashed; padding: 12px 14px; }
+.bucket-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.bucket-head b { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; }
+.bucket-head b .i { width: 17px; height: 17px; color: var(--brand); }
+.chip.sm { height: 28px; padding: 0 10px; font-size: 12.5px; }
+.bucket-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.bchip { display: inline-flex; align-items: center; gap: 6px; background: color-mix(in srgb, var(--dc) 12%, var(--surface-2)); border: 1px solid color-mix(in srgb, var(--dc) 35%, var(--line)); border-radius: 999px; padding: 5px 6px 5px 11px; font-size: 14px; font-weight: 650; }
+.bchip .dotc { width: 9px; height: 9px; border-radius: 50%; background: var(--dc); flex: none; }
+.bchip small { color: var(--muted); font-weight: 700; }
+.bchip .bx { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--surface); color: var(--muted); border: none; cursor: pointer; transition: background .15s, color .15s; }
+.bchip .bx .i { width: 13px; height: 13px; }
+.bchip .bx:hover { background: var(--bad); color: #fff; }
+
+/* ===== Tambah cepat (bulk cloze) ===== */
+.quickadd textarea { width: 100%; box-sizing: border-box; margin-top: 8px; padding: 12px 14px; border: 1.5px solid var(--line-2); border-radius: 12px; font-family: inherit; font-size: 15px; background: var(--surface); color: var(--text); resize: vertical; }
+.quickadd textarea:focus { outline: none; border-color: var(--brand); }

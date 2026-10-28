@@ -6,7 +6,7 @@ import { hbars, lineChart } from './charts.js';
 import { pinyin as pyPro } from 'pinyin-pro';
 
 const APP = 'Alvaro Mandarin Flashcard Tamer';
-const APP_VERSION = '2026.10.27-beku';
+const APP_VERSION = '2026.10.28-cepat';
 const BUILD = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev';
 
 /* ================= helpers ================= */
@@ -58,6 +58,7 @@ const ICON = {
   help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 4.5 1.5c0 1.5-2 2-2 3.5"/><path d="M12 17h.01"/>',
   globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/>',
   snow: '<path d="M12 2v20M4 6l16 12M20 6L4 18"/><path d="M12 2l-2.5 2.5M12 2l2.5 2.5M12 22l-2.5-2.5M12 22l2.5-2.5"/>',
+  basket: '<path d="M5 11h14l-1.2 8a2 2 0 0 1-2 1.7H8.2a2 2 0 0 1-2-1.7z"/><path d="M9 11 12 4l3 7"/><path d="M3 11h18"/>',
   split: '<rect x="3" y="4" width="7" height="16" rx="2"/><rect x="14" y="4" width="7" height="16" rx="2"/>',
   bulb: '<path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2V17h6v-.3c0-.8.4-1.5 1-2A7 7 0 0 0 12 2z"/>',
   bolt: '<path d="M13 2L3 14h9l-1 8 10-12h-9z"/>', flag: '<path d="M4 22V4M4 4h13l-2 4 2 4H4"/>',
@@ -246,7 +247,7 @@ async function reloadContent() { applyContent(await api.content()); }
 
 /* ================= Belajar ================= */
 const mwOn = () => SET.mw_quiz !== false;
-const kindNow = () => (S.kind === 'mw' && mwOn() ? 'mw' : S.kind === 'cloze' ? 'cloze' : 'card');
+const kindNow = () => (S.kind === 'mw' && mwOn() ? 'mw' : S.kind === 'cloze' ? 'cloze' : S.kind === 'type' ? 'type' : 'card');
 const forKind = (cs) => (kindNow() === 'mw' ? cs.filter((c) => c.mw) : cs);
 const isFrozenDeck = (d) => FRZ_DECKS.has(typeof d === 'string' ? d : d.id);
 const usable = (cards) => cards.filter((c) => !FRZ_CARDS.has(c.id) && !FRZ_DECKS.has(c.deck_id));
@@ -309,6 +310,14 @@ function deckCard(d) {
     <div class="bar"><i style="width:${total ? (sched / total) * 100 : 0}%"></i></div>
     <div class="meta"><span class="dotc"></span>${kindNow() === 'mw' ? `${mwN} kartu ber-量词` : `${due} siap · ${live.length} kartu`}</div></button>`;
 }
+function updateBucket() { const el = document.getElementById('bucketBox'); if (el && S.view === 'learn') el.innerHTML = selBucketHTML(); }
+function selBucketHTML() {
+  const sel = studyDecks().filter((d) => S.sel.includes(d.id) && !isFrozenDeck(d));
+  const n = poolCards().length;
+  if (!sel.length) return '<div class="bucket empty"><span class="note">Belum ada kategori dipilih. Ketuk kategori di bawah untuk menambahkannya ke keranjang.</span></div>';
+  return `<div class="bucket"><div class="bucket-head"><b>${ic('basket')} Keranjang belajar · ${n} kartu</b><button class="chip sm" data-clearsel>${ic('x')} Kosongkan</button></div>
+    <div class="bucket-chips">${sel.map((d) => `<span class="bchip" style="--dc:${d.color}"><span class="dotc"></span>${esc(d.zh)} <small>${liveCards(d).length}</small><button class="bx" data-unselect="${esc(d.id)}" aria-label="Keluarkan ${esc(d.zh)}">${ic('x')}</button></span>`).join('')}</div></div>`;
+}
 function lastSessHTML() {
   const r = store.get('lastsess', null); if (!r || !ME || (savedRun() && RESUME_OK)) return '';
   const decks = (r.decks || []).map((id) => deckOf(id)).filter((d) => d && d.cards.length && studyDecks().some((x) => x.id === d.id));
@@ -348,18 +357,19 @@ function renderLearn() {
     ${pinned.length ? `<div class="sec-title">${ic('pin')} Disematkan · ${pinned.length}</div>
       <div class="pinbar"><p class="note" style="flex:1;min-width:140px">Kartu yang kamu sematkan untuk diulang. Belajar khusus kartu ini.</p><button class="btn sm" data-studypinned>${ic('play')} Belajar sematan</button></div>` : ''}
     <div class="learnbar">
-      <div class="seg" role="group" aria-label="Jenis latihan"><button data-lkind="card" aria-pressed="${kindNow() === 'card'}">Flashcard</button>${mwOn() ? `<button data-lkind="mw" aria-pressed="${kindNow() === 'mw'}">Kuis 量词</button>` : ''}<button data-lkind="cloze" aria-pressed="${kindNow() === 'cloze'}">Isi rumpang</button></div>
+      <div class="seg" role="group" aria-label="Jenis latihan"><button data-lkind="card" aria-pressed="${kindNow() === 'card'}">Flashcard</button>${mwOn() ? `<button data-lkind="mw" aria-pressed="${kindNow() === 'mw'}">Kuis 量词</button>` : ''}<button data-lkind="cloze" aria-pressed="${kindNow() === 'cloze'}">Isi rumpang</button><button data-lkind="type" aria-pressed="${kindNow() === 'type'}">Latihan ketik</button></div>
       <button class="chip" data-act="split" aria-pressed="${S.split.on}">${ic('split')} Atur sesi</button>
       <button class="chip" data-act="sendsheet">${ic('send')} Kirim kartu</button>
       ${!isTeacher() && 'Notification' in window ? `<button class="chip" data-act="reminder" aria-pressed="${store.get('remind', false)}">${ic('alert')} Pengingat</button>` : ''}
     </div>
+    <div id="bucketBox">${selBucketHTML()}</div>
     ${S.split.on ? `<div class="splitbox">
       <label class="field" for="spSize">Kartu per sesi<input id="spSize" type="number" inputmode="numeric" min="1" max="500" value="${S.split.size}"></label>
       <span class="x-sign">=</span>
       <label class="field" for="spCount">Jumlah sesi<input id="spCount" type="number" inputmode="numeric" min="1" max="100" value="${Math.max(1, ps.length)}"></label>
       <p class="note" style="flex:1;min-width:180px;padding-bottom:10px">${pool} kartu dari kategori yang dipilih. Pilih sesi yang mau dipelajari sekarang.</p>
       <div class="parts">${ps.map((p, i) => `<button class="part ${dp.includes(i) ? 'ok' : ''}" data-part="${i}" aria-pressed="${S.split.part === i}">Sesi ${i + 1}<small>${dp.includes(i) ? '✓ selesai · ' : ''}${p.length} kartu</small></button>`).join('') || '<span class="note">Pilih kategori dulu.</span>'}</div>
-    </div>` : `<p class="note" style="margin:-6px 0 16px">${kindNow() === 'mw' ? 'Kuis 量词: tebak kata satuan yang tepat untuk tiap benda, misalnya 一<b>本</b>书.' : kindNow() === 'cloze' ? 'Isi rumpang: lengkapi kalimat dengan kata yang tepat — ketik (pinyin/hanzi) atau pilih. Arti kalimat ditampilkan di depan. Kalimat dibuat otomatis jika belum ada.' : 'Ketuk kategori untuk memilih. <b>Ketuk 2× cepat</b> untuk membuka tombol Mulai. Nilai 1 & 2 diulang di sesi ini, 3 muncul besok, 4 muncul 3 hari lagi.'}</p>`}
+    </div>` : `<p class="note" style="margin:-6px 0 16px">${kindNow() === 'mw' ? 'Kuis 量词: tebak kata satuan yang tepat untuk tiap benda, misalnya 一<b>本</b>书.' : kindNow() === 'cloze' ? 'Isi rumpang: lengkapi kalimat dengan kata yang tepat — ketik (pinyin/hanzi) atau pilih. Arti kalimat ditampilkan di depan. Kalimat dibuat otomatis jika belum ada.' : kindNow() === 'type' ? 'Latihan ketik: lihat hanzi, lalu ketik pinyin-nya tanpa dikasih dulu — mengetik sambil menebak bacaannya.' : 'Ketuk kategori untuk memilih. <b>Ketuk 2× cepat</b> untuk membuka tombol Mulai. Nilai 1 & 2 diulang di sesi ini, 3 muncul besok, 4 muncul 3 hari lagi.'}</p>`}
     ${hskLevels.length ? `<div class="sec-title">${ic('book2')} HSK 3.0</div><div class="decks hsk-row">${hskLevels.map(hskCard).join('')}</div>
       ${HSK_OPEN && hskLessons.length ? `<div class="hsk-open"><div class="hsk-open-bar"><b>级${HSK_OPEN} · ${hskLessons.length} pelajaran</b><span class="spacer"></span><button class="btn sm" data-studyhsk="${HSK_OPEN}">${ic('play')} Belajar semua</button><button class="chip" data-babpick="${HSK_OPEN}">${ic('list')} Per bab</button><button class="chip" data-hsk="${HSK_OPEN}">${ic('x')} Tutup</button></div>
         <div class="decks">${hskLessons.map(deckCard).join('')}</div></div>` : '<p class="note" style="margin:-4px 0 14px">Ketuk salah satu kartu HSK di atas untuk membuka semua pelajarannya.</p>'}` : ''}
@@ -521,7 +531,7 @@ async function startStudy(cards) {
   if (savedRun()) await endSaved(); // sesi lama yang ditinggal ditutup dulu
   BAR_OPEN = false;
   const kind = cards ? 'card' : kindNow();
-  const mode = kind === 'mw' ? 'mw' : kind === 'cloze' ? 'han' : effMode();
+  const mode = kind === 'mw' ? 'mw' : (kind === 'cloze' || kind === 'type') ? 'han' : effMode();
   const decks = [...new Set(cs.map((c) => c.deck_id))];
   let sid;
   try { sid = await api.startSession(decks, mode, cs.length); }
@@ -531,12 +541,13 @@ async function startStudy(cards) {
   PRES.state = 'active'; saveRun();
   S.view = 'study'; $('#actionbar').hidden = true; shell(); startBeat(); window.scrollTo(0, 0); renderStudy();
 }
-function cardMode(c) { if (Q && Q.kind === 'mw') return 'mw'; if (Q && Q.kind === 'cloze') return 'cloze'; if (isSpeak(c)) return 'arti'; let m = effMode(); if (m === 'mix') m = ['pic', 'han', 'arti'][(Math.random() * 3) | 0]; if (m === 'pic' && !hasPic(c)) m = 'han'; return m; }
+function cardMode(c) { if (Q && Q.kind === 'mw') return 'mw'; if (Q && Q.kind === 'cloze') return 'cloze'; if (Q && Q.kind === 'type') return 'type'; if (isSpeak(c)) return 'arti'; let m = effMode(); if (m === 'mix') m = ['pic', 'han', 'arti'][(Math.random() * 3) | 0]; if (m === 'pic' && !hasPic(c)) m = 'han'; return m; }
 function frontHTML(c, m) {
   if (m === 'mw') return `${hasPic(c) ? `<div class="big" style="width:min(40%,150px)">${picHTML(c)}</div>` : ''}<div class="mwq">一<span class="blank">个</span>${esc(c.h)}</div><div class="mwq-sub">${esc(c.p)} · ${esc(mean(c))}</div><div class="q">Kata satuannya apa?</div>`;
   if (m === 'han') return `<div class="bighan">${esc(c.h)}</div><div class="q">Apa artinya?</div>`;
   if (m === 'arti') return `<div class="bigid">${esc(mean(c))}</div><div class="q">Bahasa Mandarinnya apa?</div>`;
   if (m === 'cloze') return `<div class="cloze-front" id="clozeFront"><div class="note">Menyusun kalimat…</div></div>`;
+  if (m === 'type') return `<div class="type-front"><div class="bighan ${[...c.h].length >= 6 ? 'small' : ''}">${esc(c.h)}</div><div class="q">Ketik pinyin-nya — tebak bacaannya</div></div>`;
   return `<div class="big">${picHTML(c)}</div><div class="q">Ini apa dalam bahasa Mandarin?</div>`;
 }
 function backHTML(c) {
@@ -552,8 +563,9 @@ function renderStudy() {
   const c = Q.queue[0], d = deckOf(c.deck_id) || { zh: '', color: '#1f3fbf', cards: [] }, m = cardMode(c);
   const isMw = Q.kind === 'mw';
   const isCloze = m === 'cloze';
-  const canQuiz = !isCloze && (isMw || (SET.quiz_enabled && S.quiz && d.cards.length >= 4));
-  Q.cur = { c, m, t0: performance.now(), hidden: 0, answered: !canQuiz && !isCloze, flipped: false, sug: 0 };
+  const isType = m === 'type';
+  const canQuiz = !isCloze && !isType && (isMw || (SET.quiz_enabled && S.quiz && d.cards.length >= 4));
+  Q.cur = { c, m, t0: performance.now(), hidden: 0, answered: !canQuiz && !isCloze && !isType, flipped: false, sug: 0 };
   document.documentElement.style.setProperty('--c', d.color);
   $('#view').innerHTML = `<div class="study">
     <div class="study-top"><button class="btn ghost sm" data-act="quit">${ic('back')} Kategori</button><div class="progress"><i style="width:${(Q.done / Q.total) * 100}%"></i></div><span class="count">${Q.part ? `Sesi ${Q.part.idx + 1} · ` : ''}${Q.done}/${Q.total}</span><button class="btn ghost sm end" data-act="endrun" title="Akhiri sesi sekarang">${ic('stop')} <span>Akhiri</span></button></div>
@@ -562,30 +574,32 @@ function renderStudy() {
     <div class="study-opts">
       ${isMw ? '<span class="pill priv">Kuis 量词</span>' : ''}
       ${isCloze ? '<span class="pill priv">Isi rumpang</span>' : ''}
-      ${!isMw && !isCloze && SET.student_can_choose && SET.modes.length > 1 ? `<div class="seg" role="group" aria-label="Sisi depan kartu">${SET.modes.map((x) => `<button data-mode="${x}" aria-pressed="${effMode() === x}">${MODE_LABEL[x]}</button>`).join('')}</div>` : ''}
+      ${isType ? '<span class="pill priv">Latihan ketik</span>' : ''}
+      ${!isMw && !isCloze && !isType && SET.student_can_choose && SET.modes.length > 1 ? `<div class="seg" role="group" aria-label="Sisi depan kartu">${SET.modes.map((x) => `<button data-mode="${x}" aria-pressed="${effMode() === x}">${MODE_LABEL[x]}</button>`).join('')}</div>` : ''}
       <span class="spacer"></span>
-      ${!isCloze ? `<button class="chip clue-btn" data-act="clue" ${Q.clues > 0 ? '' : 'disabled'} title="Clue: huruf depan jawaban. Dapat clue baru tiap ${CLUE_STREAK} jawaban benar berturut-turut.">${ic('bulb')} Clue <b>${Q.clues}</b></button>
+      ${!isCloze && !isType ? `<button class="chip clue-btn" data-act="clue" ${Q.clues > 0 ? '' : 'disabled'} title="Clue: huruf depan jawaban. Dapat clue baru tiap ${CLUE_STREAK} jawaban benar berturut-turut.">${ic('bulb')} Clue <b>${Q.clues}</b></button>
       <button class="chip" data-act="lang" title="Bahasa arti">${LANG_LABEL[S.lang] || 'ID'}</button>` : ''}
       <button class="chip pinchip ${PINS.has(c.id) ? 'on' : ''}" data-pincard aria-pressed="${PINS.has(c.id)}" title="Sematkan kartu ini untuk diulang">${ic('pin')} <span>Sematkan</span></button>
       <button class="chip" data-freezecard title="Bekukan kata ini — tidak muncul lagi sampai dicairkan">${ic('snow')} <span>Belum berguna</span></button>
-      ${SET.quiz_enabled && !isMw && !isCloze ? `<button class="chip" data-act="quiz" aria-pressed="${S.quiz}">Tebak</button>` : ''}
+      ${SET.quiz_enabled && !isMw && !isCloze && !isType ? `<button class="chip" data-act="quiz" aria-pressed="${S.quiz}">Tebak</button>` : ''}
       <button class="chip" data-act="auto" aria-pressed="${S.auto}" aria-label="Ucapan otomatis" title="Ucapan otomatis">${ic('sound')}</button>
       <button class="chip" data-act="sfx" aria-pressed="${S.sfx}" aria-label="Efek suara" title="Efek suara">${ic(S.sfx ? 'sparkle' : 'mute')}</button>
       ${AI_ON ? `<button class="chip ailah" data-act="asklaoshi" title="Tanya ${esc(aiName())} soal kartu ini">${monkey()} ${esc(aiName())}</button>` : ''}
     </div>
     <div class="stage"><div class="tilt" id="tilt"><div class="fc" id="fc" tabindex="0" role="button" aria-label="Kartu. Ketuk untuk membalik">
-      <div class="face front"><div class="tag"><span class="dotc" style="--dc:${d.color}"></span>${esc(d.zh)}</div>${frontHTML(c, m)}<div class="clue" id="clueBox" hidden></div><div class="hint">${canQuiz ? 'Pilih jawaban di bawah' : isCloze ? 'Isi jawaban di bawah' : 'Ketuk kartu untuk membalik'}</div></div>
+      <div class="face front"><div class="tag"><span class="dotc" style="--dc:${d.color}"></span>${esc(d.zh)}</div>${frontHTML(c, m)}<div class="clue" id="clueBox" hidden></div><div class="hint">${canQuiz ? 'Pilih jawaban di bawah' : (isCloze || isType) ? 'Ketik jawaban di bawah' : 'Ketuk kartu untuk membalik'}</div></div>
       <div class="face bface"><div class="tag"><span class="dotc" style="--dc:${d.color}"></span>${esc(d.zh)}</div><button class="say" data-act="say" aria-label="Dengarkan pengucapan">${ic('sound')}</button>${backHTML(c)}</div>
     </div></div></div>
-    <div id="ctrl">${canQuiz ? `<div class="quiz" aria-busy="true">${'<button class="qo skeleton" disabled>…</button>'.repeat(4)}</div>` : isCloze ? '<p class="note" style="text-align:center">Menyusun kalimat…</p>' : `<button class="btn lg flipbtn" data-act="flip">${ic('flip')} Balik kartu</button>`}</div>
+    <div id="ctrl">${canQuiz ? `<div class="quiz" aria-busy="true">${'<button class="qo skeleton" disabled>…</button>'.repeat(4)}</div>` : isCloze ? '<p class="note" style="text-align:center">Menyusun kalimat…</p>' : isType ? '' : `<button class="btn lg flipbtn" data-act="flip">${ic('flip')} Balik kartu</button>`}</div>
     <div class="skiprow"><button class="btn ghost sm" data-act="skip" title="Lewati kartu ini (muncul lagi di akhir sesi)">Lewati kartu ${ic('play')}</button></div>
-    <div class="keys">${isCloze ? 'Enter: periksa · 1–4: nilai · S: dengarkan · N: lewati' : 'Spasi: balik · 1–4: jawab atau nilai · S: dengarkan · H: clue · N: lewati'}</div>
+    <div class="keys">${(isCloze || isType) ? 'Enter: periksa · 1–4: nilai · S: dengarkan · N: lewati' : 'Spasi: balik · 1–4: jawab atau nilai · S: dengarkan · H: clue · N: lewati'}</div>
   </div>`;
   bindTilt();
   if (Q && Q.sid) api.presence(Q.sid, PRES.state === 'away' ? 'away' : 'active', c.id); // mirror kartu ke guru
   if (m === 'han' && S.auto) speak(c.h);
   if (canQuiz) loadQuiz(c, m);
   if (isCloze) setupCloze(c, d);
+  if (isType) setupType(c);
 }
 /* ---- lewati kartu: pindah ke akhir antrean, tidak dinilai ---- */
 function skipCard() {
@@ -790,6 +804,34 @@ function revealCloze(correct) {
   const info = `<div class="cloze-reveal"><span class="han">${esc(cur.cloze.answer)}</span> <span class="rp">${esc(cur.c.p || pyOf(cur.cloze.answer))}</span> · ${esc(mean(cur.c))}${correct ? '' : ' <span class="pill bad">belum tepat</span>'}</div>`;
   $('#ctrl').innerHTML = info + `<div class="rate">${[1, 2, 3, 4].map((n) => `<button class="rb r${n} ${cur.sug === n ? 'sug' : ''}" data-rate="${n}"><span class="k">${n}</span><span class="l">${RATE[n].l}</span><span class="w">${RATE[n].w}</span></button>`).join('')}</div>`;
   if (S.auto) speak(cur.cloze.s || cur.c.h);
+}
+/* ---- Latihan ketik (type pinyin) ---- */
+function setupType(c) {
+  const ctrl = document.getElementById('ctrl'); if (!ctrl) return;
+  ctrl.innerHTML = `<div class="cloze-ctrl"><input id="typeIn" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="ketik pinyin… (mis. ni hao)" aria-label="Pinyin">
+      <button class="btn" data-typecheck>${ic('check')} Periksa</button></div>
+    <p class="note" style="text-align:center;margin-top:8px">Nada boleh diabaikan — yang penting bacaannya benar.</p>`;
+  const inp = document.getElementById('typeIn'); if (inp) { inp.focus(); inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); checkType(inp.value); } }); }
+}
+function checkType(val) {
+  const cur = Q && Q.cur; if (!cur || cur.answered) return;
+  if (locked && locked()) { lockCtrl(); return; }
+  const v = String(val || '').trim(); if (!v) return;
+  const c = cur.c;
+  const targets = [normPy(c.p), normPy(pyToneless(c.h)), normPy(c.h)].filter(Boolean);
+  const correct = targets.includes(normPy(v));
+  revealType(correct);
+}
+function revealType(correct) {
+  const cur = Q.cur; cur.answered = true; cur.quizOk = correct; cur.sug = correct ? 3 : 1; cur.flipped = true;
+  const inp = document.getElementById('typeIn'); if (inp) inp.disabled = true;
+  const tilt = $('#tilt');
+  badgeFx(correct); gainStreak(correct);
+  if (correct) { SFX.right(); fx(tilt, 'fx-right'); if (Q.streak % 5 === 0) { burst(24); toast(`${Q.streak} benar berturut-turut!`); } }
+  else { SFX.wrong(); fx(tilt, 'fx-wrong'); try { if (navigator.vibrate) navigator.vibrate(120); } catch (_) { /* - */ } }
+  const info = `<div class="cloze-reveal"><span class="han">${esc(cur.c.h)}</span> <span class="rp">${esc(cur.c.p || pyOf(cur.c.h))}</span> · ${esc(mean(cur.c))} ${correct ? '<span class="pill good">benar</span>' : '<span class="pill bad">belum tepat</span>'}</div>`;
+  $('#ctrl').innerHTML = info + `<div class="rate">${[1, 2, 3, 4].map((n) => `<button class="rb r${n} ${cur.sug === n ? 'sug' : ''}" data-rate="${n}"><span class="k">${n}</span><span class="l">${RATE[n].l}</span><span class="w">${RATE[n].w}</span></button>`).join('')}</div>`;
+  if (S.auto) speak(cur.c.h);
 }
 function bindTilt() {
   const tilt = $('#tilt'); if (!tilt || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -1534,7 +1576,7 @@ async function setPic(v) {
 const TF = Object.assign({ days: 30, cls: '', student: '' }, store.get('tf', {}));
 let armed = null, lastCred = null, SESS = [], liveT = 0, DRAFT = null;
 function stopLive() { clearInterval(liveT); liveT = 0; }
-const TTABS = [['live', 'eye', 'Pantau langsung'], ['students', 'users', 'Murid'], ['scores', 'chart', 'Skor'], ['progress', 'flag', 'Progres'], ['time', 'clock', 'Grafik waktu'], ['approve', 'inbox', 'Persetujuan'], ['stories', 'book2', 'Cerita'], ['settings', 'gear', 'Pengaturan']];
+const TTABS = [['live', 'eye', 'Pantau langsung'], ['students', 'users', 'Murid'], ['scores', 'chart', 'Skor'], ['progress', 'flag', 'Progres'], ['time', 'clock', 'Grafik waktu'], ['approve', 'inbox', 'Persetujuan'], ['stories', 'book2', 'Cerita'], ['cloze', 'edit', 'Isi rumpang'], ['settings', 'gear', 'Pengaturan']];
 async function renderTeach() {
   $('#actionbar').hidden = true; document.documentElement.style.setProperty('--c', 'var(--brand)');
   if (!TTABS.some(([k]) => k === S.ttab)) S.ttab = 'live';
@@ -1542,8 +1584,8 @@ async function renderTeach() {
   $('#view').innerHTML = `<div class="page-head"><div><p class="eyebrow">Panel guru</p><h1 class="h1">Halo, ${esc(ME.display_name)}</h1><p class="sub">Pengaturan dan kartu yang kamu ubah langsung berlaku untuk semua murid.</p></div></div>
     <div class="tabs" role="tablist">${TTABS.map(([k, i, l]) => `<button role="tab" data-ttab="${k}" aria-selected="${S.ttab === k}">${ic(i)} ${l}${k === 'approve' && pend ? `<span class="n">${pend}</span>` : ''}</button>`).join('')}</div><div id="tview"><p class="note">Memuat…</p></div>`;
   armed = null;
-  const tab = S.ttab, draw = () => ({ live: tLive, students: tStudents, scores: tScores, progress: tProgress, time: tTime, approve: tApprove, stories: tStories, settings: tSettings })[tab]();
-  if (['settings', 'approve', 'stories'].includes(tab)) { draw(); return; }
+  const tab = S.ttab, draw = () => ({ live: tLive, students: tStudents, scores: tScores, progress: tProgress, time: tTime, approve: tApprove, stories: tStories, cloze: tCloze, settings: tSettings })[tab]();
+  if (['settings', 'approve', 'stories', 'cloze'].includes(tab)) { draw(); return; }
   try { STUDENTS = await api.students(); } catch (e) { toast(e.message); }
   if (S.view === 'teach' && S.ttab === tab) draw();
 }
@@ -1758,6 +1800,75 @@ function tApprove() {
 }
 
 /* ---- Pengaturan ---- */
+const CLZ = { deck: '', rows: [], filter: '' };
+function clozeDeckOptions() {
+  return DECKS.filter((d) => d.cards.length && !(d.hskLevel && !d.hskLesson)).map((d) => `<option value="${esc(d.id)}" ${CLZ.deck === d.id ? 'selected' : ''}>${esc(d.zh)} (${d.cards.length})</option>`).join('');
+}
+async function tCloze() {
+  const v = $('#tview');
+  if (!CLZ.deck) { const first = DECKS.find((d) => d.cards.length && !(d.hskLevel && !d.hskLesson)); CLZ.deck = first ? first.id : ''; }
+  v.innerHTML = `<div class="panel">
+    <div class="panel-head"><h2 class="h3">Pembuat kalimat isian (rumpang)</h2></div>
+    <p class="note">Tulis satu kalimat untuk tiap kata; kalimat <b>harus memuat kata itu</b>. Saat murid belajar mode "Isi rumpang", kata itu dikosongkan jadi isian. Beri arti kalimat agar tampil di depan.</p>
+    <div class="row" style="gap:10px;flex-wrap:wrap;margin-top:10px">
+      <label class="field" style="flex:1;min-width:180px">Kategori<select id="clzDeck">${clozeDeckOptions()}</select></label>
+      <label class="field" style="flex:1;min-width:140px">Cari kata<input id="clzFilter" value="${esc(CLZ.filter)}" placeholder="hanzi / arti"></label>
+    </div></div>
+    <div class="panel quickadd">
+      <div class="panel-head"><h2 class="h3">${ic('plus')} Tambah cepat</h2><button class="chip sm" data-clzqhelp>Contoh</button></div>
+      <p class="note">Tempel banyak kalimat sekaligus — satu kalimat per baris. Sistem otomatis mencocokkan tiap kalimat ke kata di dalamnya. Beri arti setelah tanda <b>|</b>. Contoh: <span class="han">我在看书。</span> | Saya sedang membaca buku.</p>
+      <textarea id="clzBulk" rows="5" placeholder="我在看书。 | Saya sedang membaca buku.&#10;今天天气很好。 | Cuaca hari ini bagus."></textarea>
+      <div class="row" style="margin-top:8px"><button class="btn" data-clzbulk>${ic('check')} Tambahkan cepat</button><span id="clzBulkNote" class="note"></span></div>
+    </div>
+    <div class="panel"><div id="clzList"><p class="note">Memuat…</p></div></div>`;
+  $('#clzDeck').value = CLZ.deck;
+  $('#clzDeck').addEventListener('change', (e) => { CLZ.deck = e.target.value; CLZ.filter = ''; tCloze(); });
+  $('#clzFilter').addEventListener('input', (e) => { CLZ.filter = e.target.value; drawClozeList(); });
+  try { CLZ.rows = await api.deckCloze(CLZ.deck); } catch (e) { toast(e.message); CLZ.rows = []; }
+  if (!(S.view === 'teach' && S.ttab === 'cloze')) return;
+  drawClozeList();
+}
+function drawClozeList() {
+  const box = $('#clzList'); if (!box) return;
+  const f = CLZ.filter.trim().toLowerCase();
+  const rows = CLZ.rows.filter((r) => !f || r.h.includes(f) || (r.m || '').toLowerCase().includes(f) || (r.p || '').toLowerCase().includes(f));
+  const done = CLZ.rows.filter((r) => r.s).length;
+  box.innerHTML = `<p class="note" style="margin-bottom:10px">${done}/${CLZ.rows.length} kata sudah punya kalimat.</p>` + (rows.length ? rows.map((r) => `
+    <div class="clz-row" data-clzid="${esc(r.id)}">
+      <div class="clz-word"><b class="han">${esc(r.h)}</b><span>${esc(r.p || '')}${r.m ? ' · ' + esc(r.m) : ''}</span>${r.s ? `<span class="pill good">${r.source === 'ai' ? 'AI' : r.source === 'card' ? 'contoh' : 'manual'}</span>` : '<span class="pill mute">belum ada</span>'}</div>
+      <input class="clz-s" value="${esc(r.s)}" placeholder="kalimat yang memuat ${esc(r.h)}" maxlength="200">
+      <input class="clz-si" value="${esc(r.si)}" placeholder="arti kalimat (opsional)" maxlength="200">
+      <div class="row" style="gap:6px"><button class="btn sm" data-clzsave="${esc(r.id)}">${ic('check')} Simpan</button>${r.s ? `<button class="btn ghost sm" data-clzdel="${esc(r.id)}">${ic('trash')} Hapus</button>` : ''}</div>
+    </div>`).join('') : '<p class="note">Tidak ada kata yang cocok.</p>');
+  box.querySelectorAll('.clz-s, .clz-si').forEach((inp) => inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); const sv = inp.closest('.clz-row').querySelector('[data-clzsave]'); if (sv) sv.click(); } }));
+}
+async function runClozeBulk() {
+  const ta = $('#clzBulk'); const note = $('#clzBulkNote'); if (!ta) return;
+  const lines = ta.value.split('\n').map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) { note.textContent = 'Tempel kalimat dulu.'; return; }
+  // kata terpanjang dulu agar pencocokan paling spesifik
+  const words = CLZ.rows.map((r) => ({ id: r.id, h: r.h })).sort((a, b) => [...b.h].length - [...a.h].length);
+  const items = []; const unmatched = [];
+  for (const line of lines) {
+    const bar = line.indexOf('|');
+    const s = (bar >= 0 ? line.slice(0, bar) : line).trim();
+    const si = bar >= 0 ? line.slice(bar + 1).trim() : '';
+    const w = words.find((x) => s.includes(x.h));
+    if (w) items.push({ card_id: w.id, s, si }); else unmatched.push(line);
+  }
+  if (!items.length) { note.textContent = 'Tidak ada kalimat yang memuat kata di kategori ini.'; return; }
+  note.textContent = 'Menyimpan…';
+  try {
+    const r = await api.bulkCloze(items);
+    for (const it of items) CLOZE.delete(it.card_id);
+    CLZ.rows = await api.deckCloze(CLZ.deck);
+    const skipped = (r.skipped || []).length;
+    ta.value = unmatched.join('\n');
+    note.textContent = `${r.saved} kalimat ditambahkan.` + (unmatched.length ? ` ${unmatched.length} baris tak cocok (tetap di kotak).` : '') + (skipped ? ` ${skipped} dilewati.` : '');
+    toast(`${r.saved} kalimat rumpang ditambahkan.`);
+    drawClozeList();
+  } catch (e) { note.textContent = e.message; }
+}
 let STEDIT = null;
 async function tStories() {
   const v = $('#tview');
@@ -1844,7 +1955,7 @@ function leaveStudy() {
 let endArmed = 0, LAST_TAP = { id: null, t: 0 };
 document.addEventListener('click', async (e) => {
   if (!e.target.closest('#emojiPop') && !e.target.closest('[data-emo]')) closeEmoji();
-  const b = e.target.closest('[data-freezecard],[data-freezedeck],[data-unfreezedeck],[data-unfreezecard],[data-clozecheck],[data-clozemc],[data-clozepick],[data-stedit],[data-stdel],[data-stnew],[data-story],[data-backlearn],[data-togpy],[data-sayall],[data-saysent],[data-trsent],[data-word],[data-pincard],[data-sayresp],[data-studypinned],[data-guide],[data-profile],[data-like],[data-studypost],[data-backfeed],[data-onb],[data-onbans],[data-sheetq],[data-aitip],[data-dl],[data-hsk],[data-studyhsk],[data-babpick],[data-babgo],[data-vis],[data-pstu],[data-lkind],[data-part],[data-pickstu],[data-mkind],[data-warn],[data-chatto],[data-endrun],[data-endall],[data-nav],[data-pick],[data-act],[data-mode],[data-rate],[data-t],[data-ttab],[data-sact],[data-stu],[data-cfgmode],[data-cfgtog],[data-cfgdeck],[data-edeck],[data-etab],[data-ncolor],[data-rcolor],[data-emo],[data-pick-emo],[data-rm],[data-approve]');
+  const b = e.target.closest('[data-clzbulk],[data-clzqhelp],[data-unselect],[data-clearsel],[data-typecheck],[data-clzsave],[data-clzdel],[data-freezecard],[data-freezedeck],[data-unfreezedeck],[data-unfreezecard],[data-clozecheck],[data-clozemc],[data-clozepick],[data-stedit],[data-stdel],[data-stnew],[data-story],[data-backlearn],[data-togpy],[data-sayall],[data-saysent],[data-trsent],[data-word],[data-pincard],[data-sayresp],[data-studypinned],[data-guide],[data-profile],[data-like],[data-studypost],[data-backfeed],[data-onb],[data-onbans],[data-sheetq],[data-aitip],[data-dl],[data-hsk],[data-studyhsk],[data-babpick],[data-babgo],[data-vis],[data-pstu],[data-lkind],[data-part],[data-pickstu],[data-mkind],[data-warn],[data-chatto],[data-endrun],[data-endall],[data-nav],[data-pick],[data-act],[data-mode],[data-rate],[data-t],[data-ttab],[data-sact],[data-stu],[data-cfgmode],[data-cfgtog],[data-cfgdeck],[data-edeck],[data-etab],[data-ncolor],[data-rcolor],[data-emo],[data-pick-emo],[data-rm],[data-approve]');
   if (!b) { const fc = e.target.closest('#fc'); if (fc && Q && Q.cur && Q.cur.answered) flip(); return; }
   const ds = b.dataset;
   if (ds.nav) { leaveStudy(); go(ds.nav); return; }
@@ -1867,6 +1978,22 @@ document.addEventListener('click', async (e) => {
     try { const r = await api.endRun(ds.endall ? { all: true } : { sid: ds.endrun }); toast(`${r.ended} sesi diakhiri. Murid langsung melihat pemberitahuan.`); if (LIVE_DRAW) LIVE_DRAW(); } catch (err) { toast(err.message); }
     return;
   }
+  if (ds.clzbulk !== undefined) { runClozeBulk(); return; }
+  if (ds.clzqhelp !== undefined) { const ta = $('#clzBulk'); if (ta) { ta.value = (ta.value ? ta.value + '\n' : '') + '我在看书。 | Saya sedang membaca buku.'; ta.focus(); } return; }
+  if (ds.clzsave) {
+    const row = b.closest('.clz-row'); if (!row) return;
+    const s = row.querySelector('.clz-s').value.trim(), si = row.querySelector('.clz-si').value.trim();
+    if (!s) { toast('Isi kalimatnya dulu.'); return; }
+    b.disabled = true;
+    try { const r = await api.setCloze(ds.clzsave, s, si); const row2 = CLZ.rows.find((x) => x.id === ds.clzsave); if (row2) { row2.s = r.s; row2.si = r.si; row2.source = 'manual'; } CLOZE.delete(ds.clzsave); toast('Kalimat disimpan.'); drawClozeList(); }
+    catch (err) { toast(err.message); b.disabled = false; }
+    return;
+  }
+  if (ds.clzdel) {
+    try { await api.clearCloze(ds.clzdel); const row2 = CLZ.rows.find((x) => x.id === ds.clzdel); if (row2) { row2.s = ''; row2.si = ''; row2.source = ''; } CLOZE.delete(ds.clzdel); toast('Kalimat dihapus.'); drawClozeList(); }
+    catch (err) { toast(err.message); }
+    return;
+  }
   if (ds.freezedeck !== undefined) { e.stopPropagation(); freezeDeck(ds.freezedeck, true); return; }
   if (ds.unfreezedeck !== undefined) { freezeDeck(ds.unfreezedeck, false); return; }
   if (ds.unfreezecard !== undefined) { freezeCard(ds.unfreezecard, false); renderLearn(); return; }
@@ -1875,6 +2002,9 @@ document.addEventListener('click', async (e) => {
     if (Q.queue[0] && Q.queue[0].id === id) { Q.queue.shift(); Q.total = Math.max(Q.done, Q.total - 1); }
     renderStudy(); return;
   }
+  if (ds.unselect) { S.sel = S.sel.filter((x) => x !== ds.unselect); savePrefs(); renderLearn(); return; }
+  if (ds.clearsel !== undefined) { S.sel = []; S.split.part = 0; savePrefs(); renderLearn(); return; }
+  if (ds.typecheck !== undefined) { const inp = document.getElementById('typeIn'); if (inp) checkType(inp.value); return; }
   if (ds.clozecheck !== undefined) { const inp = document.getElementById('clozeIn'); if (inp) checkCloze(inp.value); return; }
   if (ds.clozemc !== undefined) { showClozeMC(); return; }
   if (ds.clozepick) { checkCloze(ds.clozepick); return; }
@@ -1912,7 +2042,7 @@ document.addEventListener('click', async (e) => {
       LAST_TAP = { id, t };
       S.sel = S.sel.includes(id) ? S.sel.filter((x) => x !== id) : [...S.sel, id];
     }
-    savePrefs(); b.setAttribute('aria-pressed', S.sel.includes(id)); renderActionbar(); return;
+    savePrefs(); b.setAttribute('aria-pressed', S.sel.includes(id)); renderActionbar(); updateBucket(); return;
   }
   if (ds.mode) { S.mode = ds.mode; savePrefs(); if (Q && Q.queue.length) renderStudy(); return; }
   if (ds.t !== undefined && b.classList.contains('qo')) { answerQuiz(b); return; }
