@@ -399,6 +399,14 @@ check('Tambah cepat: tersimpan & terbaca murid', SA.req('POST', '/api/cloze', {'
 check('Tambah cepat: murid tak bisa', SA.req('POST', '/api/cloze/bulk', {'items': [{'card_id': _a['id'], 's': '测试' + _a['h']}]})[0] == 403)
 check('Tambah cepat: kosong ditolak', T.req('POST', '/api/cloze/bulk', {'items': []})[0] == 400)
 
+# ---- Kalimat rumpang bawaan untuk kata buatin ----
+_bw = next((c for c in _ct['cards'] if c['deck_id'] == 'buah'), None)
+if _bw:
+    _bwr = SA.req('POST', '/api/cloze', {'card_id': _bw['id']})[1]
+    check('Bawaan: kata buatin punya kalimat otomatis', bool(_bwr.get('s')) and _bw['h'] in _bwr.get('s', ''), _bwr)
+    check('Bawaan: sumber "builtin"', _bwr.get('source') == 'builtin', _bwr.get('source'))
+    check('Bawaan: ada arti kalimat', bool(_bwr.get('si')), _bwr)
+
 fails = 0
 for ok, name, d in results:
     print(('LULUS ' if ok else 'GAGAL ') + name + ('' if ok else f'  → {str(d)[:200]}')); fails += (not ok)

@@ -1,0 +1,104 @@
+{
+  "lessons": [
+    {
+      "id": "spok",
+      "emoji": "🧩",
+      "color": "#2f6df0",
+      "title": "Struktur Kalimat (SPOK)",
+      "subtitle": "Urutan kata dalam bahasa Mandarin",
+      "sections": [
+        {
+          "h": "1. Pola dasar: Subjek + Predikat + Objek",
+          "body": "Seperti bahasa Indonesia, urutan dasar Mandarin adalah S–P–O (Subjek → Kata kerja → Objek). Yang penting: kata kerja TIDAK berubah bentuk.",
+          "examples": [
+            {"zh": "我吃苹果。", "id": "Saya makan apel.", "note": "我 (S) · 吃 (P) · 苹果 (O)"},
+            {"zh": "他喝水。", "id": "Dia minum air.", "note": "他 (S) · 喝 (P) · 水 (O)"},
+            {"zh": "老师教中文。", "id": "Guru mengajar bahasa Mandarin.", "note": "老师 (S) · 教 (P) · 中文 (O)"}
+          ]
+        },
+        {
+          "h": "2. Keterangan WAKTU di depan",
+          "body": "Keterangan waktu diletakkan di awal kalimat atau tepat setelah subjek — TIDAK di akhir seperti bahasa Inggris.",
+          "examples": [
+            {"zh": "我今天去学校。", "id": "Hari ini saya pergi ke sekolah.", "note": "Waktu (今天) setelah subjek"},
+            {"zh": "明天我们吃饭。", "id": "Besok kita makan.", "note": "Waktu (明天) di awal"}
+          ]
+        },
+        {
+          "h": "3. Keterangan TEMPAT dengan 在",
+          "body": "Tempat memakai 在 + tempat, dan diletakkan SEBELUM kata kerja, bukan sesudahnya.",
+          "examples": [
+            {"zh": "我在家看书。", "id": "Saya membaca buku di rumah.", "note": "在家 (tempat) sebelum 看书"},
+            {"zh": "他在学校学习。", "id": "Dia belajar di sekolah.", "note": "在学校 sebelum 学习"}
+          ]
+        },
+        {
+          "h": "4. Urutan keterangan: Waktu → Tempat → Cara → Kerja",
+          "body": "Kalau ada banyak keterangan, urutannya tetap: SUBJEK + WAKTU + TEMPAT + CARA/ALAT + KATA KERJA + OBJEK.",
+          "examples": [
+            {"zh": "我今天在家用电脑工作。", "id": "Hari ini saya bekerja di rumah pakai komputer.", "note": "我 + 今天 + 在家 + 用电脑 + 工作"},
+            {"zh": "她每天在公园跑步。", "id": "Dia lari di taman setiap hari.", "note": "她 + 每天 + 在公园 + 跑步"}
+          ]
+        },
+        {
+          "h": "5. Kalimat tanya",
+          "body": "Tambahkan 吗 di akhir untuk tanya ya/tidak. Untuk tanya detail, pakai kata tanya (什么 apa, 谁 siapa, 哪里 di mana, 什么时候 kapan) di posisi jawabannya — urutan kalimat tidak berubah.",
+          "examples": [
+            {"zh": "你是学生吗？", "id": "Apakah kamu murid?", "note": "吗 = tanya ya/tidak"},
+            {"zh": "你吃什么？", "id": "Kamu makan apa?", "note": "什么 di posisi objek"},
+            {"zh": "他在哪里？", "id": "Dia di mana?", "note": "哪里 di posisi tempat"}
+          ]
+        },
+        {
+          "h": "6. Negasi: 不 dan 没",
+          "body": "不 untuk menyangkal kebiasaan / masa kini / masa depan. 没 untuk menyangkal yang SUDAH terjadi (belum). Keduanya diletakkan sebelum kata kerja.",
+          "examples": [
+            {"zh": "我不喝咖啡。", "id": "Saya tidak minum kopi.", "note": "不 + kerja (kebiasaan)"},
+            {"zh": "我没吃早饭。", "id": "Saya belum makan sarapan.", "note": "没 + kerja (lampau/belum)"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "radikal",
+      "emoji": "🧱",
+      "color": "#e8513f",
+      "title": "Radikal Hanzi (部首)",
+      "subtitle": "Petunjuk makna di dalam karakter",
+      "sections": [
+        {
+          "h": "Apa itu radikal?",
+          "body": "Radikal (部首 bùshǒu) adalah bagian kecil penyusun hanzi yang sering memberi petunjuk MAKNA karakter. Mengenali radikal membantu menebak arti dan mengingat tulisan. Contoh: semua karakter dengan 氵berhubungan dengan air."
+        },
+        {
+          "h": "Radikal yang paling sering muncul",
+          "body": "Hafalkan sedikit demi sedikit. Ketuk contoh karakternya untuk melihat arti & menambahkannya ke kartu.",
+          "radicals": [
+            {"r": "氵", "base": "水", "m": "air", "ex": "河 海 洗 游"},
+            {"r": "亻", "base": "人", "m": "orang", "ex": "你 他 们 住"},
+            {"r": "口", "base": "口", "m": "mulut", "ex": "吃 叫 唱 喝"},
+            {"r": "女", "base": "女", "m": "perempuan", "ex": "妈 她 好 姐"},
+            {"r": "木", "base": "木", "m": "kayu/pohon", "ex": "树 林 桌 椅"},
+            {"r": "扌", "base": "手", "m": "tangan", "ex": "打 找 拿 提"},
+            {"r": "忄", "base": "心", "m": "hati/perasaan", "ex": "忙 快 怕 慢"},
+            {"r": "讠", "base": "言", "m": "bicara/kata", "ex": "说 话 语 请"},
+            {"r": "日", "base": "日", "m": "matahari/hari", "ex": "明 时 晴 早"},
+            {"r": "月", "base": "月", "m": "bulan/tubuh", "ex": "朋 脸 胖 脚"},
+            {"r": "足", "base": "足", "m": "kaki", "ex": "跑 跳 路 踢"},
+            {"r": "钅", "base": "金", "m": "logam", "ex": "钱 钟 银 错"},
+            {"r": "火", "base": "火", "m": "api", "ex": "灯 热 烧 炒"},
+            {"r": "土", "base": "土", "m": "tanah", "ex": "地 坐 场 城"},
+            {"r": "艹", "base": "艸", "m": "rumput/tanaman", "ex": "花 草 菜 茶"},
+            {"r": "饣", "base": "食", "m": "makanan", "ex": "饭 饿 饺 馆"},
+            {"r": "宀", "base": "宀", "m": "atap/rumah", "ex": "家 室 安 字"},
+            {"r": "目", "base": "目", "m": "mata", "ex": "看 眼 睛 睡"},
+            {"r": "心", "base": "心", "m": "hati", "ex": "想 念 感 愿"},
+            {"r": "车", "base": "车", "m": "kendaraan", "ex": "轮 较 辆 转"},
+            {"r": "门", "base": "门", "m": "pintu", "ex": "问 间 闹 们"},
+            {"r": "雨", "base": "雨", "m": "hujan/cuaca", "ex": "雪 雷 零 需"}
+          ]
+        }
+      ]
+    }
+  ]
+}

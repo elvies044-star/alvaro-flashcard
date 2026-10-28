@@ -4,9 +4,10 @@ import MW from './data/mw.json';
 import { api } from './api/http.js';
 import { hbars, lineChart } from './charts.js';
 import { pinyin as pyPro } from 'pinyin-pro';
+import LESSONS from './data/lessons.json';
 
 const APP = 'Alvaro Mandarin Flashcard Tamer';
-const APP_VERSION = '2026.10.28-cepat';
+const APP_VERSION = '2026.10.28-materi';
 const BUILD = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev';
 
 /* ================= helpers ================= */
@@ -179,7 +180,7 @@ function navItems() {
   return n;
 }
 function shell() {
-  const cur = (v) => S.view === v || (['study', 'done', 'story'].includes(S.view) && v === 'learn');
+  const cur = (v) => S.view === v || (['study', 'done', 'story', 'lesson'].includes(S.view) && v === 'learn');
   const pend = pendingCount();
   const btns = navItems().map(([v, i, l]) => `<button data-nav="${v}" ${cur(v) ? 'aria-current="page"' : ''}>${ic(i)}<span>${l}</span>${v === 'teach' && pend ? `<span class="dot">${pend}</span>` : ''}</button>`).join('');
   $('.top').hidden = false;
@@ -311,6 +312,7 @@ function deckCard(d) {
     <div class="meta"><span class="dotc"></span>${kindNow() === 'mw' ? `${mwN} kartu ber-量词` : `${due} siap · ${live.length} kartu`}</div></button>`;
 }
 function updateBucket() { const el = document.getElementById('bucketBox'); if (el && S.view === 'learn') el.innerHTML = selBucketHTML(); }
+function updateStartFab() { const el = document.getElementById('startFab'); if (!el) return; const n = poolCards().length; el.hidden = !n; el.innerHTML = `${ic('play')} Mulai${n ? ` · ${n} kartu` : ''}`; }
 function selBucketHTML() {
   const sel = studyDecks().filter((d) => S.sel.includes(d.id) && !isFrozenDeck(d));
   const n = poolCards().length;
@@ -359,6 +361,7 @@ function renderLearn() {
     <div class="learnbar">
       <div class="seg" role="group" aria-label="Jenis latihan"><button data-lkind="card" aria-pressed="${kindNow() === 'card'}">Flashcard</button>${mwOn() ? `<button data-lkind="mw" aria-pressed="${kindNow() === 'mw'}">Kuis 量词</button>` : ''}<button data-lkind="cloze" aria-pressed="${kindNow() === 'cloze'}">Isi rumpang</button><button data-lkind="type" aria-pressed="${kindNow() === 'type'}">Latihan ketik</button></div>
       <button class="chip" data-act="split" aria-pressed="${S.split.on}">${ic('split')} Atur sesi</button>
+      <button class="chip" data-act="togall" aria-pressed="${S.all}" title="Latih semua kartu, abaikan jadwal">${ic('play')} Latih semua</button>
       <button class="chip" data-act="sendsheet">${ic('send')} Kirim kartu</button>
       ${!isTeacher() && 'Notification' in window ? `<button class="chip" data-act="reminder" aria-pressed="${store.get('remind', false)}">${ic('alert')} Pengingat</button>` : ''}
     </div>
@@ -375,12 +378,14 @@ function renderLearn() {
         <div class="decks">${hskLessons.map(deckCard).join('')}</div></div>` : '<p class="note" style="margin:-4px 0 14px">Ketuk salah satu kartu HSK di atas untuk membuka semua pelajarannya.</p>'}` : ''}
     ${speakDecks.length ? `<div class="sec-title">${ic('speak')} Percakapan harian</div><div class="decks">${speakDecks.map(deckCard).join('')}</div>` : ''}
     ${STORIES && STORIES.length ? `<div class="sec-title">${ic('book2')} Cerita</div><div class="stories">${STORIES.map(storyTile).join('')}</div>` : ''}
+    ${LESSONS && LESSONS.lessons.length ? `<div class="sec-title">${ic('book2')} Materi</div><div class="lessons">${LESSONS.lessons.map(lessonTile).join('')}</div>` : ''}
     ${!isTeacher() || priv.length ? `<div class="sec-title">${ic('key')} Pribadi${priv.length ? ' · ' + priv.length : ''}</div><div class="decks">${!isTeacher() ? `<button class="deck custom" data-act="custom" aria-label="Buat kartu sendiri"><span class="plus">${ic('plus')}</span><b>Custom</b><span>Buat kartu sendiri</span></button>` : ''}${priv.map(deckCard).join('')}</div>${rest.length ? '<div class="sec-title">Kategori kelas</div>' : ''}` : ''}
     <div class="decks">${rest.map(deckCard).join('') || (priv.length ? '' : '<div class="panel empty"><b>Belum ada kategori</b>Gurumu belum menampilkan kategori untukmu.</div>')}</div>
     ${frozenCardList.length ? `<div class="sec-title">${ic('snow')} Kata beku · ${frozenCardList.length}</div>
       <div class="frozen-cards">${frozenCardList.map((c) => `<button class="frz-chip" data-unfreezecard="${esc(c.id)}" title="Pecahkan (cairkan)"><span class="han">${esc(c.h)}</span><span class="fm">${esc(mean(c))}</span>${ic('snow')}</button>`).join('')}</div>
       <p class="note" style="margin-top:6px">Ketuk kata untuk mencairkannya agar muncul lagi saat belajar.</p>` : ''}
-    <p class="ver">Versi ${APP_VERSION}</p>`;
+    <p class="ver">Versi ${APP_VERSION}</p>
+    <button class="start-fab" id="startFab" data-startsel ${poolCards().length ? '' : 'hidden'}>${ic('play')} Mulai${poolCards().length ? ` · ${poolCards().length} kartu` : ''}</button>`;
   const sz = $('#spSize'), ct = $('#spCount');
   if (sz) {
     const upd = (from) => {
@@ -1230,8 +1235,8 @@ const GUIDE = [
 function openGuide() {
   if (document.getElementById('guideSheet')) return;
   const steps = GUIDE.map(([i, t, d]) => `<li><span class="g-ic">${ic(i)}</span><div><b>${t}</b><p>${d}</p></div></li>`).join('');
-  const el = document.createElement('div'); el.id = 'guideSheet'; el.className = 'sheet-back';
-  el.innerHTML = `<div class="sheet guide-sheet" role="dialog" aria-modal="true" aria-label="Petunjuk">
+  const el = document.createElement('div'); el.id = 'guideSheet'; el.className = 'overlay sheet';
+  el.innerHTML = `<div class="box guide-sheet" role="dialog" aria-modal="true" aria-label="Petunjuk">
     <div class="sh-head"><div><p class="eyebrow">Selamat datang 👋</p><b>Cara memakai aplikasi</b></div><button class="icon-btn" data-guideclose aria-label="Tutup">${ic('x')}</button></div>
     <ul class="guide-list">${steps}</ul>
     <button class="btn lg" data-guideclose>${ic('check')} Mengerti, mulai belajar</button></div>`;
@@ -1258,7 +1263,7 @@ async function openStory(id) {
   $('#view').innerHTML = '<div class="panel"><p class="note">Memuat cerita…</p></div>';
   let s; try { s = await api.story(id); } catch (e) { toast(e.message); return go('learn'); }
   if (S.view !== 'story') return;
-  STORY = s;
+  STORY = s; UNKNOWN = new Set();
   if (!isTeacher() && (ME.level || 0) <= 1) LOWPY = true; // pemula: pinyin otomatis nyala
   renderStory();
 }
@@ -1268,16 +1273,22 @@ function sentencesOf(body) {
   if (cur.trim()) out.push(cur.trim());
   return out;
 }
+let UNKNOWN = new Set();
 function sentHTML(sent, si) {
   const toks = segHan(sent).map((tk) => {
     if (tk.t !== 'w') return `<span class="px">${esc(tk.s)}</span>`;
     const chars = [...tk.s];
     const ruby = LOWPY ? `<span class="rt">${chars.map((c) => `<i class="t${toneOf(c)}">${esc(pyOf(c))}</i>`).join('')}</span>` : '';
-    return `<span class="w" data-word="${esc(tk.s)}">${ruby}<span class="rb">${esc(tk.s)}</span></span>`;
+    return `<span class="w ${UNKNOWN.has(tk.s) ? 'unknown' : ''}" data-word="${esc(tk.s)}">${ruby}<span class="rb">${esc(tk.s)}</span></span>`;
   }).join('');
   return `<div class="sent" data-si="${si}"><div class="sent-h ${LOWPY ? 'withpy' : ''}">${toks}</div>
-    <div class="sent-tools"><button class="icon-btn sm" data-saysent="${si}" aria-label="Dengar kalimat">${ic('sound')}</button>${AI_ON && canCreate() ? `<button class="icon-btn sm" data-trsent="${si}" aria-label="Terjemahkan">${ic('globe')}</button>` : ''}</div>
+    <div class="sent-tools"><button class="icon-btn sm" data-saysent="${si}" aria-label="Dengar kalimat">${ic('sound')}</button><button class="icon-btn sm" data-trsent="${si}" aria-label="Terjemahkan">${ic('globe')}</button></div>
     <div class="sent-tr" id="tr${si}" hidden></div></div>`;
+}
+// glosa per kata (offline) — selalu tersedia walau AI mati
+function glossOf(sent) {
+  const parts = segHan(sent).filter((t) => t.t === 'w').map((t) => { const m = (LEX.get(t.s) || {}).m; return m ? `${t.s}=${m}` : ''; }).filter(Boolean);
+  return parts.length ? parts.join(' · ') : '';
 }
 function renderStory() {
   const s = STORY; if (!s) return go('learn');
@@ -1288,9 +1299,10 @@ function renderStory() {
     <div class="reader-top"><button class="btn ghost sm" data-backlearn>${ic('back')} Belajar</button>
       <button class="chip ${LOWPY ? 'on' : ''}" data-togpy aria-pressed="${LOWPY}">拼 Pinyin</button>
       <button class="chip" data-sayall>${ic('sound')} Dengar semua</button></div>
+    ${UNKNOWN.size ? `<div class="unknown-bar">${ic('snow')} <b>${UNKNOWN.size}</b> kata ditandai belum tahu${canCreate() ? ` <button class="btn sm" data-addunknown>${ic('plus')} Masukkan ke deck…</button>` : ''}<button class="chip sm" data-clearunknown>${ic('x')} Bersihkan</button></div>` : ''}
     <div class="reader-head"><span class="story-lvl" style="--sc:${col}">${esc(lvlName(s.level))}</span><h1 class="h1 han">${esc(s.title)}</h1></div>
     <div class="reader-body">${sents.map(sentHTML).join('')}</div>
-    <p class="note" style="text-align:center;margin-top:12px">Ketuk kata untuk arti & tambahkan ke kartu. Ketuk ikon suara untuk mendengar.</p>
+    <p class="note" style="text-align:center;margin-top:12px">Ketuk kata untuk arti, audio, tandai "belum tahu", atau tambah ke deck. Ikon 🌐 untuk terjemahan kalimat.</p>
   </div>`;
 }
 function openWordSheet(word) {
@@ -1298,40 +1310,134 @@ function openWordSheet(word) {
   const info = LEX.get(word) || {};
   const p = info.p || pyOf(word);
   const m = info.m || '';
-  const el = document.createElement('div'); el.id = 'wordSheet'; el.className = 'sheet-back';
-  el.innerHTML = `<div class="sheet word-sheet" role="dialog" aria-modal="true">
+  const unk = UNKNOWN.has(word);
+  const el = document.createElement('div'); el.id = 'wordSheet'; el.className = 'overlay sheet';
+  el.innerHTML = `<div class="box word-sheet" role="dialog" aria-modal="true">
     <div class="sh-head"><div><div class="word-h han">${esc(word)}</div><div class="word-p">${esc(p)}</div></div><button class="icon-btn" data-wordclose aria-label="Tutup">${ic('x')}</button></div>
     <div class="word-m" id="wordM">${m ? esc(m) : '<span class="note">Arti belum diketahui.</span>'}</div>
-    <div class="row" style="gap:8px;margin-top:12px"><button class="btn secondary" data-wordsay>${ic('sound')} Dengar</button>${canCreate() ? `<button class="btn" data-wordadd="${esc(word)}">${ic('plus')} Tambah ke kartu</button>` : ''}</div></div>`;
+    <div class="word-acts"><button class="btn secondary sm" data-wordsay>${ic('sound')} Dengar</button>
+      <button class="btn ${unk ? '' : 'secondary'} sm" data-wordunknown="${esc(word)}">${ic('snow')} ${unk ? 'Belum tahu ✓' : 'Tandai belum tahu'}</button>
+      ${canCreate() ? `<button class="btn sm" data-wordadd="${esc(word)}">${ic('plus')} Tambah ke deck…</button>` : ''}</div></div>`;
   document.body.appendChild(el);
-  el.addEventListener('click', (e) => { if (e.target === el || e.target.closest('[data-wordclose]')) closeWordSheet(); if (e.target.closest('[data-wordsay]')) speak(word); if (e.target.closest('[data-wordadd]')) addWordToCards(word, info); });
-  if (!m && AI_ON && canCreate()) api.translate([word]).then((r) => { const it = (r.items || [])[0]; const mm = it && (it.m || it.idn || it.translation); if (mm) { const box = document.getElementById('wordM'); if (box) box.textContent = mm; STORY && LEX.set(word, { p, m: mm }); } }).catch(() => {});
+  el.addEventListener('click', (e) => {
+    if (e.target === el || e.target.closest('[data-wordclose]')) { closeWordSheet(); return; }
+    if (e.target.closest('[data-wordsay]')) speak(word);
+    if (e.target.closest('[data-wordunknown]')) { toggleUnknown(word); closeWordSheet(); }
+    if (e.target.closest('[data-wordadd]')) { closeWordSheet(); openDeckPicker([word]); }
+  });
+  if (!m && AI_ON && canCreate()) api.translate([word]).then((r) => { const it = (r.items || [])[0]; const mm = it && (it.m || it.idn || it.translation); if (mm) { const box = document.getElementById('wordM'); if (box) box.textContent = mm; LEX.set(word, { p, m: mm }); } }).catch(() => {});
 }
 function closeWordSheet() { const el = document.getElementById('wordSheet'); if (el) el.remove(); }
-async function addWordToCards(word, info) {
+function reRenderReader() { if (S.view === 'story') renderStory(); else if (S.view === 'lesson') renderLesson(); }
+function toggleUnknown(word) { if (UNKNOWN.has(word)) UNKNOWN.delete(word); else UNKNOWN.add(word); reRenderReader(); }
+async function wordInfo(word) {
+  const p = (LEX.get(word) || {}).p || pyOf(word);
+  let m = (LEX.get(word) || {}).m || '';
+  if (!m && AI_ON) { try { const r = await api.translate([word]); const it = (r.items || [])[0]; m = (it && (it.m || it.idn || it.translation)) || ''; } catch (_) { /* - */ } }
+  return { h: word, p, m: m || p };
+}
+// pemilih deck untuk menambahkan kata
+function openDeckPicker(words) {
   if (!canCreate()) { toast('Gurumu belum mengizinkan membuat kartu.'); return; }
-  const p = (info && info.p) || LEX.get(word)?.p || pyOf(word);
-  let m = (info && info.m) || LEX.get(word)?.m || '';
-  if (!m && AI_ON) { try { const r = await api.translate([word]); const it = (r.items || [])[0]; m = (it && (it.m || it.idn || it.translation)) || ''; } catch (_) { /* biar kosong */ } }
-  if (!m) m = p; // minimal ada isi
+  const owned = editableDecks();
+  const el = document.createElement('div'); el.id = 'deckPicker'; el.className = 'overlay sheet';
+  el.innerHTML = `<div class="box" role="dialog" aria-modal="true">
+    <div class="sh-head"><b>Masukkan ${words.length} kata ke deck</b><button class="icon-btn" data-dpclose aria-label="Tutup">${ic('x')}</button></div>
+    <div class="dp-list">
+      ${owned.map((d) => `<button class="dp-item" data-pickdeck="${esc(d.id)}" style="--dc:${d.color}"><span class="dotc"></span><b>${esc(d.zh)}</b><small>${d.cards.length} kartu</small></button>`).join('')}
+      <button class="dp-item new" data-pickdeck="__new">${ic('plus')} Buat deck baru "Dari cerita"</button>
+    </div></div>`;
+  document.body.appendChild(el);
+  el.addEventListener('click', async (e) => {
+    if (e.target === el || e.target.closest('[data-dpclose]')) { el.remove(); return; }
+    const pk = e.target.closest('[data-pickdeck]'); if (!pk) return;
+    el.remove(); await addWordsToDeck(pk.dataset.pickdeck, words);
+  });
+}
+async function addWordsToDeck(deckId, words) {
   try {
-    let deck = DECKS.find((d) => d.mine && d.zh === 'Dari cerita');
-    if (!deck) { const r = await api.createDeck({ zh: 'Dari cerita', idn: 'Kata dari cerita', color: '#0ea5a4', public: false }); await reloadContent(); deck = DECKS.find((d) => d.id === r.id) || DECKS.find((d) => d.mine && d.zh === 'Dari cerita'); }
-    if (!deck) { toast('Gagal membuat kategori.'); return; }
-    if (deck.cards.some((c) => c.h === word)) { toast('Kata ini sudah ada di kartumu.'); closeWordSheet(); return; }
-    await api.bulkCards(deck.id, [{ h: word, p, m }]);
+    let deck;
+    if (deckId === '__new') {
+      deck = DECKS.find((d) => d.mine && d.zh === 'Dari cerita');
+      if (!deck) { const r = await api.createDeck({ zh: 'Dari cerita', idn: 'Kata dari cerita', color: '#0ea5a4', public: false }); await reloadContent(); deck = DECKS.find((d) => d.id === r.id) || DECKS.find((d) => d.mine && d.zh === 'Dari cerita'); }
+    } else deck = DECKS.find((d) => d.id === deckId);
+    if (!deck) { toast('Deck tidak ditemukan.'); return; }
+    toast('Menyiapkan kartu…');
+    const have = new Set(deck.cards.map((c) => c.h));
+    const fresh = words.filter((w) => !have.has(w));
+    if (!fresh.length) { toast('Semua kata itu sudah ada di deck.'); return; }
+    const cards = [];
+    for (const w of fresh) cards.push(await wordInfo(w));
+    await api.bulkCards(deck.id, cards);
     await reloadContent();
-    toast(`"${word}" ditambahkan ke kategori "Dari cerita".`);
-    closeWordSheet();
+    for (const w of fresh) UNKNOWN.delete(w);
+    toast(`${fresh.length} kata ditambahkan ke "${deck.zh}".`);
+    reRenderReader();
   } catch (e) { toast(e.message); }
 }
 async function translateSent(si) {
   const box = document.getElementById('tr' + si); if (!box) return;
   if (!box.hidden) { box.hidden = true; return; }
   const sent = sentencesOf(STORY.body)[si]; if (!sent) return;
-  box.hidden = false; box.textContent = 'Menerjemahkan…';
-  try { const r = await api.translate([sent]); const it = (r.items || [])[0]; box.textContent = (it && (it.m || it.idn || it.translation)) || 'Tidak ada terjemahan.'; }
-  catch (e) { box.textContent = e.message; }
+  box.hidden = false;
+  if (AI_ON && canCreate()) {
+    box.textContent = 'Menerjemahkan…';
+    try { const r = await api.translate([sent]); const it = (r.items || [])[0]; const t = it && (it.m || it.idn || it.translation); if (t) { box.textContent = t; return; } } catch (_) { /* pakai glosa */ }
+  }
+  const g = glossOf(sent);
+  box.innerHTML = g ? `<span class="gloss">${esc(g)}</span><span class="note" style="display:block;margin-top:4px">Arti per kata.</span>` : '<span class="note">Terjemahan belum tersedia.</span>';
+}
+/* ================= Materi (kursus) ================= */
+let CURLESSON = null;
+function lessonTile(l) {
+  return `<button class="lesson-tile" data-lesson="${esc(l.id)}" style="--sc:${l.color || '#1f3fbf'}">
+    <span class="lesson-emoji">${esc(l.emoji || '📚')}</span>
+    <span class="lesson-meta"><b>${esc(l.title)}</b><small>${esc(l.subtitle || '')}</small></span></button>`;
+}
+function openLesson(id) {
+  const l = LESSONS.lessons.find((x) => x.id === id); if (!l) return;
+  stopLive(); CURLESSON = l; S.view = 'lesson'; UNKNOWN = new Set(); shell(); window.scrollTo(0, 0); $('#actionbar').hidden = true;
+  if (!isTeacher() && (ME.level || 0) <= 1) LOWPY = true;
+  renderLesson();
+}
+// baris hanzi yang bisa diketuk kata-katanya (+ pinyin ber-nada opsional)
+function hanLine(zh) {
+  return segHan(zh).map((tk) => {
+    if (tk.t !== 'w') return `<span class="px">${esc(tk.s)}</span>`;
+    const ruby = LOWPY ? `<span class="rt">${[...tk.s].map((c) => `<i class="t${toneOf(c)}">${esc(pyOf(c))}</i>`).join('')}</span>` : '';
+    return `<span class="w ${UNKNOWN.has(tk.s) ? 'unknown' : ''}" data-word="${esc(tk.s)}">${ruby}<span class="rb">${esc(tk.s)}</span></span>`;
+  }).join('');
+}
+function exampleHTML(ex, i) {
+  return `<div class="lex-ex">
+    <div class="lex-top"><div class="sent-h ${LOWPY ? 'withpy' : ''}">${hanLine(ex.zh)}</div><button class="icon-btn sm" data-saytext="${esc(ex.zh)}" aria-label="Dengar">${ic('sound')}</button></div>
+    <div class="lex-id">${esc(ex.id || '')}</div>
+    ${ex.note ? `<div class="lex-note">${esc(ex.note)}</div>` : ''}</div>`;
+}
+function radicalHTML(r) {
+  return `<div class="rad-card">
+    <div class="rad-top"><span class="rad-r han">${esc(r.r)}</span>${r.base && r.base !== r.r ? `<span class="rad-base">(${esc(r.base)})</span>` : ''}<button class="icon-btn sm" data-saytext="${esc(r.r)}" aria-label="Dengar">${ic('sound')}</button></div>
+    <div class="rad-m">${esc(r.m)}</div>
+    <div class="rad-ex">${(r.ex || '').split(/\s+/).filter(Boolean).map((c) => `<span class="w" data-word="${esc(c)}"><span class="rb">${esc(c)}</span></span>`).join('')}</div></div>`;
+}
+function sectionHTML(sec) {
+  let inner = sec.body ? `<p class="lex-body">${esc(sec.body)}</p>` : '';
+  if (sec.examples) inner += `<div class="lex-exs">${sec.examples.map(exampleHTML).join('')}</div>`;
+  if (sec.radicals) inner += `<div class="rad-grid">${sec.radicals.map(radicalHTML).join('')}</div>`;
+  return `<section class="lex-sec"><h2 class="lex-h">${esc(sec.h)}</h2>${inner}</section>`;
+}
+function renderLesson() {
+  const l = CURLESSON; if (!l) return go('learn');
+  const col = l.color || '#1f3fbf';
+  document.documentElement.style.setProperty('--c', col);
+  $('#view').innerHTML = `<div class="reader lesson" style="--sc:${col}">
+    <div class="reader-top"><button class="btn ghost sm" data-backlearn>${ic('back')} Belajar</button>
+      <button class="chip ${LOWPY ? 'on' : ''}" data-togpy aria-pressed="${LOWPY}">拼 Pinyin</button></div>
+    ${UNKNOWN.size ? `<div class="unknown-bar">${ic('snow')} <b>${UNKNOWN.size}</b> kata ditandai belum tahu${canCreate() ? ` <button class="btn sm" data-addunknown>${ic('plus')} Masukkan ke deck…</button>` : ''}<button class="chip sm" data-clearunknown>${ic('x')} Bersihkan</button></div>` : ''}
+    <div class="reader-head"><span class="lesson-emoji big">${esc(l.emoji || '📚')}</span><div><h1 class="h1">${esc(l.title)}</h1><p class="sub">${esc(l.subtitle || '')}</p></div></div>
+    ${l.sections.map(sectionHTML).join('')}
+    <p class="note" style="text-align:center;margin:14px 0">Ketuk hanzi untuk arti, audio, atau tambah ke deck.</p>
+  </div>`;
 }
 async function toggleLike(id, btn) {
   const want = !btn.classList.contains('on');
@@ -1835,7 +1941,7 @@ function drawClozeList() {
   const done = CLZ.rows.filter((r) => r.s).length;
   box.innerHTML = `<p class="note" style="margin-bottom:10px">${done}/${CLZ.rows.length} kata sudah punya kalimat.</p>` + (rows.length ? rows.map((r) => `
     <div class="clz-row" data-clzid="${esc(r.id)}">
-      <div class="clz-word"><b class="han">${esc(r.h)}</b><span>${esc(r.p || '')}${r.m ? ' · ' + esc(r.m) : ''}</span>${r.s ? `<span class="pill good">${r.source === 'ai' ? 'AI' : r.source === 'card' ? 'contoh' : 'manual'}</span>` : '<span class="pill mute">belum ada</span>'}</div>
+      <div class="clz-word"><b class="han">${esc(r.h)}</b><span>${esc(r.p || '')}${r.m ? ' · ' + esc(r.m) : ''}</span>${r.s ? `<span class="pill good">${r.source === 'ai' ? 'AI' : r.source === 'card' ? 'contoh' : r.source === 'builtin' ? 'bawaan' : 'manual'}</span>` : '<span class="pill mute">belum ada</span>'}</div>
       <input class="clz-s" value="${esc(r.s)}" placeholder="kalimat yang memuat ${esc(r.h)}" maxlength="200">
       <input class="clz-si" value="${esc(r.si)}" placeholder="arti kalimat (opsional)" maxlength="200">
       <div class="row" style="gap:6px"><button class="btn sm" data-clzsave="${esc(r.id)}">${ic('check')} Simpan</button>${r.s ? `<button class="btn ghost sm" data-clzdel="${esc(r.id)}">${ic('trash')} Hapus</button>` : ''}</div>
@@ -1955,14 +2061,14 @@ function leaveStudy() {
 let endArmed = 0, LAST_TAP = { id: null, t: 0 };
 document.addEventListener('click', async (e) => {
   if (!e.target.closest('#emojiPop') && !e.target.closest('[data-emo]')) closeEmoji();
-  const b = e.target.closest('[data-clzbulk],[data-clzqhelp],[data-unselect],[data-clearsel],[data-typecheck],[data-clzsave],[data-clzdel],[data-freezecard],[data-freezedeck],[data-unfreezedeck],[data-unfreezecard],[data-clozecheck],[data-clozemc],[data-clozepick],[data-stedit],[data-stdel],[data-stnew],[data-story],[data-backlearn],[data-togpy],[data-sayall],[data-saysent],[data-trsent],[data-word],[data-pincard],[data-sayresp],[data-studypinned],[data-guide],[data-profile],[data-like],[data-studypost],[data-backfeed],[data-onb],[data-onbans],[data-sheetq],[data-aitip],[data-dl],[data-hsk],[data-studyhsk],[data-babpick],[data-babgo],[data-vis],[data-pstu],[data-lkind],[data-part],[data-pickstu],[data-mkind],[data-warn],[data-chatto],[data-endrun],[data-endall],[data-nav],[data-pick],[data-act],[data-mode],[data-rate],[data-t],[data-ttab],[data-sact],[data-stu],[data-cfgmode],[data-cfgtog],[data-cfgdeck],[data-edeck],[data-etab],[data-ncolor],[data-rcolor],[data-emo],[data-pick-emo],[data-rm],[data-approve]');
+  const b = e.target.closest('[data-startsel],[data-lesson],[data-saytext],[data-addunknown],[data-clearunknown],[data-clzbulk],[data-clzqhelp],[data-unselect],[data-clearsel],[data-typecheck],[data-clzsave],[data-clzdel],[data-freezecard],[data-freezedeck],[data-unfreezedeck],[data-unfreezecard],[data-clozecheck],[data-clozemc],[data-clozepick],[data-stedit],[data-stdel],[data-stnew],[data-story],[data-backlearn],[data-togpy],[data-sayall],[data-saysent],[data-trsent],[data-word],[data-pincard],[data-sayresp],[data-studypinned],[data-guide],[data-profile],[data-like],[data-studypost],[data-backfeed],[data-onb],[data-onbans],[data-sheetq],[data-aitip],[data-dl],[data-hsk],[data-studyhsk],[data-babpick],[data-babgo],[data-vis],[data-pstu],[data-lkind],[data-part],[data-pickstu],[data-mkind],[data-warn],[data-chatto],[data-endrun],[data-endall],[data-nav],[data-pick],[data-act],[data-mode],[data-rate],[data-t],[data-ttab],[data-sact],[data-stu],[data-cfgmode],[data-cfgtog],[data-cfgdeck],[data-edeck],[data-etab],[data-ncolor],[data-rcolor],[data-emo],[data-pick-emo],[data-rm],[data-approve]');
   if (!b) { const fc = e.target.closest('#fc'); if (fc && Q && Q.cur && Q.cur.answered) flip(); return; }
   const ds = b.dataset;
   if (ds.nav) { leaveStudy(); go(ds.nav); return; }
   if (ds.vis !== undefined) { ED.wantPublic = ds.vis === '1'; document.querySelectorAll('[data-vis]').forEach((x) => x.setAttribute('aria-pressed', x === b)); $('#visNote').textContent = ED.wantPublic ? 'Semua teman bisa memakai, setelah disetujui guru.' : 'Hanya kamu dan guru.'; return; }
   if (ds.pstu) { TF.student = ds.pstu; store.set('tf', TF); tProgress(); return; }
   if (ds.lkind) { S.kind = ds.lkind; S.split.part = 0; savePrefs(); renderLearn(); return; }
-  if (ds.part !== undefined) { S.split.part = +ds.part; savePrefs(); document.querySelectorAll('[data-part]').forEach((x) => x.setAttribute('aria-pressed', x.dataset.part === ds.part)); renderActionbar(); return; }
+  if (ds.part !== undefined) { S.split.part = +ds.part; savePrefs(); document.querySelectorAll('[data-part]').forEach((x) => x.setAttribute('aria-pressed', x.dataset.part === ds.part)); updateStartFab(); return; }
   if (ds.pickstu) { const id = ds.pickstu; PICK.ids = PICK.ids.includes(id) ? PICK.ids.filter((x) => x !== id) : [...PICK.ids, id]; b.setAttribute('aria-pressed', PICK.ids.includes(id)); return; }
   if (ds.mkind) { document.querySelectorAll('[data-mkind]').forEach((x) => x.setAttribute('aria-pressed', x === b)); return; }
   if (ds.warn || ds.chatto) {
@@ -2011,6 +2117,10 @@ document.addEventListener('click', async (e) => {
   if (ds.stnew !== undefined) { STEDIT = null; tStories(); return; }
   if (ds.stedit) { try { STEDIT = await api.story(ds.stedit); window.scrollTo(0, 0); tStories(); } catch (err) { toast(err.message); } return; }
   if (ds.stdel) { if (armed !== 'st:' + ds.stdel) { armed = 'st:' + ds.stdel; b.innerHTML = `${ic('trash')} Yakin?`; setTimeout(() => { if (armed === 'st:' + ds.stdel) { armed = null; tStories(); } }, 3000); return; } armed = null; try { await api.deleteStory(ds.stdel); if (STEDIT && STEDIT.id === ds.stdel) STEDIT = null; toast('Cerita dihapus.'); tStories(); } catch (err) { toast(err.message); } return; }
+  if (ds.lesson) { openLesson(ds.lesson); return; }
+  if (ds.saytext) { speak(ds.saytext); return; }
+  if (ds.addunknown !== undefined) { if (UNKNOWN.size) openDeckPicker([...UNKNOWN]); return; }
+  if (ds.clearunknown !== undefined) { UNKNOWN = new Set(); reRenderReader(); return; }
   if (ds.story) { openStory(ds.story); return; }
   if (ds.backlearn !== undefined) { go('learn'); return; }
   if (ds.togpy !== undefined) { LOWPY = !LOWPY; renderStory(); return; }
@@ -2033,17 +2143,11 @@ document.addEventListener('click', async (e) => {
   if (ds.babpick !== undefined) { openBabPick(+ds.babpick); return; }
   if (ds.babgo !== undefined) { closeBabPick(); S.sel = [ds.babgo]; S.split.on = false; S.kind = 'card'; savePrefs(); startStudy(); return; }
   if (ds.pick) {
-    const id = ds.pick, t = Date.now();
-    if (LAST_TAP.id === id && t - LAST_TAP.t < 500) { // ketuk 2×: pilih & buka tombol Mulai
-      LAST_TAP = { id: null, t: 0 };
-      if (!S.sel.includes(id)) S.sel = [...S.sel, id];
-      BAR_OPEN = true;
-    } else {
-      LAST_TAP = { id, t };
-      S.sel = S.sel.includes(id) ? S.sel.filter((x) => x !== id) : [...S.sel, id];
-    }
-    savePrefs(); b.setAttribute('aria-pressed', S.sel.includes(id)); renderActionbar(); updateBucket(); return;
+    const id = ds.pick;
+    S.sel = S.sel.includes(id) ? S.sel.filter((x) => x !== id) : [...S.sel, id];
+    savePrefs(); b.setAttribute('aria-pressed', S.sel.includes(id)); updateBucket(); updateStartFab(); return;
   }
+  if (ds.startsel !== undefined) { if (!poolCards().length) { toast('Pilih kategori dulu.'); return; } if (!planCards().length) { toast('Semua kartu sudah terjadwal. Nyalakan "Latih semua" untuk mengulang.'); return; } startStudy(); return; }
   if (ds.mode) { S.mode = ds.mode; savePrefs(); if (Q && Q.queue.length) renderStudy(); return; }
   if (ds.t !== undefined && b.classList.contains('qo')) { answerQuiz(b); return; }
   if (ds.rate) { rate(+ds.rate); return; }
@@ -2082,7 +2186,7 @@ document.addEventListener('click', async (e) => {
   const a = ds.act;
   if (a === 'logout') { stopBeat(); stopLive(); clearInterval(inboxT); await api.logout(); ME = null; Q = null; renderLogin(); }
   else if (a === 'selall') { const d2 = studyDecks(); S.sel = S.sel.length === d2.length ? [] : d2.map((d) => d.id); savePrefs(); renderLearn(); }
-  else if (a === 'togall') { S.all = !S.all; savePrefs(); renderActionbar(); }
+  else if (a === 'togall') { S.all = !S.all; savePrefs(); renderLearn(); }
   else if (a === 'start' || a === 'again') startStudy();
   else if (a === 'quit') { if (S.view === 'study') leaveStudy(); else stopBeat(); S.view = 'learn'; savePrefs(); shell(); renderLearn(); }
   else if (a === 'endrun') {
@@ -2116,8 +2220,8 @@ document.addEventListener('click', async (e) => {
   else if (a === 'mycards') { ED.newOpen = !editableDecks().length; go('cards'); }
   else if (a === 'endsaved') { await endSaved(); toast('Sesi lama diakhiri.'); }
   else if (a === 'nextpart') { S.split.part = Q.part.idx + 1; savePrefs(); S.view = 'learn'; shell(); renderLearn(); startStudy(); }
-  else if (a === 'partprev' || a === 'partnext') { const ps = parts(); S.split.part = Math.max(0, Math.min(ps.length - 1, S.split.part + (a === 'partnext' ? 1 : -1))); savePrefs(); document.querySelectorAll('[data-part]').forEach((x) => x.setAttribute('aria-pressed', +x.dataset.part === S.split.part)); renderActionbar(); }
-  else if (a === 'split') { if (!b.closest('#actionbar') && !S.split.on) BAR_OPEN = true; S.split.on = !S.split.on; S.split.part = 0; savePrefs(); renderLearn(); }
+  else if (a === 'partprev' || a === 'partnext') { const ps = parts(); S.split.part = Math.max(0, Math.min(ps.length - 1, S.split.part + (a === 'partnext' ? 1 : -1))); savePrefs(); document.querySelectorAll('[data-part]').forEach((x) => x.setAttribute('aria-pressed', +x.dataset.part === S.split.part)); updateStartFab(); }
+  else if (a === 'split') { S.split.on = !S.split.on; S.split.part = 0; savePrefs(); renderLearn(); }
   else if (a === 'preset') { $('#msgText').value = WARN_PRESET; document.querySelector('[data-mkind="warn"]').click(); }
   else if (a === 'newshared') { ED.shared = !ED.shared; b.setAttribute('aria-checked', ED.shared); }
   else if (a === 'deliver') {
@@ -2142,7 +2246,7 @@ document.addEventListener('click', async (e) => {
   else if (a === 'savebulk') saveBulk();
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { closeEmoji(); closeAiSheet(); closeWordSheet(); closeGuide(); }
+  if (e.key === 'Escape') { closeEmoji(); closeAiSheet(); closeWordSheet(); closeGuide(); const dp = document.getElementById('deckPicker'); if (dp) dp.remove(); }
   if (S.view !== 'study' || !Q || !Q.cur || !$('#fc')) return;
   if (e.target.matches('input,select,textarea')) return;
   if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); if (Q.cur.answered) flip(); }

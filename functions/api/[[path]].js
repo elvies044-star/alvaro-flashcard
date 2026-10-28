@@ -15,6 +15,7 @@ import builtin from '../../src/data/builtin.json';
 import hsk from '../../src/data/hsk.json';
 import speaking from '../../src/data/speaking.json';
 import stories from '../../src/data/stories.json';
+import clozeData from '../../src/data/cloze.json';
 import { translateLines, cleanEmoji, CJK, toPinyin, enOf } from '../../server/translate.js';
 
 const DAY = 864e5;
@@ -25,7 +26,7 @@ const FRONT_MODES = ['pic', 'han', 'arti', 'mix'];
 const COMMON_MW = ['个', '本', '支', '张', '把', '只', '条', '头', '辆', '件', '双', '块', '朵', '棵', '杯', '瓶', '碗', '台', '座', '片', '颗', '根', '匹', '架', '艘', '盏', '扇', '部', '顶', '副', '枚', '位', '家', '所'];
 const USERNAME_RE = /^[a-z0-9._]{3,24}$/;
 const HEX32 = /^[a-f0-9]{32}$/;
-const BUILTIN_VERSION = `hsk1-v${builtin.decks.length}-${builtin.cards.length}-${hsk.decks.length}-${hsk.cards.length}-sp${speaking.decks.length}.${speaking.cards.length}-st${stories.stories.length}-${builtin.cards.reduce((t, c) => (t + c.id.length * 7 + c.m.length) % 1e9, 0)}`;
+const BUILTIN_VERSION = `hsk1-v${builtin.decks.length}-${builtin.cards.length}-${hsk.decks.length}-${hsk.cards.length}-sp${speaking.decks.length}.${speaking.cards.length}-st${stories.stories.length}-cz${clozeData.clozes.length}-${builtin.cards.reduce((t, c) => (t + c.id.length * 7 + c.m.length) % 1e9, 0)}`;
 const enc = new TextEncoder();
 const now = () => Date.now();
 
@@ -225,6 +226,13 @@ async function seedBuiltin(db) {
     stmts.push(db.prepare(`INSERT INTO stories (id, title, level, body, author_id, builtin, sort, created_at) VALUES (?1,?2,?3,?4,NULL,1,?5,?6)
       ON CONFLICT(id) DO UPDATE SET title=excluded.title, level=excluded.level, body=excluded.body, sort=excluded.sort`)
       .bind(st.id, st.title, st.level || 1, st.body, st.sort || 0, t));
+  }
+  // kalimat isian (rumpang) bawaan — jangan menimpa yang dibuat guru (manual)
+  for (const z of clozeData.clozes) {
+    if (del.has(z.card_id) || del.has('cloze:' + z.card_id)) continue;
+    stmts.push(db.prepare(`INSERT INTO cloze (card_id, s, si, source, created_at) VALUES (?1,?2,?3,'builtin',?4)
+      ON CONFLICT(card_id) DO UPDATE SET s=excluded.s, si=excluded.si, source='builtin' WHERE cloze.source != 'manual'`)
+      .bind(z.card_id, z.s, z.si || '', t));
   }
   for (let i = 0; i < stmts.length; i += 50) await db.batch(stmts.slice(i, i + 50));
   await db.prepare("INSERT INTO meta (k, v) VALUES ('builtin', ?1) ON CONFLICT(k) DO UPDATE SET v = excluded.v").bind(BUILTIN_VERSION).run();

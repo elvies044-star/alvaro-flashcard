@@ -7,7 +7,7 @@ const BUILD_ID = new Date().toISOString();
 const versionFile = () => ({
   name: 'version-file',
   apply: 'build',
-  closeBundle() { mkdirSync('dist', { recursive: true }); writeFileSync('dist/version.json', JSON.stringify({ build: BUILD_ID, version: '2026.10.28-cepat' })); },
+  closeBundle() { mkdirSync('dist', { recursive: true }); writeFileSync('dist/version.json', JSON.stringify({ build: BUILD_ID, version: '2026.10.28-materi' })); },
 });
 
 export default defineConfig({
