@@ -211,7 +211,7 @@ function renderLogin(msg = '') {
     <label class="field" for="lp">Password<input id="lp" name="password" type="password" autocomplete="current-password" maxlength="128" required></label>
     <div class="err" id="lerr" role="alert">${esc(msg)}</div>
     <button class="btn lg" type="submit" id="lbtn">Masuk</button>
-    <p class="note" style="text-align:center">Belum punya akun? Akun dibuat oleh gurumu.</p>${adminHTML()}<p class="ver">Versi ${APP_VERSION}</p>`);
+    <p class="note" style="text-align:center">Belum punya akun? Akun dibuat oleh gurumu.</p>${adminHTML()}<p class="ver">Versi ${APP_VERSION} · <span class="credit">Designed by Elvies</span></p>`);
   $('#authForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = $('#lbtn'); btn.disabled = true; $('#lerr').textContent = '';
@@ -313,14 +313,24 @@ function deckCard(d) {
     <div class="bar"><i style="width:${total ? (sched / total) * 100 : 0}%"></i></div>
     <div class="meta"><span class="dotc"></span>${kindNow() === 'mw' ? `${mwN} kartu ber-量词` : `${due} siap · ${live.length} kartu`}</div></button>`;
 }
-function updateBucket() { const el = document.getElementById('bucketBox'); if (el && S.view === 'learn') el.innerHTML = selBucketHTML(); }
-function updateStartFab() { const el = document.getElementById('startFab'); if (!el) return; const n = poolCards().length; el.hidden = !n; el.innerHTML = `${ic('play')} Mulai${n ? ` · ${n} kartu` : ''}`; }
-function selBucketHTML() {
+let BUCKET_OPEN = false;
+function updateStartBar() { const el = document.getElementById('startBarWrap'); if (el && S.view === 'learn') el.innerHTML = startBarHTML(); }
+// bar bawah: gabungan keranjang + tombol Mulai (tak perlu scroll ke atas)
+function startBarHTML() {
   const sel = studyDecks().filter((d) => S.sel.includes(d.id) && !isFrozenDeck(d));
   const n = poolCards().length;
-  if (!sel.length) return '<div class="bucket empty"><span class="note">Belum ada kategori dipilih. Ketuk kategori di bawah untuk menambahkannya ke keranjang.</span></div>';
-  return `<div class="bucket"><div class="bucket-head"><b>${ic('basket')} Keranjang belajar · ${n} kartu</b><button class="chip sm" data-clearsel>${ic('x')} Kosongkan</button></div>
-    <div class="bucket-chips">${sel.map((d) => `<span class="bchip" style="--dc:${d.color}"><span class="dotc"></span>${esc(d.zh)} <small>${liveCards(d).length}</small><button class="bx" data-unselect="${esc(d.id)}" aria-label="Keluarkan ${esc(d.zh)}">${ic('x')}</button></span>`).join('')}</div></div>`;
+  if (!sel.length) { BUCKET_OPEN = false; return ''; }
+  return `<div class="startbar">
+    ${BUCKET_OPEN ? `<div class="sb-detail">
+      <div class="sb-dhead"><b>${sel.length} kategori · ${n} kartu</b><button class="chip sm" data-clearsel>${ic('x')} Kosongkan</button></div>
+      <div class="sb-chips">${sel.map((d) => `<span class="bchip" style="--dc:${d.color}"><span class="dotc"></span>${esc(d.zh)} <small>${liveCards(d).length}</small><button class="bx" data-unselect="${esc(d.id)}" aria-label="Keluarkan ${esc(d.zh)}">${ic('x')}</button></span>`).join('')}</div>
+    </div>` : ''}
+    <div class="sb-main">
+      <button class="sb-basket ${BUCKET_OPEN ? 'on' : ''}" data-bucket aria-label="Lihat kategori dipilih" aria-expanded="${BUCKET_OPEN}">${ic('basket')}<span class="sb-badge">${sel.length}</span></button>
+      <span class="sb-total"><b>${n}</b> kartu</span>
+      <button class="sb-go" data-startsel>${ic('play')} Mulai</button>
+    </div>
+  </div>`;
 }
 function lastSessHTML() {
   const r = store.get('lastsess', null); if (!r || !ME || (savedRun() && RESUME_OK)) return '';
@@ -367,14 +377,13 @@ function renderLearn() {
       <button class="chip" data-act="sendsheet">${ic('send')} Kirim kartu</button>
       ${!isTeacher() && 'Notification' in window ? `<button class="chip" data-act="reminder" aria-pressed="${store.get('remind', false)}">${ic('alert')} Pengingat</button>` : ''}
     </div>
-    <div id="bucketBox">${selBucketHTML()}</div>
     ${S.split.on ? `<div class="splitbox">
       <label class="field" for="spSize">Kartu per sesi<input id="spSize" type="number" inputmode="numeric" min="1" max="500" value="${S.split.size}"></label>
       <span class="x-sign">=</span>
       <label class="field" for="spCount">Jumlah sesi<input id="spCount" type="number" inputmode="numeric" min="1" max="100" value="${Math.max(1, ps.length)}"></label>
       <p class="note" style="flex:1;min-width:180px;padding-bottom:10px">${pool} kartu dari kategori yang dipilih. Pilih sesi yang mau dipelajari sekarang.</p>
       <div class="parts">${ps.map((p, i) => `<button class="part ${dp.includes(i) ? 'ok' : ''}" data-part="${i}" aria-pressed="${S.split.part === i}">Sesi ${i + 1}<small>${dp.includes(i) ? '✓ selesai · ' : ''}${p.length} kartu</small></button>`).join('') || '<span class="note">Pilih kategori dulu.</span>'}</div>
-    </div>` : `<p class="note" style="margin:-6px 0 16px">${kindNow() === 'mw' ? 'Kuis 量词: tebak kata satuan yang tepat untuk tiap benda, misalnya 一<b>本</b>书.' : kindNow() === 'cloze' ? 'Isi rumpang: lengkapi kalimat dengan kata yang tepat — ketik (pinyin/hanzi) atau pilih. Arti kalimat ditampilkan di depan. Kalimat dibuat otomatis jika belum ada.' : kindNow() === 'type' ? 'Latihan ketik: lihat hanzi, lalu ketik pinyin-nya tanpa dikasih dulu — mengetik sambil menebak bacaannya.' : kindNow() === 'trans' ? 'Terjemah kalimat: baca kalimat Mandarin, coba terjemahkan ke bahasa Indonesia, lalu buka kunci & nilai dirimu.' : 'Ketuk kategori untuk memilih. <b>Ketuk 2× cepat</b> untuk membuka tombol Mulai. Nilai 1 & 2 diulang di sesi ini, 3 muncul besok, 4 muncul 3 hari lagi.'}</p>`}
+    </div>` : `<p class="note" style="margin:-6px 0 16px">${kindNow() === 'mw' ? 'Kuis 量词: tebak kata satuan yang tepat untuk tiap benda, misalnya 一<b>本</b>书.' : kindNow() === 'cloze' ? 'Isi rumpang: lengkapi kalimat dengan kata yang tepat — ketik (pinyin/hanzi) atau pilih. Arti kalimat ditampilkan di depan. Kalimat dibuat otomatis jika belum ada.' : kindNow() === 'type' ? 'Latihan ketik: lihat hanzi, lalu ketik pinyin-nya tanpa dikasih dulu — mengetik sambil menebak bacaannya.' : kindNow() === 'trans' ? 'Terjemah kalimat: baca kalimat Mandarin, coba terjemahkan ke bahasa Indonesia, lalu buka kunci & nilai dirimu.' : 'Ketuk kategori untuk menambahkannya ke keranjang, lalu tekan <b>Mulai</b> di bawah. Nilai 1 & 2 diulang di sesi ini, 3 muncul besok, 4 muncul 3 hari lagi.'}</p>`}
     ${hskLevels.length ? `<div class="sec-title">${ic('book2')} HSK 3.0</div><div class="decks hsk-row">${hskLevels.map(hskCard).join('')}</div>
       ${HSK_OPEN && hskLessons.length ? `<div class="hsk-open"><div class="hsk-open-bar"><b>级${HSK_OPEN} · ${hskLessons.length} pelajaran</b><span class="spacer"></span><button class="btn sm" data-studyhsk="${HSK_OPEN}">${ic('play')} Belajar semua</button><button class="chip" data-babpick="${HSK_OPEN}">${ic('list')} Per bab</button><button class="chip" data-hsk="${HSK_OPEN}">${ic('x')} Tutup</button></div>
         <div class="decks">${hskLessons.map(deckCard).join('')}</div></div>` : '<p class="note" style="margin:-4px 0 14px">Ketuk salah satu kartu HSK di atas untuk membuka semua pelajarannya.</p>'}` : ''}
@@ -386,8 +395,8 @@ function renderLearn() {
     ${frozenCardList.length ? `<div class="sec-title">${ic('snow')} Kata beku · ${frozenCardList.length}</div>
       <div class="frozen-cards">${frozenCardList.map((c) => `<button class="frz-chip" data-unfreezecard="${esc(c.id)}" title="Pecahkan (cairkan)"><span class="han">${esc(c.h)}</span><span class="fm">${esc(mean(c))}</span>${ic('snow')}</button>`).join('')}</div>
       <p class="note" style="margin-top:6px">Ketuk kata untuk mencairkannya agar muncul lagi saat belajar.</p>` : ''}
-    <p class="ver">Versi ${APP_VERSION}</p>
-    <button class="start-fab" id="startFab" data-startsel ${poolCards().length ? '' : 'hidden'}>${ic('play')} Mulai${poolCards().length ? ` · ${poolCards().length} kartu` : ''}</button>`;
+    <p class="ver">Versi ${APP_VERSION} · <span class="credit">Designed by Elvies</span></p>
+    <div id="startBarWrap">${startBarHTML()}</div>`;
   const sz = $('#spSize'), ct = $('#spCount');
   if (sz) {
     const upd = (from) => {
@@ -1212,7 +1221,7 @@ async function renderFeed() {
     + (FEED.length ? `<div class="feed">${FEED.map((p) => postCard(p, true)).join('')}</div>`
       : `<div class="panel empty"><b>Belum ada postingan</b>${tip}</div>`)
     + (FEED.length ? `<p class="note" style="text-align:center;margin:14px 0 4px">${tip}</p>` : '')
-    + `<p class="ver">Versi ${APP_VERSION}</p>`;
+    + `<p class="ver">Versi ${APP_VERSION} · <span class="credit">Designed by Elvies</span></p>`;
 }
 async function renderProfile(id) {
   feedUser = id; S.view = 'social';
@@ -2130,14 +2139,14 @@ function leaveStudy() {
 let endArmed = 0, LAST_TAP = { id: null, t: 0 };
 document.addEventListener('click', async (e) => {
   if (!e.target.closest('#emojiPop') && !e.target.closest('[data-emo]')) closeEmoji();
-  const b = e.target.closest('[data-transreveal],[data-startsel],[data-lesson],[data-saytext],[data-addunknown],[data-clearunknown],[data-clzbulk],[data-clzqhelp],[data-unselect],[data-clearsel],[data-typecheck],[data-clzsave],[data-clzdel],[data-freezecard],[data-freezedeck],[data-unfreezedeck],[data-unfreezecard],[data-clozecheck],[data-clozemc],[data-clozepick],[data-stedit],[data-stdel],[data-stnew],[data-story],[data-backlearn],[data-togpy],[data-sayall],[data-saysent],[data-trsent],[data-word],[data-pincard],[data-sayresp],[data-studypinned],[data-guide],[data-profile],[data-like],[data-studypost],[data-backfeed],[data-onb],[data-onbans],[data-sheetq],[data-aitip],[data-dl],[data-hsk],[data-studyhsk],[data-babpick],[data-babgo],[data-vis],[data-pstu],[data-lkind],[data-part],[data-pickstu],[data-mkind],[data-warn],[data-chatto],[data-endrun],[data-endall],[data-nav],[data-pick],[data-act],[data-mode],[data-rate],[data-t],[data-ttab],[data-sact],[data-stu],[data-cfgmode],[data-cfgtog],[data-cfgdeck],[data-edeck],[data-etab],[data-ncolor],[data-rcolor],[data-emo],[data-pick-emo],[data-rm],[data-approve]');
+  const b = e.target.closest('[data-bucket],[data-transreveal],[data-startsel],[data-lesson],[data-saytext],[data-addunknown],[data-clearunknown],[data-clzbulk],[data-clzqhelp],[data-unselect],[data-clearsel],[data-typecheck],[data-clzsave],[data-clzdel],[data-freezecard],[data-freezedeck],[data-unfreezedeck],[data-unfreezecard],[data-clozecheck],[data-clozemc],[data-clozepick],[data-stedit],[data-stdel],[data-stnew],[data-story],[data-backlearn],[data-togpy],[data-sayall],[data-saysent],[data-trsent],[data-word],[data-pincard],[data-sayresp],[data-studypinned],[data-guide],[data-profile],[data-like],[data-studypost],[data-backfeed],[data-onb],[data-onbans],[data-sheetq],[data-aitip],[data-dl],[data-hsk],[data-studyhsk],[data-babpick],[data-babgo],[data-vis],[data-pstu],[data-lkind],[data-part],[data-pickstu],[data-mkind],[data-warn],[data-chatto],[data-endrun],[data-endall],[data-nav],[data-pick],[data-act],[data-mode],[data-rate],[data-t],[data-ttab],[data-sact],[data-stu],[data-cfgmode],[data-cfgtog],[data-cfgdeck],[data-edeck],[data-etab],[data-ncolor],[data-rcolor],[data-emo],[data-pick-emo],[data-rm],[data-approve]');
   if (!b) { const fc = e.target.closest('#fc'); if (fc && Q && Q.cur && Q.cur.answered) flip(); return; }
   const ds = b.dataset;
   if (ds.nav) { leaveStudy(); go(ds.nav); return; }
   if (ds.vis !== undefined) { ED.wantPublic = ds.vis === '1'; document.querySelectorAll('[data-vis]').forEach((x) => x.setAttribute('aria-pressed', x === b)); $('#visNote').textContent = ED.wantPublic ? 'Semua teman bisa memakai, setelah disetujui guru.' : 'Hanya kamu dan guru.'; return; }
   if (ds.pstu) { TF.student = ds.pstu; store.set('tf', TF); tProgress(); return; }
   if (ds.lkind) { S.kind = ds.lkind; S.split.part = 0; savePrefs(); renderLearn(); return; }
-  if (ds.part !== undefined) { S.split.part = +ds.part; savePrefs(); document.querySelectorAll('[data-part]').forEach((x) => x.setAttribute('aria-pressed', x.dataset.part === ds.part)); updateStartFab(); return; }
+  if (ds.part !== undefined) { S.split.part = +ds.part; savePrefs(); document.querySelectorAll('[data-part]').forEach((x) => x.setAttribute('aria-pressed', x.dataset.part === ds.part)); updateStartBar(); return; }
   if (ds.pickstu) { const id = ds.pickstu; PICK.ids = PICK.ids.includes(id) ? PICK.ids.filter((x) => x !== id) : [...PICK.ids, id]; b.setAttribute('aria-pressed', PICK.ids.includes(id)); return; }
   if (ds.mkind) { document.querySelectorAll('[data-mkind]').forEach((x) => x.setAttribute('aria-pressed', x === b)); return; }
   if (ds.warn || ds.chatto) {
@@ -2177,8 +2186,9 @@ document.addEventListener('click', async (e) => {
     if (Q.queue[0] && Q.queue[0].id === id) { Q.queue.shift(); Q.total = Math.max(Q.done, Q.total - 1); }
     renderStudy(); return;
   }
-  if (ds.unselect) { S.sel = S.sel.filter((x) => x !== ds.unselect); savePrefs(); renderLearn(); return; }
-  if (ds.clearsel !== undefined) { S.sel = []; S.split.part = 0; savePrefs(); renderLearn(); return; }
+  if (ds.bucket !== undefined) { BUCKET_OPEN = !BUCKET_OPEN; updateStartBar(); return; }
+  if (ds.unselect) { S.sel = S.sel.filter((x) => x !== ds.unselect); savePrefs(); const t = document.querySelector(`[data-pick="${CSS.escape(ds.unselect)}"]`); if (t) t.setAttribute('aria-pressed', 'false'); updateStartBar(); return; }
+  if (ds.clearsel !== undefined) { S.sel = []; S.split.part = 0; BUCKET_OPEN = false; savePrefs(); renderLearn(); return; }
   if (ds.typecheck !== undefined) { const inp = document.getElementById('typeIn'); if (inp) checkType(inp.value); return; }
   if (ds.transreveal !== undefined) { revealTrans(); return; }
   if (ds.clozecheck !== undefined) { const inp = document.getElementById('clozeIn'); if (inp) checkCloze(inp.value); return; }
@@ -2215,7 +2225,7 @@ document.addEventListener('click', async (e) => {
   if (ds.pick) {
     const id = ds.pick;
     S.sel = S.sel.includes(id) ? S.sel.filter((x) => x !== id) : [...S.sel, id];
-    savePrefs(); b.setAttribute('aria-pressed', S.sel.includes(id)); updateBucket(); updateStartFab(); return;
+    savePrefs(); b.setAttribute('aria-pressed', S.sel.includes(id)); updateStartBar(); return;
   }
   if (ds.startsel !== undefined) { if (!poolCards().length) { toast('Pilih kategori dulu.'); return; } if (!planCards().length) { toast('Semua kartu sudah terjadwal. Nyalakan "Latih semua" untuk mengulang.'); return; } startStudy(); return; }
   if (ds.mode) { S.mode = ds.mode; savePrefs(); if (Q && Q.queue.length) renderStudy(); return; }
@@ -2290,7 +2300,7 @@ document.addEventListener('click', async (e) => {
   else if (a === 'mycards') { ED.newOpen = !editableDecks().length; go('cards'); }
   else if (a === 'endsaved') { await endSaved(); toast('Sesi lama diakhiri.'); }
   else if (a === 'nextpart') { S.split.part = Q.part.idx + 1; savePrefs(); S.view = 'learn'; shell(); renderLearn(); startStudy(); }
-  else if (a === 'partprev' || a === 'partnext') { const ps = parts(); S.split.part = Math.max(0, Math.min(ps.length - 1, S.split.part + (a === 'partnext' ? 1 : -1))); savePrefs(); document.querySelectorAll('[data-part]').forEach((x) => x.setAttribute('aria-pressed', +x.dataset.part === S.split.part)); updateStartFab(); }
+  else if (a === 'partprev' || a === 'partnext') { const ps = parts(); S.split.part = Math.max(0, Math.min(ps.length - 1, S.split.part + (a === 'partnext' ? 1 : -1))); savePrefs(); document.querySelectorAll('[data-part]').forEach((x) => x.setAttribute('aria-pressed', +x.dataset.part === S.split.part)); updateStartBar(); }
   else if (a === 'split') { S.split.on = !S.split.on; S.split.part = 0; savePrefs(); renderLearn(); }
   else if (a === 'preset') { $('#msgText').value = WARN_PRESET; document.querySelector('[data-mkind="warn"]').click(); }
   else if (a === 'newshared') { ED.shared = !ED.shared; b.setAttribute('aria-checked', ED.shared); }

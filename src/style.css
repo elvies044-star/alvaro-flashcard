@@ -961,3 +961,38 @@ code { font: 600 13px ui-monospace, SFMono-Regular, Menlo, monospace; background
 .tr-mine { color: var(--muted); font-size: 14px; margin-bottom: 6px; }
 .tr-key { font-size: 18px; }
 .tr-key .i { width: 18px; height: 18px; color: var(--good); vertical-align: -3px; }
+
+/* ===== Bar bawah: keranjang + Mulai menyatu ===== */
+.startbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(82px + env(safe-area-inset-bottom, 0px)); z-index: 30; width: min(540px, calc(100vw - 20px)); }
+@media (min-width: 641px) { .startbar { bottom: calc(22px + env(safe-area-inset-bottom, 0px)); } }
+.sb-main { display: flex; align-items: center; gap: 10px; background: var(--brand); color: var(--brand-ink); border-radius: 999px; padding: 6px 7px 6px 7px; box-shadow: var(--sh-2); animation: barUp .25s var(--ease) both; }
+.sb-basket { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: rgba(255, 255, 255, .2); color: #fff; border: none; cursor: pointer; flex: none; }
+.sb-basket .i { width: 20px; height: 20px; }
+.sb-basket.on { background: #fff; color: var(--brand); }
+.sb-badge { position: absolute; top: -3px; right: -3px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: var(--sun); color: #3a2a00; font-size: 11px; font-weight: 800; display: grid; place-items: center; border: 2px solid var(--brand); }
+.sb-total { flex: 1; font-weight: 650; font-size: 13.5px; white-space: nowrap; }
+.sb-total b { font-size: 16px; }
+.sb-go { display: inline-flex; align-items: center; gap: 6px; background: #fff; color: var(--brand); border: none; border-radius: 999px; padding: 9px 18px; font-weight: 800; font-size: 15px; cursor: pointer; flex: none; }
+.sb-go .i { width: 17px; height: 17px; }
+.sb-detail { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 12px; margin-bottom: 8px; box-shadow: var(--sh-2); max-height: 42vh; overflow-y: auto; animation: barUp .2s var(--ease) both; }
+.sb-dhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.sb-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ===== SPOK: paksa satu baris di HP ===== */
+.po-row { flex-wrap: nowrap; overflow-x: auto; gap: 4px; padding-bottom: 2px; -webkit-overflow-scrolling: touch; }
+.po-row::-webkit-scrollbar { height: 0; }
+.po-block { flex: none; padding: 5px 7px; }
+.po-h { font-size: clamp(17px, 5.2vw, 25px); }
+.po-p { font-size: clamp(10px, 2.8vw, 12px); white-space: nowrap; }
+.po-plus { align-self: center; color: var(--muted); font-size: 13px; }
+
+/* ===== kredit ===== */
+.credit { color: var(--muted); font-weight: 700; }
+.ver { padding-bottom: 96px; }
+@media (min-width: 641px) { .ver { padding-bottom: 8px; } }
+
+/* ===== segmented control: jangan meluber di HP ===== */
+.seg { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.seg::-webkit-scrollbar { height: 0; }
+.seg button { flex: 0 0 auto; white-space: nowrap; padding: 0 10px; }
+.learnbar { max-width: 100%; }
