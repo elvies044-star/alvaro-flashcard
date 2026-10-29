@@ -7,7 +7,7 @@ import { pinyin as pyPro } from 'pinyin-pro';
 import LESSONS from './data/lessons.json';
 
 const APP = 'Alvaro Mandarin Flashcard Tamer';
-const APP_VERSION = '2026.10.28-materi';
+const APP_VERSION = '2026.10.29-materi2';
 const BUILD = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev';
 
 /* ================= helpers ================= */
@@ -60,6 +60,8 @@ const ICON = {
   globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/>',
   snow: '<path d="M12 2v20M4 6l16 12M20 6L4 18"/><path d="M12 2l-2.5 2.5M12 2l2.5 2.5M12 22l-2.5-2.5M12 22l2.5-2.5"/>',
   basket: '<path d="M5 11h14l-1.2 8a2 2 0 0 1-2 1.7H8.2a2 2 0 0 1-2-1.7z"/><path d="M9 11 12 4l3 7"/><path d="M3 11h18"/>',
+  grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+  brick: '<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M3 10h18M3 15h18M9 4v6M15 10v5M9 15v5"/>',
   split: '<rect x="3" y="4" width="7" height="16" rx="2"/><rect x="14" y="4" width="7" height="16" rx="2"/>',
   bulb: '<path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2V17h6v-.3c0-.8.4-1.5 1-2A7 7 0 0 0 12 2z"/>',
   bolt: '<path d="M13 2L3 14h9l-1 8 10-12h-9z"/>', flag: '<path d="M4 22V4M4 4h13l-2 4 2 4H4"/>',
@@ -248,7 +250,7 @@ async function reloadContent() { applyContent(await api.content()); }
 
 /* ================= Belajar ================= */
 const mwOn = () => SET.mw_quiz !== false;
-const kindNow = () => (S.kind === 'mw' && mwOn() ? 'mw' : S.kind === 'cloze' ? 'cloze' : S.kind === 'type' ? 'type' : 'card');
+const kindNow = () => (S.kind === 'mw' && mwOn() ? 'mw' : S.kind === 'cloze' ? 'cloze' : S.kind === 'type' ? 'type' : S.kind === 'trans' ? 'trans' : 'card');
 const forKind = (cs) => (kindNow() === 'mw' ? cs.filter((c) => c.mw) : cs);
 const isFrozenDeck = (d) => FRZ_DECKS.has(typeof d === 'string' ? d : d.id);
 const usable = (cards) => cards.filter((c) => !FRZ_CARDS.has(c.id) && !FRZ_DECKS.has(c.deck_id));
@@ -359,7 +361,7 @@ function renderLearn() {
     ${pinned.length ? `<div class="sec-title">${ic('pin')} Disematkan · ${pinned.length}</div>
       <div class="pinbar"><p class="note" style="flex:1;min-width:140px">Kartu yang kamu sematkan untuk diulang. Belajar khusus kartu ini.</p><button class="btn sm" data-studypinned>${ic('play')} Belajar sematan</button></div>` : ''}
     <div class="learnbar">
-      <div class="seg" role="group" aria-label="Jenis latihan"><button data-lkind="card" aria-pressed="${kindNow() === 'card'}">Flashcard</button>${mwOn() ? `<button data-lkind="mw" aria-pressed="${kindNow() === 'mw'}">Kuis 量词</button>` : ''}<button data-lkind="cloze" aria-pressed="${kindNow() === 'cloze'}">Isi rumpang</button><button data-lkind="type" aria-pressed="${kindNow() === 'type'}">Latihan ketik</button></div>
+      <div class="seg" role="group" aria-label="Jenis latihan"><button data-lkind="card" aria-pressed="${kindNow() === 'card'}">Flashcard</button>${mwOn() ? `<button data-lkind="mw" aria-pressed="${kindNow() === 'mw'}">Kuis 量词</button>` : ''}<button data-lkind="cloze" aria-pressed="${kindNow() === 'cloze'}">Isi rumpang</button><button data-lkind="type" aria-pressed="${kindNow() === 'type'}">Latihan ketik</button><button data-lkind="trans" aria-pressed="${kindNow() === 'trans'}">Terjemah</button></div>
       <button class="chip" data-act="split" aria-pressed="${S.split.on}">${ic('split')} Atur sesi</button>
       <button class="chip" data-act="togall" aria-pressed="${S.all}" title="Latih semua kartu, abaikan jadwal">${ic('play')} Latih semua</button>
       <button class="chip" data-act="sendsheet">${ic('send')} Kirim kartu</button>
@@ -372,7 +374,7 @@ function renderLearn() {
       <label class="field" for="spCount">Jumlah sesi<input id="spCount" type="number" inputmode="numeric" min="1" max="100" value="${Math.max(1, ps.length)}"></label>
       <p class="note" style="flex:1;min-width:180px;padding-bottom:10px">${pool} kartu dari kategori yang dipilih. Pilih sesi yang mau dipelajari sekarang.</p>
       <div class="parts">${ps.map((p, i) => `<button class="part ${dp.includes(i) ? 'ok' : ''}" data-part="${i}" aria-pressed="${S.split.part === i}">Sesi ${i + 1}<small>${dp.includes(i) ? '✓ selesai · ' : ''}${p.length} kartu</small></button>`).join('') || '<span class="note">Pilih kategori dulu.</span>'}</div>
-    </div>` : `<p class="note" style="margin:-6px 0 16px">${kindNow() === 'mw' ? 'Kuis 量词: tebak kata satuan yang tepat untuk tiap benda, misalnya 一<b>本</b>书.' : kindNow() === 'cloze' ? 'Isi rumpang: lengkapi kalimat dengan kata yang tepat — ketik (pinyin/hanzi) atau pilih. Arti kalimat ditampilkan di depan. Kalimat dibuat otomatis jika belum ada.' : kindNow() === 'type' ? 'Latihan ketik: lihat hanzi, lalu ketik pinyin-nya tanpa dikasih dulu — mengetik sambil menebak bacaannya.' : 'Ketuk kategori untuk memilih. <b>Ketuk 2× cepat</b> untuk membuka tombol Mulai. Nilai 1 & 2 diulang di sesi ini, 3 muncul besok, 4 muncul 3 hari lagi.'}</p>`}
+    </div>` : `<p class="note" style="margin:-6px 0 16px">${kindNow() === 'mw' ? 'Kuis 量词: tebak kata satuan yang tepat untuk tiap benda, misalnya 一<b>本</b>书.' : kindNow() === 'cloze' ? 'Isi rumpang: lengkapi kalimat dengan kata yang tepat — ketik (pinyin/hanzi) atau pilih. Arti kalimat ditampilkan di depan. Kalimat dibuat otomatis jika belum ada.' : kindNow() === 'type' ? 'Latihan ketik: lihat hanzi, lalu ketik pinyin-nya tanpa dikasih dulu — mengetik sambil menebak bacaannya.' : kindNow() === 'trans' ? 'Terjemah kalimat: baca kalimat Mandarin, coba terjemahkan ke bahasa Indonesia, lalu buka kunci & nilai dirimu.' : 'Ketuk kategori untuk memilih. <b>Ketuk 2× cepat</b> untuk membuka tombol Mulai. Nilai 1 & 2 diulang di sesi ini, 3 muncul besok, 4 muncul 3 hari lagi.'}</p>`}
     ${hskLevels.length ? `<div class="sec-title">${ic('book2')} HSK 3.0</div><div class="decks hsk-row">${hskLevels.map(hskCard).join('')}</div>
       ${HSK_OPEN && hskLessons.length ? `<div class="hsk-open"><div class="hsk-open-bar"><b>级${HSK_OPEN} · ${hskLessons.length} pelajaran</b><span class="spacer"></span><button class="btn sm" data-studyhsk="${HSK_OPEN}">${ic('play')} Belajar semua</button><button class="chip" data-babpick="${HSK_OPEN}">${ic('list')} Per bab</button><button class="chip" data-hsk="${HSK_OPEN}">${ic('x')} Tutup</button></div>
         <div class="decks">${hskLessons.map(deckCard).join('')}</div></div>` : '<p class="note" style="margin:-4px 0 14px">Ketuk salah satu kartu HSK di atas untuk membuka semua pelajarannya.</p>'}` : ''}
@@ -536,7 +538,7 @@ async function startStudy(cards) {
   if (savedRun()) await endSaved(); // sesi lama yang ditinggal ditutup dulu
   BAR_OPEN = false;
   const kind = cards ? 'card' : kindNow();
-  const mode = kind === 'mw' ? 'mw' : (kind === 'cloze' || kind === 'type') ? 'han' : effMode();
+  const mode = kind === 'mw' ? 'mw' : (kind === 'cloze' || kind === 'type' || kind === 'trans') ? 'han' : effMode();
   const decks = [...new Set(cs.map((c) => c.deck_id))];
   let sid;
   try { sid = await api.startSession(decks, mode, cs.length); }
@@ -546,13 +548,14 @@ async function startStudy(cards) {
   PRES.state = 'active'; saveRun();
   S.view = 'study'; $('#actionbar').hidden = true; shell(); startBeat(); window.scrollTo(0, 0); renderStudy();
 }
-function cardMode(c) { if (Q && Q.kind === 'mw') return 'mw'; if (Q && Q.kind === 'cloze') return 'cloze'; if (Q && Q.kind === 'type') return 'type'; if (isSpeak(c)) return 'arti'; let m = effMode(); if (m === 'mix') m = ['pic', 'han', 'arti'][(Math.random() * 3) | 0]; if (m === 'pic' && !hasPic(c)) m = 'han'; return m; }
+function cardMode(c) { if (Q && Q.kind === 'mw') return 'mw'; if (Q && Q.kind === 'cloze') return 'cloze'; if (Q && Q.kind === 'type') return 'type'; if (Q && Q.kind === 'trans') return 'trans'; if (isSpeak(c)) return 'arti'; let m = effMode(); if (m === 'mix') m = ['pic', 'han', 'arti'][(Math.random() * 3) | 0]; if (m === 'pic' && !hasPic(c)) m = 'han'; return m; }
 function frontHTML(c, m) {
   if (m === 'mw') return `${hasPic(c) ? `<div class="big" style="width:min(40%,150px)">${picHTML(c)}</div>` : ''}<div class="mwq">一<span class="blank">个</span>${esc(c.h)}</div><div class="mwq-sub">${esc(c.p)} · ${esc(mean(c))}</div><div class="q">Kata satuannya apa?</div>`;
   if (m === 'han') return `<div class="bighan">${esc(c.h)}</div><div class="q">Apa artinya?</div>`;
   if (m === 'arti') return `<div class="bigid">${esc(mean(c))}</div><div class="q">Bahasa Mandarinnya apa?</div>`;
   if (m === 'cloze') return `<div class="cloze-front" id="clozeFront"><div class="note">Menyusun kalimat…</div></div>`;
   if (m === 'type') return `<div class="type-front"><div class="bighan ${[...c.h].length >= 6 ? 'small' : ''}">${esc(c.h)}</div><div class="q">Ketik pinyin-nya — tebak bacaannya</div></div>`;
+  if (m === 'trans') return `<div class="cloze-front" id="transFront"><div class="note">Menyiapkan kalimat…</div></div>`;
   return `<div class="big">${picHTML(c)}</div><div class="q">Ini apa dalam bahasa Mandarin?</div>`;
 }
 function backHTML(c) {
@@ -569,8 +572,9 @@ function renderStudy() {
   const isMw = Q.kind === 'mw';
   const isCloze = m === 'cloze';
   const isType = m === 'type';
-  const canQuiz = !isCloze && !isType && (isMw || (SET.quiz_enabled && S.quiz && d.cards.length >= 4));
-  Q.cur = { c, m, t0: performance.now(), hidden: 0, answered: !canQuiz && !isCloze && !isType, flipped: false, sug: 0 };
+  const isTrans = m === 'trans';
+  const canQuiz = !isCloze && !isType && !isTrans && (isMw || (SET.quiz_enabled && S.quiz && d.cards.length >= 4));
+  Q.cur = { c, m, t0: performance.now(), hidden: 0, answered: !canQuiz && !isCloze && !isType && !isTrans, flipped: false, sug: 0 };
   document.documentElement.style.setProperty('--c', d.color);
   $('#view').innerHTML = `<div class="study">
     <div class="study-top"><button class="btn ghost sm" data-act="quit">${ic('back')} Kategori</button><div class="progress"><i style="width:${(Q.done / Q.total) * 100}%"></i></div><span class="count">${Q.part ? `Sesi ${Q.part.idx + 1} · ` : ''}${Q.done}/${Q.total}</span><button class="btn ghost sm end" data-act="endrun" title="Akhiri sesi sekarang">${ic('stop')} <span>Akhiri</span></button></div>
@@ -580,24 +584,25 @@ function renderStudy() {
       ${isMw ? '<span class="pill priv">Kuis 量词</span>' : ''}
       ${isCloze ? '<span class="pill priv">Isi rumpang</span>' : ''}
       ${isType ? '<span class="pill priv">Latihan ketik</span>' : ''}
-      ${!isMw && !isCloze && !isType && SET.student_can_choose && SET.modes.length > 1 ? `<div class="seg" role="group" aria-label="Sisi depan kartu">${SET.modes.map((x) => `<button data-mode="${x}" aria-pressed="${effMode() === x}">${MODE_LABEL[x]}</button>`).join('')}</div>` : ''}
+      ${isTrans ? '<span class="pill priv">Terjemah</span>' : ''}
+      ${!isMw && !isCloze && !isType && !isTrans && SET.student_can_choose && SET.modes.length > 1 ? `<div class="seg" role="group" aria-label="Sisi depan kartu">${SET.modes.map((x) => `<button data-mode="${x}" aria-pressed="${effMode() === x}">${MODE_LABEL[x]}</button>`).join('')}</div>` : ''}
       <span class="spacer"></span>
-      ${!isCloze && !isType ? `<button class="chip clue-btn" data-act="clue" ${Q.clues > 0 ? '' : 'disabled'} title="Clue: huruf depan jawaban. Dapat clue baru tiap ${CLUE_STREAK} jawaban benar berturut-turut.">${ic('bulb')} Clue <b>${Q.clues}</b></button>
+      ${!isCloze && !isType && !isTrans ? `<button class="chip clue-btn" data-act="clue" ${Q.clues > 0 ? '' : 'disabled'} title="Clue: huruf depan jawaban. Dapat clue baru tiap ${CLUE_STREAK} jawaban benar berturut-turut.">${ic('bulb')} Clue <b>${Q.clues}</b></button>
       <button class="chip" data-act="lang" title="Bahasa arti">${LANG_LABEL[S.lang] || 'ID'}</button>` : ''}
       <button class="chip pinchip ${PINS.has(c.id) ? 'on' : ''}" data-pincard aria-pressed="${PINS.has(c.id)}" title="Sematkan kartu ini untuk diulang">${ic('pin')} <span>Sematkan</span></button>
       <button class="chip" data-freezecard title="Bekukan kata ini — tidak muncul lagi sampai dicairkan">${ic('snow')} <span>Belum berguna</span></button>
-      ${SET.quiz_enabled && !isMw && !isCloze && !isType ? `<button class="chip" data-act="quiz" aria-pressed="${S.quiz}">Tebak</button>` : ''}
+      ${SET.quiz_enabled && !isMw && !isCloze && !isType && !isTrans ? `<button class="chip" data-act="quiz" aria-pressed="${S.quiz}">Tebak</button>` : ''}
       <button class="chip" data-act="auto" aria-pressed="${S.auto}" aria-label="Ucapan otomatis" title="Ucapan otomatis">${ic('sound')}</button>
       <button class="chip" data-act="sfx" aria-pressed="${S.sfx}" aria-label="Efek suara" title="Efek suara">${ic(S.sfx ? 'sparkle' : 'mute')}</button>
       ${AI_ON ? `<button class="chip ailah" data-act="asklaoshi" title="Tanya ${esc(aiName())} soal kartu ini">${monkey()} ${esc(aiName())}</button>` : ''}
     </div>
     <div class="stage"><div class="tilt" id="tilt"><div class="fc" id="fc" tabindex="0" role="button" aria-label="Kartu. Ketuk untuk membalik">
-      <div class="face front"><div class="tag"><span class="dotc" style="--dc:${d.color}"></span>${esc(d.zh)}</div>${frontHTML(c, m)}<div class="clue" id="clueBox" hidden></div><div class="hint">${canQuiz ? 'Pilih jawaban di bawah' : (isCloze || isType) ? 'Ketik jawaban di bawah' : 'Ketuk kartu untuk membalik'}</div></div>
+      <div class="face front"><div class="tag"><span class="dotc" style="--dc:${d.color}"></span>${esc(d.zh)}</div>${frontHTML(c, m)}<div class="clue" id="clueBox" hidden></div><div class="hint">${canQuiz ? 'Pilih jawaban di bawah' : (isCloze || isType) ? 'Ketik jawaban di bawah' : isTrans ? 'Terjemahkan, lalu buka kunci' : 'Ketuk kartu untuk membalik'}</div></div>
       <div class="face bface"><div class="tag"><span class="dotc" style="--dc:${d.color}"></span>${esc(d.zh)}</div><button class="say" data-act="say" aria-label="Dengarkan pengucapan">${ic('sound')}</button>${backHTML(c)}</div>
     </div></div></div>
-    <div id="ctrl">${canQuiz ? `<div class="quiz" aria-busy="true">${'<button class="qo skeleton" disabled>…</button>'.repeat(4)}</div>` : isCloze ? '<p class="note" style="text-align:center">Menyusun kalimat…</p>' : isType ? '' : `<button class="btn lg flipbtn" data-act="flip">${ic('flip')} Balik kartu</button>`}</div>
+    <div id="ctrl">${canQuiz ? `<div class="quiz" aria-busy="true">${'<button class="qo skeleton" disabled>…</button>'.repeat(4)}</div>` : isCloze ? '<p class="note" style="text-align:center">Menyusun kalimat…</p>' : (isType || isTrans) ? '' : `<button class="btn lg flipbtn" data-act="flip">${ic('flip')} Balik kartu</button>`}</div>
     <div class="skiprow"><button class="btn ghost sm" data-act="skip" title="Lewati kartu ini (muncul lagi di akhir sesi)">Lewati kartu ${ic('play')}</button></div>
-    <div class="keys">${(isCloze || isType) ? 'Enter: periksa · 1–4: nilai · S: dengarkan · N: lewati' : 'Spasi: balik · 1–4: jawab atau nilai · S: dengarkan · H: clue · N: lewati'}</div>
+    <div class="keys">${(isCloze || isType) ? 'Enter: periksa · 1–4: nilai · S: dengarkan · N: lewati' : isTrans ? '1–4: nilai · S: dengarkan · N: lewati' : 'Spasi: balik · 1–4: jawab atau nilai · S: dengarkan · H: clue · N: lewati'}</div>
   </div>`;
   bindTilt();
   if (Q && Q.sid) api.presence(Q.sid, PRES.state === 'away' ? 'away' : 'active', c.id); // mirror kartu ke guru
@@ -605,6 +610,7 @@ function renderStudy() {
   if (canQuiz) loadQuiz(c, m);
   if (isCloze) setupCloze(c, d);
   if (isType) setupType(c);
+  if (isTrans) setupTrans(c);
 }
 /* ---- lewati kartu: pindah ke akhir antrean, tidak dinilai ---- */
 function skipCard() {
@@ -837,6 +843,34 @@ function revealType(correct) {
   const info = `<div class="cloze-reveal"><span class="han">${esc(cur.c.h)}</span> <span class="rp">${esc(cur.c.p || pyOf(cur.c.h))}</span> · ${esc(mean(cur.c))} ${correct ? '<span class="pill good">benar</span>' : '<span class="pill bad">belum tepat</span>'}</div>`;
   $('#ctrl').innerHTML = info + `<div class="rate">${[1, 2, 3, 4].map((n) => `<button class="rb r${n} ${cur.sug === n ? 'sug' : ''}" data-rate="${n}"><span class="k">${n}</span><span class="l">${RATE[n].l}</span><span class="w">${RATE[n].w}</span></button>`).join('')}</div>`;
   if (S.auto) speak(cur.c.h);
+}
+/* ---- Terjemah kalimat ---- */
+async function setupTrans(c) {
+  const cur = Q.cur;
+  let data = CLOZE.get(c.id);
+  if (!data) { try { const r = await api.cloze(c.id); data = { s: r.s, si: r.si }; CLOZE.set(c.id, data); } catch (_) { data = { s: '', si: '' }; } }
+  if (!Q || Q.cur !== cur) return;
+  const sentence = data.s || c.h;
+  const answer = (data.s && data.si) ? data.si : mean(c);
+  cur.trans = { sentence, answer };
+  const front = document.getElementById('transFront'); if (!front) return;
+  const words = segHan(sentence).map((tk) => tk.t === 'w'
+    ? `<span class="w tw ${UNKNOWN.has(tk.s) ? 'unknown' : ''}" data-word="${esc(tk.s)}">${esc(tk.s)}</span>`
+    : `<span class="px">${esc(tk.s)}</span>`).join('');
+  const py = LOWPY ? `<div class="trans-py">${segHan(sentence).filter((t) => t.t === 'w').map((t) => [...t.s].map((c) => `<i class="t${toneOf(c)}">${esc(pyOf(c))}</i>`).join('')).join(' ')}</div>` : '';
+  front.innerHTML = `<div class="trans-sent">${words}</div>${py}<div class="q">Terjemahkan ke bahasa Indonesia</div>`;
+  const ctrl = document.getElementById('ctrl'); if (!ctrl) return;
+  ctrl.innerHTML = `<div class="cloze-ctrl"><input id="transIn" type="text" autocomplete="off" placeholder="tulis terjemahanmu (opsional)…" aria-label="Terjemahan"><button class="btn" data-transreveal>${ic('check')} Buka kunci</button></div>
+    <button class="btn ghost sm" data-saytext="${esc(sentence)}" style="margin-top:8px">${ic('sound')} Dengarkan</button>`;
+  const inp = document.getElementById('transIn'); if (inp) { inp.focus(); inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); revealTrans(); } }); }
+}
+function revealTrans() {
+  const cur = Q && Q.cur; if (!cur || !cur.trans || cur.answered) return;
+  cur.answered = true; cur.flipped = true;
+  const inp = document.getElementById('transIn'); const mine = inp ? inp.value.trim() : '';
+  const info = `<div class="trans-reveal">${mine ? `<div class="tr-mine">Jawabanmu: ${esc(mine)}</div>` : ''}<div class="tr-key">${ic('check')} Terjemahan: <b>${esc(cur.trans.answer)}</b></div><p class="note">Nilai sendiri seberapa tepat terjemahanmu.</p></div>`;
+  $('#ctrl').innerHTML = info + `<div class="rate">${[1, 2, 3, 4].map((n) => `<button class="rb r${n} ${cur.sug === n ? 'sug' : ''}" data-rate="${n}"><span class="k">${n}</span><span class="l">${RATE[n].l}</span><span class="w">${RATE[n].w}</span></button>`).join('')}</div>`;
+  if (S.auto) speak(cur.trans.sentence);
 }
 function bindTilt() {
   const tilt = $('#tilt'); if (!tilt || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -1391,8 +1425,9 @@ async function translateSent(si) {
 let CURLESSON = null;
 function lessonTile(l) {
   return `<button class="lesson-tile" data-lesson="${esc(l.id)}" style="--sc:${l.color || '#1f3fbf'}">
-    <span class="lesson-emoji">${esc(l.emoji || '📚')}</span>
-    <span class="lesson-meta"><b>${esc(l.title)}</b><small>${esc(l.subtitle || '')}</small></span></button>`;
+    <span class="lesson-ico">${ic(l.icon || 'book2')}</span>
+    <span class="lesson-meta"><b>${esc(l.title)}</b><small>${esc(l.subtitle || '')}</small></span>
+    <span class="lesson-go">${ic('play')}</span></button>`;
 }
 function openLesson(id) {
   const l = LESSONS.lessons.find((x) => x.id === id); if (!l) return;
@@ -1400,7 +1435,8 @@ function openLesson(id) {
   if (!isTeacher() && (ME.level || 0) <= 1) LOWPY = true;
   renderLesson();
 }
-// baris hanzi yang bisa diketuk kata-katanya (+ pinyin ber-nada opsional)
+const ROLE = { S: ['Subjek', '#2f6df0'], P: ['Predikat', '#16a34a'], O: ['Objek', '#f08a24'], W: ['Waktu', '#8b5cf6'], T: ['Tempat', '#0ea5a4'], C: ['Cara', '#db2777'], N: ['Negasi', '#e8513f'], Q: ['Tanya', '#b45309'] };
+const wordSpan = (w) => `<span class="w ${UNKNOWN.has(w) ? 'unknown' : ''}" data-word="${esc(w)}"><span class="rb">${esc(w)}</span></span>`;
 function hanLine(zh) {
   return segHan(zh).map((tk) => {
     if (tk.t !== 'w') return `<span class="px">${esc(tk.s)}</span>`;
@@ -1408,22 +1444,54 @@ function hanLine(zh) {
     return `<span class="w ${UNKNOWN.has(tk.s) ? 'unknown' : ''}" data-word="${esc(tk.s)}">${ruby}<span class="rb">${esc(tk.s)}</span></span>`;
   }).join('');
 }
-function exampleHTML(ex, i) {
-  return `<div class="lex-ex">
-    <div class="lex-top"><div class="sent-h ${LOWPY ? 'withpy' : ''}">${hanLine(ex.zh)}</div><button class="icon-btn sm" data-saytext="${esc(ex.zh)}" aria-label="Dengar">${ic('sound')}</button></div>
-    <div class="lex-id">${esc(ex.id || '')}</div>
-    ${ex.note ? `<div class="lex-note">${esc(ex.note)}</div>` : ''}</div>`;
+function roleBlock([t, r]) {
+  const ro = ROLE[r] || ['', 'var(--muted)'];
+  return `<span class="po-block" style="--rc:${ro[1]}"><span class="po-r">${esc(ro[0])}</span>
+    <span class="po-h ${UNKNOWN.has(t) ? 'unknown' : ''}" data-word="${esc(t)}">${esc(t)}</span>
+    <span class="po-p">${esc(pyOf(t))}</span></span>`;
+}
+function exampleHTML(ex) {
+  const whole = ex.parts ? ex.parts.map((p) => p[0]).join('') : ex.zh;
+  const body = ex.parts
+    ? `<div class="po-row">${ex.parts.map(roleBlock).join('<span class="po-plus">+</span>')}</div>`
+    : `<div class="sent-h ${LOWPY ? 'withpy' : ''}">${hanLine(ex.zh)}</div>`;
+  return `<div class="lex-ex"><div class="lex-top">${body}<button class="icon-btn sm" data-saytext="${esc(whole)}" aria-label="Dengar">${ic('sound')}</button></div>
+    <div class="lex-id">${esc(ex.id || '')}</div>${ex.note ? `<div class="lex-note">${esc(ex.note)}</div>` : ''}</div>`;
+}
+function formulaHTML(roles) {
+  return `<div class="formula">${roles.map((r) => { const ro = ROLE[r] || [r, 'var(--muted)']; return `<span class="fpill" style="--rc:${ro[1]}">${esc(ro[0])}</span>`; }).join('<span class="farr">→</span>')}</div>`;
+}
+function posBox(pos, r) {
+  return `<div class="posbox pos-${pos}"><span class="pr han">${esc(r)}</span><span class="pf"></span></div>`;
 }
 function radicalHTML(r) {
-  return `<div class="rad-card">
-    <div class="rad-top"><span class="rad-r han">${esc(r.r)}</span>${r.base && r.base !== r.r ? `<span class="rad-base">(${esc(r.base)})</span>` : ''}<button class="icon-btn sm" data-saytext="${esc(r.r)}" aria-label="Dengar">${ic('sound')}</button></div>
+  return `<div class="rad-card"><div class="rad-top"><span class="rad-r han">${esc(r.r)}</span>${r.base && r.base !== r.r ? `<span class="rad-base">${esc(r.base)}</span>` : ''}<button class="icon-btn sm" data-saytext="${esc(r.r)}" aria-label="Dengar">${ic('sound')}</button></div>
     <div class="rad-m">${esc(r.m)}</div>
-    <div class="rad-ex">${(r.ex || '').split(/\s+/).filter(Boolean).map((c) => `<span class="w" data-word="${esc(c)}"><span class="rb">${esc(c)}</span></span>`).join('')}</div></div>`;
+    <div class="rad-ex">${(r.ex || '').split(/\s+/).filter(Boolean).map(wordSpan).join('')}</div></div>`;
+}
+function eqHTML(e) {
+  const rr = `<span class="eq-res"><span class="w" data-word="${esc(e.r)}"><span class="rb">${esc(e.r)}</span></span>${e.rp ? `<small>${esc(e.rp)}</small>` : ''}${e.rm ? `<em>${esc(e.rm)}</em>` : ''}</span>`;
+  const term = (ch, lab, cls) => `<span class="eq-term ${cls}"><span class="eq-c han">${esc(ch)}</span><span class="eq-l">${esc(lab)}</span></span>`;
+  return `<div class="eq ${e.kind === 'sound' ? 'eq-sound' : ''}"><button class="icon-btn sm eq-say" data-saytext="${esc(e.r)}" aria-label="Dengar">${ic('sound')}</button>
+    ${term(e.a, e.al || '', e.kind === 'sound' ? 'meaning' : '')}<span class="eq-op">+</span>${term(e.b, e.bl || '', e.kind === 'sound' ? 'sound' : '')}<span class="eq-op">=</span>${rr}</div>`;
+}
+function pictoHTML(list) {
+  return `<div class="picto-grid">${list.map((p) => `<button class="picto" data-saytext="${esc(p.zh)}"><span class="pc han">${esc(p.zh)}</span><span class="pm">${esc(p.m)}</span></button>`).join('')}</div>`;
 }
 function sectionHTML(sec) {
-  let inner = sec.body ? `<p class="lex-body">${esc(sec.body)}</p>` : '';
+  let inner = '';
+  if (sec.formula) inner += formulaHTML(sec.formula);
+  if (sec.body) inner += `<p class="lex-body">${esc(sec.body)}</p>`;
   if (sec.examples) inner += `<div class="lex-exs">${sec.examples.map(exampleHTML).join('')}</div>`;
-  if (sec.radicals) inner += `<div class="rad-grid">${sec.radicals.map(radicalHTML).join('')}</div>`;
+  if (sec.positions) inner += `<div class="pos-grid">${sec.positions.map((p) => `<div class="pos-card">${posBox(p.pos, p.r)}<div class="pos-name">${esc(p.name)}</div><div class="pos-ex">${wordSpan(p.ex)}<small>${esc(p.exm || '')}</small></div></div>`).join('')}</div>`;
+  if (sec.changes) inner += `<div class="chg-grid">${sec.changes.map((c) => `<div class="chg"><b class="han">${esc(c.from)}</b><span class="chg-arr">→</span><b class="han hl">${esc(c.to)}</b><span class="chg-m">${esc(c.m)}</span>${wordSpan(c.ex)}</div>`).join('')}</div>`;
+  if (sec.radicalGroups) inner += sec.radicalGroups.map((g) => `<div class="rad-group"><div class="rad-gh">${esc(g.g)}</div><div class="rad-grid">${g.items.map(radicalHTML).join('')}</div></div>`).join('');
+  if (sec.picto) inner += pictoHTML(sec.picto);
+  if (sec.eqs) inner += `<div class="eq-list">${sec.eqs.map(eqHTML).join('')}</div>`;
+  if (sec.soundfam) { const s = sec.soundfam; inner += `<div class="sf-head">Bunyi: <b class="han">${esc(s.sound)}</b> <span>${esc(s.sp || '')}</span></div><div class="sf-grid">${s.items.map((it) => `<button class="sf-card" data-saytext="${esc(it.zh)}"><span class="sf-c han">${esc(it.zh)}</span><span class="sf-p">${esc(it.rp)}</span><span class="sf-m">${esc(it.m)}</span><span class="sf-rad">${esc(it.rad)}</span></button>`).join('')}</div>`; }
+  if (sec.propbar) inner += `<div class="propbar">${sec.propbar.map((p) => `<div class="prop" style="--pw:${p[1]}%;--pc:${p[2]}"><span class="prop-fill"></span><span class="prop-lab">${esc(p[0])} · ${p[1]}%</span></div>`).join('')}</div>`;
+  if (sec.infos) inner += `<div class="info-list">${sec.infos.map((i) => `<div class="info-card"><b>${esc(i.t)}</b><p>${esc(i.d)}</p></div>`).join('')}</div>`;
+  if (sec.note) inner += `<p class="lex-tip">${ic('bulb')} ${esc(sec.note)}</p>`;
   return `<section class="lex-sec"><h2 class="lex-h">${esc(sec.h)}</h2>${inner}</section>`;
 }
 function renderLesson() {
@@ -1434,7 +1502,8 @@ function renderLesson() {
     <div class="reader-top"><button class="btn ghost sm" data-backlearn>${ic('back')} Belajar</button>
       <button class="chip ${LOWPY ? 'on' : ''}" data-togpy aria-pressed="${LOWPY}">拼 Pinyin</button></div>
     ${UNKNOWN.size ? `<div class="unknown-bar">${ic('snow')} <b>${UNKNOWN.size}</b> kata ditandai belum tahu${canCreate() ? ` <button class="btn sm" data-addunknown>${ic('plus')} Masukkan ke deck…</button>` : ''}<button class="chip sm" data-clearunknown>${ic('x')} Bersihkan</button></div>` : ''}
-    <div class="reader-head"><span class="lesson-emoji big">${esc(l.emoji || '📚')}</span><div><h1 class="h1">${esc(l.title)}</h1><p class="sub">${esc(l.subtitle || '')}</p></div></div>
+    <div class="reader-head"><span class="lesson-ico big">${ic(l.icon || 'book2')}</span><div><h1 class="h1">${esc(l.title)}</h1><p class="sub">${esc(l.subtitle || '')}</p></div></div>
+    ${l.legend ? `<div class="legend">${l.legend.map(([c, n]) => `<span class="lg-pill" style="--rc:${(ROLE[c] || ['', 'var(--muted)'])[1]}">${esc(n)}</span>`).join('')}</div>` : ''}
     ${l.sections.map(sectionHTML).join('')}
     <p class="note" style="text-align:center;margin:14px 0">Ketuk hanzi untuk arti, audio, atau tambah ke deck.</p>
   </div>`;
@@ -2061,7 +2130,7 @@ function leaveStudy() {
 let endArmed = 0, LAST_TAP = { id: null, t: 0 };
 document.addEventListener('click', async (e) => {
   if (!e.target.closest('#emojiPop') && !e.target.closest('[data-emo]')) closeEmoji();
-  const b = e.target.closest('[data-startsel],[data-lesson],[data-saytext],[data-addunknown],[data-clearunknown],[data-clzbulk],[data-clzqhelp],[data-unselect],[data-clearsel],[data-typecheck],[data-clzsave],[data-clzdel],[data-freezecard],[data-freezedeck],[data-unfreezedeck],[data-unfreezecard],[data-clozecheck],[data-clozemc],[data-clozepick],[data-stedit],[data-stdel],[data-stnew],[data-story],[data-backlearn],[data-togpy],[data-sayall],[data-saysent],[data-trsent],[data-word],[data-pincard],[data-sayresp],[data-studypinned],[data-guide],[data-profile],[data-like],[data-studypost],[data-backfeed],[data-onb],[data-onbans],[data-sheetq],[data-aitip],[data-dl],[data-hsk],[data-studyhsk],[data-babpick],[data-babgo],[data-vis],[data-pstu],[data-lkind],[data-part],[data-pickstu],[data-mkind],[data-warn],[data-chatto],[data-endrun],[data-endall],[data-nav],[data-pick],[data-act],[data-mode],[data-rate],[data-t],[data-ttab],[data-sact],[data-stu],[data-cfgmode],[data-cfgtog],[data-cfgdeck],[data-edeck],[data-etab],[data-ncolor],[data-rcolor],[data-emo],[data-pick-emo],[data-rm],[data-approve]');
+  const b = e.target.closest('[data-transreveal],[data-startsel],[data-lesson],[data-saytext],[data-addunknown],[data-clearunknown],[data-clzbulk],[data-clzqhelp],[data-unselect],[data-clearsel],[data-typecheck],[data-clzsave],[data-clzdel],[data-freezecard],[data-freezedeck],[data-unfreezedeck],[data-unfreezecard],[data-clozecheck],[data-clozemc],[data-clozepick],[data-stedit],[data-stdel],[data-stnew],[data-story],[data-backlearn],[data-togpy],[data-sayall],[data-saysent],[data-trsent],[data-word],[data-pincard],[data-sayresp],[data-studypinned],[data-guide],[data-profile],[data-like],[data-studypost],[data-backfeed],[data-onb],[data-onbans],[data-sheetq],[data-aitip],[data-dl],[data-hsk],[data-studyhsk],[data-babpick],[data-babgo],[data-vis],[data-pstu],[data-lkind],[data-part],[data-pickstu],[data-mkind],[data-warn],[data-chatto],[data-endrun],[data-endall],[data-nav],[data-pick],[data-act],[data-mode],[data-rate],[data-t],[data-ttab],[data-sact],[data-stu],[data-cfgmode],[data-cfgtog],[data-cfgdeck],[data-edeck],[data-etab],[data-ncolor],[data-rcolor],[data-emo],[data-pick-emo],[data-rm],[data-approve]');
   if (!b) { const fc = e.target.closest('#fc'); if (fc && Q && Q.cur && Q.cur.answered) flip(); return; }
   const ds = b.dataset;
   if (ds.nav) { leaveStudy(); go(ds.nav); return; }
@@ -2111,6 +2180,7 @@ document.addEventListener('click', async (e) => {
   if (ds.unselect) { S.sel = S.sel.filter((x) => x !== ds.unselect); savePrefs(); renderLearn(); return; }
   if (ds.clearsel !== undefined) { S.sel = []; S.split.part = 0; savePrefs(); renderLearn(); return; }
   if (ds.typecheck !== undefined) { const inp = document.getElementById('typeIn'); if (inp) checkType(inp.value); return; }
+  if (ds.transreveal !== undefined) { revealTrans(); return; }
   if (ds.clozecheck !== undefined) { const inp = document.getElementById('clozeIn'); if (inp) checkCloze(inp.value); return; }
   if (ds.clozemc !== undefined) { showClozeMC(); return; }
   if (ds.clozepick) { checkCloze(ds.clozepick); return; }

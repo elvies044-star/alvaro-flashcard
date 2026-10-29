@@ -26,7 +26,7 @@ const FRONT_MODES = ['pic', 'han', 'arti', 'mix'];
 const COMMON_MW = ['个', '本', '支', '张', '把', '只', '条', '头', '辆', '件', '双', '块', '朵', '棵', '杯', '瓶', '碗', '台', '座', '片', '颗', '根', '匹', '架', '艘', '盏', '扇', '部', '顶', '副', '枚', '位', '家', '所'];
 const USERNAME_RE = /^[a-z0-9._]{3,24}$/;
 const HEX32 = /^[a-f0-9]{32}$/;
-const BUILTIN_VERSION = `hsk1-v${builtin.decks.length}-${builtin.cards.length}-${hsk.decks.length}-${hsk.cards.length}-sp${speaking.decks.length}.${speaking.cards.length}-st${stories.stories.length}-cz${clozeData.clozes.length}-${builtin.cards.reduce((t, c) => (t + c.id.length * 7 + c.m.length) % 1e9, 0)}`;
+const BUILTIN_VERSION = `hsk1-v${builtin.decks.length}-${builtin.cards.length}-${hsk.decks.length}-${hsk.cards.length}-sp${speaking.decks.length}.${speaking.cards.length}-st${stories.stories.length}-cz${clozeData.clozes.length}.${clozeData.clozes.reduce((t, z) => { for (let i = 0; i < z.s.length; i++) t = (t * 31 + z.s.charCodeAt(i)) % 1e9; return t; }, 7)}-${builtin.cards.reduce((t, c) => (t + c.id.length * 7 + c.m.length) % 1e9, 0)}`;
 const enc = new TextEncoder();
 const now = () => Date.now();
 

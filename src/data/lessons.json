@@ -2,100 +2,202 @@
   "lessons": [
     {
       "id": "spok",
-      "emoji": "🧩",
+      "icon": "grid",
       "color": "#2f6df0",
-      "title": "Struktur Kalimat (SPOK)",
+      "title": "Struktur Kalimat",
       "subtitle": "Urutan kata dalam bahasa Mandarin",
+      "legend": [["S", "Subjek"], ["P", "Predikat"], ["O", "Objek"], ["W", "Waktu"], ["T", "Tempat"], ["C", "Cara"], ["N", "Negasi"], ["Q", "Tanya"]],
       "sections": [
         {
-          "h": "1. Pola dasar: Subjek + Predikat + Objek",
-          "body": "Seperti bahasa Indonesia, urutan dasar Mandarin adalah S–P–O (Subjek → Kata kerja → Objek). Yang penting: kata kerja TIDAK berubah bentuk.",
+          "h": "Pola dasar",
+          "formula": ["S", "P", "O"],
+          "body": "Seperti bahasa Indonesia, urutannya Subjek → Predikat (kata kerja) → Objek. Yang penting: kata kerja TIDAK pernah berubah bentuk.",
           "examples": [
-            {"zh": "我吃苹果。", "id": "Saya makan apel.", "note": "我 (S) · 吃 (P) · 苹果 (O)"},
-            {"zh": "他喝水。", "id": "Dia minum air.", "note": "他 (S) · 喝 (P) · 水 (O)"},
-            {"zh": "老师教中文。", "id": "Guru mengajar bahasa Mandarin.", "note": "老师 (S) · 教 (P) · 中文 (O)"}
+            {"parts": [["我", "S"], ["吃", "P"], ["苹果", "O"]], "id": "Saya makan apel."},
+            {"parts": [["他", "S"], ["喝", "P"], ["水", "O"]], "id": "Dia minum air."},
+            {"parts": [["我们", "S"], ["学", "P"], ["中文", "O"]], "id": "Kami belajar bahasa Mandarin."}
           ]
         },
         {
-          "h": "2. Keterangan WAKTU di depan",
-          "body": "Keterangan waktu diletakkan di awal kalimat atau tepat setelah subjek — TIDAK di akhir seperti bahasa Inggris.",
+          "h": "Keterangan waktu",
+          "body": "Keterangan WAKTU diletakkan di awal kalimat atau tepat setelah subjek — bukan di akhir seperti bahasa Inggris.",
           "examples": [
-            {"zh": "我今天去学校。", "id": "Hari ini saya pergi ke sekolah.", "note": "Waktu (今天) setelah subjek"},
-            {"zh": "明天我们吃饭。", "id": "Besok kita makan.", "note": "Waktu (明天) di awal"}
+            {"parts": [["我", "S"], ["今天", "W"], ["去", "P"], ["学校", "O"]], "id": "Hari ini saya pergi ke sekolah."},
+            {"parts": [["明天", "W"], ["我", "S"], ["休息", "P"]], "id": "Besok saya istirahat."}
           ]
         },
         {
-          "h": "3. Keterangan TEMPAT dengan 在",
+          "h": "Keterangan tempat (在)",
           "body": "Tempat memakai 在 + tempat, dan diletakkan SEBELUM kata kerja, bukan sesudahnya.",
           "examples": [
-            {"zh": "我在家看书。", "id": "Saya membaca buku di rumah.", "note": "在家 (tempat) sebelum 看书"},
-            {"zh": "他在学校学习。", "id": "Dia belajar di sekolah.", "note": "在学校 sebelum 学习"}
+            {"parts": [["我", "S"], ["在家", "T"], ["看", "P"], ["书", "O"]], "id": "Saya membaca buku di rumah."},
+            {"parts": [["他", "S"], ["在学校", "T"], ["学习", "P"]], "id": "Dia belajar di sekolah."}
           ]
         },
         {
-          "h": "4. Urutan keterangan: Waktu → Tempat → Cara → Kerja",
-          "body": "Kalau ada banyak keterangan, urutannya tetap: SUBJEK + WAKTU + TEMPAT + CARA/ALAT + KATA KERJA + OBJEK.",
+          "h": "Urutan lengkap",
+          "formula": ["S", "W", "T", "C", "P", "O"],
+          "body": "Kalau ada banyak keterangan, urutannya tetap seperti rumus di atas.",
           "examples": [
-            {"zh": "我今天在家用电脑工作。", "id": "Hari ini saya bekerja di rumah pakai komputer.", "note": "我 + 今天 + 在家 + 用电脑 + 工作"},
-            {"zh": "她每天在公园跑步。", "id": "Dia lari di taman setiap hari.", "note": "她 + 每天 + 在公园 + 跑步"}
+            {"parts": [["我", "S"], ["今天", "W"], ["在家", "T"], ["用电脑", "C"], ["工作", "P"]], "id": "Hari ini saya bekerja di rumah pakai komputer."},
+            {"parts": [["她", "S"], ["每天", "W"], ["在公园", "T"], ["跑步", "P"]], "id": "Dia lari di taman setiap hari."}
           ]
         },
         {
-          "h": "5. Kalimat tanya",
-          "body": "Tambahkan 吗 di akhir untuk tanya ya/tidak. Untuk tanya detail, pakai kata tanya (什么 apa, 谁 siapa, 哪里 di mana, 什么时候 kapan) di posisi jawabannya — urutan kalimat tidak berubah.",
+          "h": "Kalimat tanya",
+          "body": "Tambahkan 吗 di akhir untuk tanya ya/tidak. Untuk tanya detail, pakai kata tanya (什么 apa, 哪里 di mana) di posisi jawabannya — urutan tidak berubah.",
           "examples": [
-            {"zh": "你是学生吗？", "id": "Apakah kamu murid?", "note": "吗 = tanya ya/tidak"},
-            {"zh": "你吃什么？", "id": "Kamu makan apa?", "note": "什么 di posisi objek"},
-            {"zh": "他在哪里？", "id": "Dia di mana?", "note": "哪里 di posisi tempat"}
+            {"parts": [["你", "S"], ["是", "P"], ["学生", "O"], ["吗", "Q"]], "id": "Apakah kamu murid?"},
+            {"parts": [["你", "S"], ["吃", "P"], ["什么", "Q"]], "id": "Kamu makan apa?"},
+            {"parts": [["他", "S"], ["在", "P"], ["哪里", "Q"]], "id": "Dia di mana?"}
           ]
         },
         {
-          "h": "6. Negasi: 不 dan 没",
-          "body": "不 untuk menyangkal kebiasaan / masa kini / masa depan. 没 untuk menyangkal yang SUDAH terjadi (belum). Keduanya diletakkan sebelum kata kerja.",
+          "h": "Negasi: 不 dan 没",
+          "body": "不 menyangkal kebiasaan / sekarang / nanti. 没 menyangkal yang SUDAH terjadi (belum). Keduanya sebelum kata kerja.",
           "examples": [
-            {"zh": "我不喝咖啡。", "id": "Saya tidak minum kopi.", "note": "不 + kerja (kebiasaan)"},
-            {"zh": "我没吃早饭。", "id": "Saya belum makan sarapan.", "note": "没 + kerja (lampau/belum)"}
+            {"parts": [["我", "S"], ["不", "N"], ["喝", "P"], ["咖啡", "O"]], "id": "Saya tidak minum kopi."},
+            {"parts": [["我", "S"], ["没", "N"], ["吃", "P"], ["饭", "O"]], "id": "Saya belum makan."}
           ]
         }
       ]
     },
     {
-      "id": "radikal",
-      "emoji": "🧱",
+      "id": "hanzi",
+      "icon": "brick",
       "color": "#e8513f",
-      "title": "Radikal Hanzi (部首)",
-      "subtitle": "Petunjuk makna di dalam karakter",
+      "title": "Pembentukan Hanzi",
+      "subtitle": "6 cara membentuk karakter (六书) + radikal",
       "sections": [
         {
           "h": "Apa itu radikal?",
-          "body": "Radikal (部首 bùshǒu) adalah bagian kecil penyusun hanzi yang sering memberi petunjuk MAKNA karakter. Mengenali radikal membantu menebak arti dan mengingat tulisan. Contoh: semua karakter dengan 氵berhubungan dengan air."
+          "body": "Radikal (部首 bùshǒu) adalah bagian penyusun hanzi yang sering memberi petunjuk MAKNA. Hampir semua hanzi dibentuk dari bagian-bagian kecil — mengenalinya membantu menebak arti & mengingat tulisan. Contoh: semua karakter dengan 氵berhubungan dengan air.",
+          "note": "Kabar baik: kamu tidak perlu hafal 214 radikal. Kenali ~30 yang paling sering, itu sudah sangat membantu."
         },
         {
-          "h": "Radikal yang paling sering muncul",
-          "body": "Hafalkan sedikit demi sedikit. Ketuk contoh karakternya untuk melihat arti & menambahkannya ke kartu.",
-          "radicals": [
-            {"r": "氵", "base": "水", "m": "air", "ex": "河 海 洗 游"},
-            {"r": "亻", "base": "人", "m": "orang", "ex": "你 他 们 住"},
-            {"r": "口", "base": "口", "m": "mulut", "ex": "吃 叫 唱 喝"},
-            {"r": "女", "base": "女", "m": "perempuan", "ex": "妈 她 好 姐"},
-            {"r": "木", "base": "木", "m": "kayu/pohon", "ex": "树 林 桌 椅"},
-            {"r": "扌", "base": "手", "m": "tangan", "ex": "打 找 拿 提"},
-            {"r": "忄", "base": "心", "m": "hati/perasaan", "ex": "忙 快 怕 慢"},
-            {"r": "讠", "base": "言", "m": "bicara/kata", "ex": "说 话 语 请"},
-            {"r": "日", "base": "日", "m": "matahari/hari", "ex": "明 时 晴 早"},
-            {"r": "月", "base": "月", "m": "bulan/tubuh", "ex": "朋 脸 胖 脚"},
-            {"r": "足", "base": "足", "m": "kaki", "ex": "跑 跳 路 踢"},
-            {"r": "钅", "base": "金", "m": "logam", "ex": "钱 钟 银 错"},
-            {"r": "火", "base": "火", "m": "api", "ex": "灯 热 烧 炒"},
-            {"r": "土", "base": "土", "m": "tanah", "ex": "地 坐 场 城"},
-            {"r": "艹", "base": "艸", "m": "rumput/tanaman", "ex": "花 草 菜 茶"},
-            {"r": "饣", "base": "食", "m": "makanan", "ex": "饭 饿 饺 馆"},
-            {"r": "宀", "base": "宀", "m": "atap/rumah", "ex": "家 室 安 字"},
-            {"r": "目", "base": "目", "m": "mata", "ex": "看 眼 睛 睡"},
-            {"r": "心", "base": "心", "m": "hati", "ex": "想 念 感 愿"},
-            {"r": "车", "base": "车", "m": "kendaraan", "ex": "轮 较 辆 转"},
-            {"r": "门", "base": "门", "m": "pintu", "ex": "问 间 闹 们"},
-            {"r": "雨", "base": "雨", "m": "hujan/cuaca", "ex": "雪 雷 零 需"}
+          "h": "象形 — Gambar benda",
+          "body": "Xiàngxíng. Karakter paling kuno: sekadar gambar bendanya. Hanya ~5% hanzi, tapi jadi bahan dasar yang lain.",
+          "picto": [
+            {"zh": "山", "m": "gunung · gambar puncak"},
+            {"zh": "日", "m": "matahari"},
+            {"zh": "月", "m": "bulan"},
+            {"zh": "木", "m": "pohon"},
+            {"zh": "人", "m": "orang"},
+            {"zh": "水", "m": "air"}
+          ]
+        },
+        {
+          "h": "指事 — Tanda abstrak",
+          "body": "Zhǐshì. Menunjuk ide yang tidak bisa digambar, dengan tanda sederhana.",
+          "picto": [
+            {"zh": "一", "m": "satu"},
+            {"zh": "上", "m": "atas · tanda di atas garis"},
+            {"zh": "下", "m": "bawah · tanda di bawah garis"},
+            {"zh": "本", "m": "akar/asal · 木 + garis di bawahnya"}
+          ]
+        },
+        {
+          "h": "会意 — Gabungan makna",
+          "body": "Huìyì. Dua gambar digabung menjadi makna baru.",
+          "eqs": [
+            {"a": "亻", "al": "orang", "b": "木", "bl": "pohon", "r": "休", "rp": "xiū", "rm": "istirahat"},
+            {"a": "日", "al": "matahari", "b": "月", "bl": "bulan", "r": "明", "rp": "míng", "rm": "terang"},
+            {"a": "木", "al": "pohon", "b": "木", "bl": "pohon", "r": "林", "rp": "lín", "rm": "hutan kecil"}
+          ]
+        },
+        {
+          "h": "形声 — Makna + bunyi",
+          "body": "Xíngshēng. Satu bagian memberi MAKNA, satu bagian memberi BUNYI. Inilah cara terpenting — hampir semua hanzi modern begini.",
+          "propbar": [["形声 (makna + bunyi)", 85, "#e8513f"], ["cara lainnya", 15, "#94a3b8"]],
+          "eqs": [
+            {"kind": "sound", "a": "女", "al": "makna: wanita", "b": "马", "bl": "bunyi: mǎ", "r": "妈", "rp": "mā", "rm": "ibu"},
+            {"kind": "sound", "a": "氵", "al": "makna: air", "b": "可", "bl": "bunyi: kě", "r": "河", "rp": "hé", "rm": "sungai"},
+            {"kind": "sound", "a": "口", "al": "makna: mulut", "b": "门", "bl": "bunyi: mén", "r": "问", "rp": "wèn", "rm": "bertanya"}
+          ],
+          "soundfam": {"sound": "青", "sp": "qīng", "items": [
+            {"zh": "清", "rp": "qīng", "m": "jernih", "rad": "氵 air"},
+            {"zh": "请", "rp": "qǐng", "m": "silakan", "rad": "讠 bicara"},
+            {"zh": "情", "rp": "qíng", "m": "perasaan", "rad": "忄 hati"},
+            {"zh": "晴", "rp": "qíng", "m": "cerah", "rad": "日 matahari"}
+          ]},
+          "note": "Lihat keluarga 青: bunyinya mirip (qing), tapi radikal di kirinya mengubah maknanya."
+        },
+        {
+          "h": "假借 — Pinjam bunyi",
+          "body": "Jiǎjiè. Meminjam karakter lain yang bunyinya sama untuk makna baru.",
+          "picto": [
+            {"zh": "来", "m": "datang · dulu berarti 'gandum'"},
+            {"zh": "北", "m": "utara · dulu berarti 'punggung'"}
+          ]
+        },
+        {
+          "h": "Di mana letak radikal?",
+          "body": "Radikal bisa berada di posisi berbeda dalam satu karakter. Ketuk contohnya untuk arti.",
+          "positions": [
+            {"pos": "left", "r": "氵", "name": "Kiri (paling sering)", "ex": "河", "exm": "sungai"},
+            {"pos": "top", "r": "艹", "name": "Atas", "ex": "花", "exm": "bunga"},
+            {"pos": "bottom", "r": "心", "name": "Bawah", "ex": "想", "exm": "berpikir"},
+            {"pos": "right", "r": "刂", "name": "Kanan", "ex": "到", "exm": "sampai"}
+          ]
+        },
+        {
+          "h": "Radikal yang berubah bentuk",
+          "body": "Beberapa karakter berubah bentuk saat jadi radikal. Kiri = bentuk asli, kanan = bentuk radikalnya.",
+          "changes": [
+            {"from": "水", "to": "氵", "m": "air", "ex": "河"},
+            {"from": "人", "to": "亻", "m": "orang", "ex": "你"},
+            {"from": "心", "to": "忄", "m": "hati", "ex": "忙"},
+            {"from": "手", "to": "扌", "m": "tangan", "ex": "打"},
+            {"from": "刀", "to": "刂", "m": "pisau", "ex": "到"},
+            {"from": "火", "to": "灬", "m": "api", "ex": "热"},
+            {"from": "言", "to": "讠", "m": "bicara", "ex": "说"},
+            {"from": "金", "to": "钅", "m": "logam", "ex": "钱"},
+            {"from": "食", "to": "饣", "m": "makan", "ex": "饭"},
+            {"from": "犬", "to": "犭", "m": "hewan", "ex": "狗"}
+          ]
+        },
+        {
+          "h": "Radikal umum per tema",
+          "body": "Hafalkan sedikit demi sedikit. Ketuk contoh karakternya untuk arti & tambah ke kartu.",
+          "radicalGroups": [
+            {"g": "Orang & perasaan", "items": [
+              {"r": "亻", "base": "人", "m": "orang", "ex": "你 他 住"},
+              {"r": "女", "base": "女", "m": "perempuan", "ex": "妈 她 好"},
+              {"r": "忄", "base": "心", "m": "hati / rasa", "ex": "忙 快 怕"},
+              {"r": "口", "base": "口", "m": "mulut", "ex": "吃 叫 喝"}
+            ]},
+            {"g": "Alam & cuaca", "items": [
+              {"r": "氵", "base": "水", "m": "air", "ex": "河 海 洗"},
+              {"r": "火", "base": "火", "m": "api", "ex": "灯 热 烧"},
+              {"r": "日", "base": "日", "m": "matahari / hari", "ex": "明 时 晴"},
+              {"r": "雨", "base": "雨", "m": "hujan", "ex": "雪 雷 零"}
+            ]},
+            {"g": "Tumbuhan & makanan", "items": [
+              {"r": "木", "base": "木", "m": "kayu / pohon", "ex": "树 林 桌"},
+              {"r": "艹", "base": "艸", "m": "rumput / tanaman", "ex": "花 草 菜"},
+              {"r": "饣", "base": "食", "m": "makanan", "ex": "饭 饿 饺"},
+              {"r": "米", "base": "米", "m": "beras", "ex": "粥 糖 粽"}
+            ]},
+            {"g": "Gerakan & alat", "items": [
+              {"r": "扌", "base": "手", "m": "tangan", "ex": "打 拿 找"},
+              {"r": "足", "base": "足", "m": "kaki", "ex": "跑 跳 路"},
+              {"r": "辶", "base": "辵", "m": "jalan / gerak", "ex": "走 这 远"},
+              {"r": "钅", "base": "金", "m": "logam", "ex": "钱 钟 银"}
+            ]},
+            {"g": "Bicara, tempat & hewan", "items": [
+              {"r": "讠", "base": "言", "m": "bicara / kata", "ex": "说 话 请"},
+              {"r": "宀", "base": "宀", "m": "atap / rumah", "ex": "家 室 安"},
+              {"r": "门", "base": "门", "m": "pintu", "ex": "问 间 闹"},
+              {"r": "犭", "base": "犬", "m": "hewan", "ex": "狗 猫 猪"}
+            ]}
+          ]
+        },
+        {
+          "h": "Tips & jebakan",
+          "infos": [
+            {"t": "Radikal = petunjuk makna", "d": "Bagian radikal biasanya menunjukkan arti; bagian lain sering menunjukkan bunyi."},
+            {"t": "Tapi tidak selalu!", "d": "Contoh: 到 (dào) — 刂 di situ justru petunjuk bunyi, bukan makna."},
+            {"t": "Mulai dari yang sering", "d": "Kenali dulu 氵亻口木扌讠. Begitu kamu hafal, menebak arti jadi jauh lebih mudah."}
           ]
         }
       ]
