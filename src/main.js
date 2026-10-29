@@ -7,7 +7,7 @@ import { pinyin as pyPro } from 'pinyin-pro';
 import LESSONS from './data/lessons.json';
 
 const APP = 'Alvaro Mandarin Flashcard Tamer';
-const APP_VERSION = '2026.10.29-materi2';
+const APP_VERSION = '2026.10.29-pantau12j';
 const BUILD = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev';
 
 /* ================= helpers ================= */
@@ -18,6 +18,12 @@ const yi = (m) => (MW[m] && MW[m][1] === 4 ? 'yí' : 'yì');
 const fmtDate = (t, o = { dateStyle: 'medium', timeStyle: 'short' }) => new Date(t).toLocaleString('id-ID', o);
 const secs = (ms) => (ms / 1000).toFixed(ms < 10000 ? 1 : 0) + ' dtk';
 const dur = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return s < 60 ? `${s} dtk` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+const hm = (t) => new Date(t).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+const sameDay = (a, b) => { const x = new Date(a), y = new Date(b); return x.getFullYear() === y.getFullYear() && x.getMonth() === y.getMonth() && x.getDate() === y.getDate(); };
+// jam:menit kalau hari ini; "29 Okt 23:05" kalau hari lain
+const dt = (t, ref = Date.now()) => { if (!t) return '–'; return sameDay(t, ref) ? hm(t) : new Date(t).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) + ' ' + hm(t); };
+// "baru saja" / "5 mnt lalu" / "2 jam lalu" / "kemarin" / tanggal
+const ago = (t, ref = Date.now()) => { if (!t) return 'belum pernah'; const s = Math.round((ref - t) / 1000); if (s < 60) return 'baru saja'; if (s < 3600) return `${Math.floor(s / 60)} mnt lalu`; if (s < 86400 && sameDay(t, ref)) return `${Math.floor(s / 3600)} jam lalu`; if (sameDay(t, ref - 86400000)) return 'kemarin ' + hm(t); return dt(t, ref); };
 const store = { get(k, d) { try { const v = localStorage.getItem('aft_' + k); return v === null ? d : JSON.parse(v); } catch (_) { return d; } }, set(k, v) { try { localStorage.setItem('aft_' + k, JSON.stringify(v)); } catch (_) { /* abaikan */ } } };
 const SVGSRC = {};
 const svgSrc = (k) => SVGSRC[k] || (SVGSRC[k] = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(IMG[k]));
@@ -1835,21 +1841,28 @@ async function tLive() {
       if (now - r.last_seen > 60000) return `<span class="pill mute"><span class="d"></span>Tidak aktif · ${dur(now - r.last_seen)}</span>`;
       return '<span class="pill good pulse"><span class="d"></span>Sedang belajar</span>';
     };
-    const msgInfo = (r) => (r.msg_at && now - r.msg_at < 3600e3 ? `<span class="seen">Pesan ${new Date(r.msg_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} · ${r.msg_seen ? '✓ sudah tampil' : 'belum tampil'}</span>` : '');
-    v.innerHTML = `<div class="kpis"><div class="kpi"><b>${active.length}</b><span>sesi berjalan</span></div><div class="kpi"><b style="color:${active.some(awayNow) ? 'var(--bad)' : 'inherit'}">${active.filter(awayNow).length}</b><span>keluar aplikasi sekarang</span></div><div class="kpi"><b>${done.length}</b><span>selesai 30 menit terakhir</span></div></div>
-      <div class="panel-head"><h2 class="h3">Sesi berjalan</h2><div class="row"><span class="note">Diperbarui ${new Date(now).toLocaleTimeString('id-ID')} · tiap 5 detik</span>
+    const msgInfo = (r) => (r.msg_at && now - r.msg_at < 3600e3 ? `<span class="seen">Pesan ${hm(r.msg_at)} · ${r.msg_seen ? '✓ sudah tampil' : 'belum tampil'}</span>` : '');
+    const roster = (d.roster || []).slice().sort((a, b) => (b.online - a.online) || ((b.last_play || 0) - (a.last_play || 0)) || a.name.localeCompare(b.name));
+    const onlineN = roster.filter((s) => s.online).length;
+    v.innerHTML = `<div class="kpis"><div class="kpi"><b>${active.length}</b><span>sesi berjalan</span></div><div class="kpi"><b style="color:${onlineN ? 'var(--good,#1a7f37)' : 'inherit'}">${onlineN}</b><span>murid online</span></div><div class="kpi"><b style="color:${active.some(awayNow) ? 'var(--bad)' : 'inherit'}">${active.filter(awayNow).length}</b><span>keluar app sekarang</span></div><div class="kpi"><b>${done.length}</b><span>main 12 jam terakhir</span></div></div>
+      <div class="panel-head"><h2 class="h3">Sesi berjalan</h2><div class="row"><span class="note">Diperbarui ${hm(now)} · tiap 5 detik</span>
         ${active.length ? `<button class="chip danger" data-endall="1" data-armed="${LIVE_ARM === 'all' ? 1 : 0}">${ic('stop')} ${LIVE_ARM === 'all' ? 'Ketuk lagi: akhiri semua' : 'Akhiri semua sesi'}</button>` : ''}</div></div>
       ${active.length ? `<div class="live">${active.map((r) => `<div class="lv ${awayNow(r) ? 'away' : ''}">
         <div class="who">${avaHTML(r.name, r.photo, '')}<div><b>${esc(r.name)}</b><span>${esc(r.class_name || 'Tanpa kelas')} · <span class="han">${esc(r.decks.map(nm).join('、'))}</span>${r.mode === 'mw' ? ' · 量词' : ''}</span></div></div>
         <div>${status(r)}</div>
         ${r.cur ? `<div class="mirror" title="Kartu yang sedang dilihat murid"><span class="han">${esc(r.cur.h)}</span><span class="py">${esc(r.cur.p)}</span><span class="mn">${esc(r.cur.m)}</span></div>` : ''}
         <div class="prog"><i style="width:${r.planned ? Math.min(100, (r.done / r.planned) * 100) : 0}%"></i></div>
-        <div class="foot"><span>${r.done}${r.planned ? `/${r.planned}` : ''} kartu · mulai ${new Date(r.started_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span><span style="color:${r.away_count ? 'var(--bad)' : 'inherit'}">Keluar ${r.away_count}× · ${dur(r.away_ms + (r.state === 'away' ? now - (r.state_since || now) : 0))}</span><span style="color:${r.rush ? 'var(--warn, #b8860b)' : 'inherit'}">Asal tekan ${r.rush}× · clue ${r.clues}</span></div>
+        <div class="foot"><span>${r.done}${r.planned ? `/${r.planned}` : ''} kartu · mulai ${dt(r.started_at, now)}</span><span style="color:${r.away_count ? 'var(--bad)' : 'inherit'}">Keluar ${r.away_count}× · ${dur(r.away_ms + (r.state === 'away' ? now - (r.state_since || now) : 0))}</span><span style="color:${r.rush ? 'var(--warn, #b8860b)' : 'inherit'}">Asal tekan ${r.rush}× · clue ${r.clues}</span></div>
         <div class="acts"><button class="chip" data-warn="${esc(r.student_id)}">${ic('alert')} Peringatkan</button><button class="chip" data-chatto="${esc(r.student_id)}">${ic('chat')} Pesan</button><button class="chip danger" data-endrun="${esc(r.id)}" data-armed="${LIVE_ARM === r.id ? 1 : 0}">${ic('stop')} ${LIVE_ARM === r.id ? 'Ketuk lagi' : 'Akhiri sesi'}</button></div>
         ${msgInfo(r)}
       </div>`).join('')}</div>` : '<div class="panel empty"><b>Belum ada yang belajar</b>Sesi murid muncul di sini begitu mereka menekan Mulai.</div>'}
-      ${done.length ? `<div class="panel" style="margin-top:16px"><div class="panel-head"><h2 class="h3">Baru selesai</h2></div><div class="tablewrap"><table class="table"><thead><tr><th>Murid</th><th>Selesai</th><th>Kartu</th><th>Keluar app</th><th>Skor</th></tr></thead><tbody>
-        ${done.map((r) => `<tr><td><b>${esc(r.name)}</b>${r.ended_by === 'teacher' ? ' <span class="pill warn">diakhiri guru</span>' : r.ended_by === 'self' ? ' <span class="pill mute">diakhiri murid</span>' : ''}</td><td>${new Date(r.finished_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</td><td>${r.total}</td><td>${r.away_count ? `<span class="pill bad">${r.away_count}× · ${dur(r.away_ms)}</span>` : '<span class="pill good">0×</span>'}</td><td>${scoreTag(r.score)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
+      ${roster.length ? `<div class="panel" style="margin-top:16px"><div class="panel-head"><h2 class="h3">Status murid</h2><span class="note">${onlineN} online · ${roster.length} murid</span></div>
+        <div class="roster">${roster.map((s) => `<div class="rost ${s.online ? 'on' : 'off'}">${avaHTML(s.name, s.photo, 'sm')}
+          <div class="ri"><b>${esc(s.name)}</b><span>${esc(s.class_name || 'Tanpa kelas')}</span></div>
+          <div class="rs">${s.online ? '<span class="pill good"><span class="d"></span>Online</span>' : '<span class="pill mute"><span class="d"></span>Offline</span>'}<small>${s.online ? 'sedang main' : (s.last_play ? 'terakhir: ' + ago(s.last_play, now) : 'belum pernah main')}</small></div>
+        </div>`).join('')}</div></div>` : ''}
+      ${done.length ? `<div class="panel" style="margin-top:16px"><div class="panel-head"><h2 class="h3">Riwayat main · 12 jam terakhir</h2></div><div class="tablewrap"><table class="table"><thead><tr><th>Murid</th><th>Mulai</th><th>Selesai</th><th>Kartu</th><th>Keluar app</th><th>Skor</th></tr></thead><tbody>
+        ${done.map((r) => `<tr><td><b>${esc(r.name)}</b>${r.ended_by === 'teacher' ? ' <span class="pill warn">diakhiri guru</span>' : r.ended_by === 'self' ? ' <span class="pill mute">diakhiri murid</span>' : ''}</td><td>${dt(r.started_at, now)}</td><td>${dt(r.finished_at, now)}</td><td>${r.total}</td><td>${r.away_count ? `<span class="pill bad">${r.away_count}× · ${dur(r.away_ms)}</span>` : '<span class="pill good">0×</span>'}</td><td>${scoreTag(r.score)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
   };
   LIVE_DRAW = draw;
   stopLive(); await draw(); if (S.view === 'teach' && S.ttab === 'live') liveT = setInterval(draw, 5000);

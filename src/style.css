@@ -280,6 +280,15 @@ code { font: 600 13px ui-monospace, SFMono-Regular, Menlo, monospace; background
 .live { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
 .lv { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 .lv.away { border-color: var(--bad); box-shadow: 0 0 0 3px var(--bad-soft); }
+.roster { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.rost { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; }
+.rost.on { border-color: var(--good); background: var(--good-soft); }
+.rost .ri { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+.rost .ri b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rost .ri span { font-size: 12px; color: var(--muted); }
+.rost .rs { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; text-align: right; }
+.rost .rs small { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.rost.on .rs small { color: var(--good); }
 .lv .who { display: flex; align-items: center; gap: 10px; }
 .lv .who .avatar { width: 38px; height: 38px; border-radius: 12px; font-size: 16px; }
 .lv .who b { display: block; font-size: 15px; }

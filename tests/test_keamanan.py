@@ -354,7 +354,7 @@ check('Cloze: sumber manual tercatat', _cg[1].get('source') == 'manual')
 _hc2 = next((c for c in _ct['cards'] if c['deck_id'].startswith('hsk1') and c['id'] != _cid), None)
 if _hc2:
     _no = SA.req('POST', '/api/cloze', {'card_id': _hc2['id']})
-    check('Cloze: tanpa kalimat & tanpa AI ditolak rapi (503)', _no[0] == 503, _no)
+    check('Cloze: kata HSK pun punya kalimat bawaan offline', _no[0] == 200 and _hc2['h'] in _no[1].get('s', '') and _no[1].get('source') == 'builtin', _no[1])
 check('Cloze: kartu tak ada ditolak', SA.req('POST', '/api/cloze', {'card_id': 'tidakada'})[0] == 404)
 check('Cloze: tanpa login ditolak', SX.req('POST', '/api/cloze', {'card_id': _cid})[0] == 401)
 

@@ -1140,11 +1140,21 @@ export async function onRequest(ctx) {
           (SELECT created_at FROM messages m WHERE m.user_id = r.user_id ORDER BY created_at DESC LIMIT 1) AS msg_at,
           (SELECT seen_at FROM messages m WHERE m.user_id = r.user_id ORDER BY created_at DESC LIMIT 1) AS msg_seen
         FROM runs r JOIN users u ON u.id = r.user_id
-        WHERE (r.finished_at IS NULL AND r.last_seen > ?1) OR r.finished_at > ?2
-        ORDER BY r.started_at DESC LIMIT 200`).bind(t - 15 * 60e3, t - 30 * 60e3).all()).results;
+        WHERE (r.finished_at IS NULL AND r.last_seen > ?1) OR r.finished_at > ?2 OR r.started_at > ?2
+        ORDER BY r.started_at DESC LIMIT 400`).bind(t - 15 * 60e3, t - 12 * 3600e3).all()).results;
+      // Daftar semua murid aktif + status online/offline + kapan terakhir main
+      const roster = (await db.prepare(`SELECT u.id, u.display_name, u.class_name, u.photo,
+          (SELECT MAX(r.last_seen) FROM runs r WHERE r.user_id = u.id) AS last_seen,
+          (SELECT MAX(r.started_at) FROM runs r WHERE r.user_id = u.id) AS last_play,
+          (SELECT COUNT(*) FROM runs r WHERE r.user_id = u.id AND r.finished_at IS NULL AND r.last_seen > ?1) AS live_runs
+        FROM users u WHERE u.role = 'student' AND u.active = 1
+        ORDER BY u.class_name, u.display_name`).bind(t - 15 * 60e3).all()).results;
       return json({ now: t, runs: rows.map((r) => ({ ...fmtRun(r), name: r.display_name, class_name: r.class_name, planned: r.planned, done: r.done,
         state: r.state, state_since: r.state_since, last_seen: r.last_seen, msg_at: r.msg_at, msg_seen: r.msg_seen, photo: r.photo ? '/api/img/' + r.photo : '',
-        cur: (!r.finished_at && r.cur_card && r.state === 'active') ? (() => { const x = String(r.cur || '').split('\u001f'); return x[0] ? { h: x[0], p: x[1] || '', m: x[2] || '' } : null; })() : null })) });
+        cur: (!r.finished_at && r.cur_card && r.state === 'active') ? (() => { const x = String(r.cur || '').split('\u001f'); return x[0] ? { h: x[0], p: x[1] || '', m: x[2] || '' } : null; })() : null })),
+        roster: roster.map((s) => ({ id: s.id, name: s.display_name, class_name: s.class_name, photo: s.photo ? '/api/img/' + s.photo : '',
+          last_seen: s.last_seen || 0, last_play: s.last_play || 0,
+          online: !!(s.live_runs && s.last_seen && t - s.last_seen <= 60e3) })) });
     }
 
     fail(404, 'Tidak ditemukan.');
