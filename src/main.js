@@ -7,7 +7,7 @@ import { pinyin as pyPro } from 'pinyin-pro';
 import LESSONS from './data/lessons.json';
 
 const APP = 'Alvaro Mandarin Flashcard Tamer';
-const APP_VERSION = '2026.10.29-pantau12j';
+const APP_VERSION = '2026.11.05-rapi';
 const BUILD = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev';
 
 /* ================= helpers ================= */
@@ -389,7 +389,7 @@ function renderLearn() {
       <label class="field" for="spCount">Jumlah sesi<input id="spCount" type="number" inputmode="numeric" min="1" max="100" value="${Math.max(1, ps.length)}"></label>
       <p class="note" style="flex:1;min-width:180px;padding-bottom:10px">${pool} kartu dari kategori yang dipilih. Pilih sesi yang mau dipelajari sekarang.</p>
       <div class="parts">${ps.map((p, i) => `<button class="part ${dp.includes(i) ? 'ok' : ''}" data-part="${i}" aria-pressed="${S.split.part === i}">Sesi ${i + 1}<small>${dp.includes(i) ? '✓ selesai · ' : ''}${p.length} kartu</small></button>`).join('') || '<span class="note">Pilih kategori dulu.</span>'}</div>
-    </div>` : `<p class="note" style="margin:-6px 0 16px">${kindNow() === 'mw' ? 'Kuis 量词: tebak kata satuan yang tepat untuk tiap benda, misalnya 一<b>本</b>书.' : kindNow() === 'cloze' ? 'Isi rumpang: lengkapi kalimat dengan kata yang tepat — ketik (pinyin/hanzi) atau pilih. Arti kalimat ditampilkan di depan. Kalimat dibuat otomatis jika belum ada.' : kindNow() === 'type' ? 'Latihan ketik: lihat hanzi, lalu ketik pinyin-nya tanpa dikasih dulu — mengetik sambil menebak bacaannya.' : kindNow() === 'trans' ? 'Terjemah kalimat: baca kalimat Mandarin, coba terjemahkan ke bahasa Indonesia, lalu buka kunci & nilai dirimu.' : 'Ketuk kategori untuk menambahkannya ke keranjang, lalu tekan <b>Mulai</b> di bawah. Nilai 1 & 2 diulang di sesi ini, 3 muncul besok, 4 muncul 3 hari lagi.'}</p>`}
+    </div>` : (() => { const h = kindNow() === 'mw' ? 'Kuis 量词: tebak kata satuan yang tepat untuk tiap benda, misalnya 一<b>本</b>书.' : kindNow() === 'cloze' ? 'Isi rumpang: lengkapi kalimat dengan kata yang tepat — ketik (pinyin/hanzi) atau pilih. Arti kalimat ditampilkan di depan. Kalimat dibuat otomatis jika belum ada.' : kindNow() === 'type' ? 'Latihan ketik: lihat hanzi, lalu ketik pinyin-nya tanpa dikasih dulu — mengetik sambil menebak bacaannya.' : kindNow() === 'trans' ? 'Terjemah kalimat: baca kalimat Mandarin, coba terjemahkan ke bahasa Indonesia, lalu buka kunci & nilai dirimu.' : ''; return h ? `<p class="note" style="margin:-6px 0 16px">${h}</p>` : ''; })()}
     ${hskLevels.length ? `<div class="sec-title">${ic('book2')} HSK 3.0</div><div class="decks hsk-row">${hskLevels.map(hskCard).join('')}</div>
       ${HSK_OPEN && hskLessons.length ? `<div class="hsk-open"><div class="hsk-open-bar"><b>级${HSK_OPEN} · ${hskLessons.length} pelajaran</b><span class="spacer"></span><button class="btn sm" data-studyhsk="${HSK_OPEN}">${ic('play')} Belajar semua</button><button class="chip" data-babpick="${HSK_OPEN}">${ic('list')} Per bab</button><button class="chip" data-hsk="${HSK_OPEN}">${ic('x')} Tutup</button></div>
         <div class="decks">${hskLessons.map(deckCard).join('')}</div></div>` : '<p class="note" style="margin:-4px 0 14px">Ketuk salah satu kartu HSK di atas untuk membuka semua pelajarannya.</p>'}` : ''}
@@ -1554,7 +1554,7 @@ async function renderHist() {
 }
 
 /* ================= Kartu (editor) ================= */
-const ED = { shared: true, deliverOpen: false, deck: null, tab: 'add', text: '', rows: [], cache: {}, note: '', newOpen: false, newColor: COLORS[0], list: [], armDeck: false, armCard: null, renameColor: null };
+const ED = { shared: true, deliverOpen: false, deck: null, tab: 'add', addMode: 'auto', text: '', pairZh: '', pairId: '', rows: [], cache: {}, note: '', newOpen: false, newColor: COLORS[0], list: [], armDeck: false, armCard: null, renameColor: null };
 const EMOJIS = '🍎🍌🍊🍇🍉🍓🍒🍑🥭🍍🥥🥝🥑🍋🥕🌽🥦🥬🥒🍆🍅🥔🧅🧄🍄🥜🍚🍜🍞🥟🍗🍔🍕🍟🍰🍪🍫🍬🍦🥛☕🍵🧃💧🐶🐱🐭🐰🐼🐻🐨🐯🦁🐮🐷🐵🐔🐦🐧🦆🐟🐬🐳🦋🐝🐞🐍🐢🦒🐘🦓🐴🦄📚✏️🖊️📏✂️📎🎒💻📱⌚🔑🚪🪑🛏️💡📺🚗🚌🚲✈️🚢🚀⚽🏀🎸🎹🎨🎁🎈☀️🌙⭐☁️🌧️❄️🌈🔥🌳🌸🏠🏫🏥👨👩👦👧👶👴👵🙂😄😢😠😮😴🤒😋❤️👍👋🙏👀👂👃👄✋🦶'.match(/\p{Extended_Pictographic}️?(?:‍\p{Extended_Pictographic}️?)*/gu);
 const editableDecks = () => DECKS.filter((d) => d.editable);
 function statusPill(d) {
@@ -1626,7 +1626,11 @@ function deckPane(d) {
 }
 const HEAD = '<div class="rows-head"><span></span><span>汉字</span><span>Pinyin</span><span>Arti</span><span>English</span><span>量词</span><span></span></div>';
 function bulkHTML() {
-  return `<div class="bulk">
+  const modeSeg = `<div class="seg" role="group" aria-label="Cara menambah" style="margin-bottom:12px">
+    <button type="button" data-act="automode" aria-pressed="${ED.addMode === 'auto'}">${ic('sparkle')} Otomatis</button>
+    <button type="button" data-act="pairmode" aria-pressed="${ED.addMode === 'pair'}">${ic('edit')} Berpasangan</button></div>`;
+  if (ED.addMode === 'pair') return modeSeg + pairHTML();
+  return modeSeg + `<div class="bulk">
     <div class="stack">
       <label class="field" for="bulkText">Satu kata per baris<textarea id="bulkText" spellcheck="false" placeholder="我&#10;他&#10;你&#10;骄傲&#10;apel">${esc(ED.text)}</textarea></label>
       <p class="note">Boleh hanzi, bahasa Indonesia, atau bahasa Inggris. Pinyin, arti, dan English terisi otomatis, dan semuanya bisa kamu ubah.</p>
@@ -1634,15 +1638,28 @@ function bulkHTML() {
     </div>
     <div class="stack" style="min-width:0">${HEAD}
       <div class="rows" id="rows">${rowsHTML()}</div>
-      <div class="row"><span class="note" id="bulkNote">${esc(ED.note)}</span><span class="spacer"></span><button class="btn" data-act="savebulk" ${ED.rows.length ? '' : 'disabled'}>${ic('check')} Simpan ${ED.rows.length || ''} kartu</button></div>
+      <div class="row"><span class="note" id="bulkNote">${esc(ED.note)}</span><span class="spacer"></span><button class="btn ghost" data-act="previewbulk" ${ED.rows.length ? '' : 'disabled'}>${ic('eye')} Preview penuh</button><button class="btn" data-act="savebulk" ${ED.rows.length ? '' : 'disabled'}>${ic('check')} Simpan ${ED.rows.length || ''} kartu</button></div>
     </div>
+  </div>`;
+}
+// Mode berpasangan: hanzi di kiri, arti Indonesia di kanan, dihubungkan tali visual baris-per-baris
+function pairHTML() {
+  return `<div class="pairpane">
+    <p class="note" style="margin:-2px 0 10px">Tulis <b>hanzi</b> di kiri dan <b>arti</b>-mu di kanan — satu per baris, berurutan. Tiap baris kiri berpasangan dengan baris kanan di sebelahnya (lihat talinya). Pinyin & English terisi otomatis.</p>
+    <div class="pairin">
+      <label class="field" for="pairZh">汉字 / Mandarin<textarea id="pairZh" spellcheck="false" placeholder="我爱你&#10;你爱我&#10;苹果">${esc(ED.pairZh)}</textarea></label>
+      <label class="field" for="pairId">Arti (Indonesia)<textarea id="pairId" spellcheck="false" placeholder="aku cinta kamu&#10;kamu cinta aku&#10;apel">${esc(ED.pairId)}</textarea></label>
+    </div>
+    <div class="pairprevwrap"><div class="pairhdr"><b>Pratinjau pasangan</b><span class="note" id="pairNote"></span></div>
+      <div id="pairPrev"></div></div>
+    <div class="row"><span class="spacer"></span><button class="btn" data-act="savepair" id="pairSave" disabled>${ic('check')} Simpan</button></div>
   </div>`;
 }
 const rowPic = (r) => (r.picSet !== undefined ? r.picSet : S.hints ? r.pic || r.emoji || '' : '');
 function rowHTML(r, i, kind) {
   const p = kind === 'new' ? rowPic(r) : r.pic || '';
   const ph = p ? picHTML({ pic: p }) || ic('smile') : ic('smile');
-  const src = kind === 'new' ? ({ kamus: 'Dari kamus Alvaro', ai: 'Terjemahan otomatis · periksa lagi', manual: r.m ? 'Diisi manual' : 'Arti belum ditemukan, isi sendiri' }[r.from] || '') : '';
+  const src = kind === 'new' ? ({ kamus: 'Dari kamus Alvaro', google: 'Google Translate · periksa lagi', ai: 'Terjemahan otomatis · periksa lagi', manual: r.m ? 'Diisi manual' : 'Arti belum ditemukan, isi sendiri' }[r.from] || '') : '';
   const armed = kind === 'old' && ED.armCard === r.id;
   return `<div class="crow" data-row="${i}" data-kind="${kind}">
     <button class="emo-btn" data-emo="${i}" aria-label="Pilih gambar atau emoji (opsional)" title="Gambar/emoji (opsional)">${ph}</button>
@@ -1658,6 +1675,91 @@ function rowHTML(r, i, kind) {
 function rowsHTML() {
   if (!ED.rows.length) return '<div class="empty" style="border:1px dashed var(--line-2);border-radius:16px"><b>Belum ada kata</b>Ketik di kotak sebelah, satu kata per baris.</div>';
   return ED.rows.map((r, i) => rowHTML(r, i, 'new')).join('');
+}
+// Preview penuh: tampilkan tiap kartu baru persis seperti yang dilihat murid (depan & belakang)
+function pvPy(h, p) {
+  const chars = [...(h || '')].filter((c) => HAN_RE.test(c));
+  if (!chars.length) return esc(p || '');
+  return chars.map((c) => `<i class="t${toneOf(c)}">${esc(pyOf(c))}</i>`).join(' ');
+}
+function pvCardHTML(r) {
+  const pic = rowPic(r), ph = pic ? (picHTML({ pic }) || '') : '';
+  return `<div class="pvcard">
+    <div class="pvface pvfront">
+      ${ph ? `<div class="pvpic">${ph}</div>` : ''}
+      <div class="pvhz">${esc(r.h || '—')}</div>
+      <div class="pvpy">${pvPy(r.h, r.p)}</div>
+    </div>
+    <div class="pvface pvback">
+      <div class="pvm">${esc(r.m || '—')}</div>
+      ${r.en ? `<div class="pven">${esc(r.en)}</div>` : ''}
+      ${r.mw ? `<div class="pvmw">量词 ${esc(r.mw)}</div>` : ''}
+    </div>
+  </div>`;
+}
+function openBulkPreview() {
+  if (!ED.rows.length) { toast('Belum ada kartu untuk dipreview.'); return; }
+  const miss = ED.rows.filter((r) => !r.h || !r.m).length;
+  const body = `<p class="note" style="margin:-4px 0 12px">Begini tampilan kartu untuk murid — depan (hanzi + pinyin) dan belakang (arti).${miss ? ` <b>${miss} kartu</b> masih ada kolom kosong, lengkapi dulu sebelum simpan.` : ''}</p>
+    <div class="pvgrid">${ED.rows.map(pvCardHTML).join('')}</div>`;
+  showOverlay({ cls: 'pv', icon: 'eye', title: `Preview ${ED.rows.length} kartu`, body, buttons: [['ok', 'Tutup']] });
+}
+// ---- Mode berpasangan: pratinjau tali + simpan ----
+function tonePy(h) { try { return pyPro(h, { toneType: 'symbol', type: 'array' }).join(' '); } catch (_) { return ''; } }
+function pairRows() {
+  const zh = ED.pairZh.split(/\r?\n/).map((s) => s.trim());
+  const idn = ED.pairId.split(/\r?\n/).map((s) => s.trim());
+  const n = Math.max(zh.length, idn.length);
+  const rows = [];
+  for (let i = 0; i < n; i++) {
+    const h = (zh[i] || '').replace(/\s+/g, ''), m = idn[i] || '';
+    if (!h && !m) continue;
+    const okH = !!h && HAN_RE.test(h) && [...h].length <= 12;
+    rows.push({ h, m, ok: okH && !!m, badH: !!h && !okH });
+  }
+  return rows;
+}
+function renderPairPreview() {
+  const box = document.getElementById('pairPrev'); if (!box) return;
+  const rows = pairRows();
+  const good = rows.filter((r) => r.ok).length;
+  if (!rows.length) { box.innerHTML = '<div class="empty" style="border:1px dashed var(--line-2);border-radius:14px"><b>Belum ada pasangan</b>Isi kedua kolom di atas.</div>'; }
+  else box.innerHTML = `<div class="pairgrid">${rows.map((r) => `<div class="prow ${r.ok ? 'ok' : 'bad'}">
+      <div class="pcell pcl">${r.h ? `<span class="ph">${esc(r.h)}</span><span class="ppy">${r.badH ? 'bukan hanzi' : esc(tonePy(r.h))}</span>` : '<span class="pmiss">(kosong)</span>'}</div>
+      <div class="pcell pcc"><svg class="rope" viewBox="0 0 100 44" preserveAspectRatio="none" aria-hidden="true"><path d="M2,22 C38,22 62,22 98,22"/></svg><span class="knot"></span></div>
+      <div class="pcell pcr">${r.m ? esc(r.m) : '<span class="pmiss">(kosong)</span>'}</div>
+    </div>`).join('')}</div>`;
+  const note = document.getElementById('pairNote');
+  if (note) note.textContent = `${good} pasangan siap` + (rows.length - good ? ` · ${rows.length - good} belum lengkap/valid` : '');
+  const sv = document.getElementById('pairSave'); if (sv) { sv.disabled = !good; sv.innerHTML = `${ic('check')} Simpan ${good || ''} kartu`; }
+}
+async function savePair() {
+  const d = deckOf(ED.deck); if (!d) return;
+  const rows = pairRows().filter((r) => r.ok);
+  if (!rows.length) { toast('Belum ada pasangan yang lengkap.'); return; }
+  const btn = document.getElementById('pairSave'); if (btn) btn.disabled = true;
+  const note = document.getElementById('pairNote'); if (note) note.textContent = 'Menyiapkan pinyin…';
+  // pinyin + English akurat dari server (arti tetap pakai punya guru)
+  const meta = {};
+  try {
+    for (let i = 0; i < rows.length; i += 60) {
+      const part = rows.slice(i, i + 60).map((r) => r.h);
+      const r = await api.translate(part);
+      part.forEach((h, k) => { const it = r.items[k]; if (it) meta[h] = it; });
+    }
+  } catch (_) { /* pinyin offline cadangan */ }
+  const cards = rows.map((r) => { const it = meta[r.h] || {}; return { h: r.h, p: it.p || tonePy(r.h), m: r.m, en: it.en || '', mw: it.mw || '' }; });
+  try {
+    let added = 0, skipped = [];
+    for (let i = 0; i < cards.length; i += 100) {
+      const res = await api.bulkCards(d.id, cards.slice(i, i + 100));
+      added += res.added; skipped = skipped.concat(res.skipped);
+    }
+    const wp = store.get('wantpub', []);
+    if (wp.includes(ED.deck)) { store.set('wantpub', wp.filter((x) => x !== ED.deck)); try { await api.submitDeck(ED.deck); } catch (_) { /* - */ } }
+    toast(`${added} kartu tersimpan.${skipped.length ? ` ${skipped.length} dilewati (sudah ada).` : ''}`);
+    ED.pairZh = ''; ED.pairId = ''; await reloadContent(); renderCards(); burst(16);
+  } catch (e) { toast(e.message); if (btn) btn.disabled = false; }
 }
 function listHTML(d) {
   ED.list = d.cards.map((c) => ({ ...c }));
@@ -1677,6 +1779,13 @@ function bindDeckPane(d) {
   }
   const ta = $('#bulkText');
   if (ta) ta.addEventListener('input', () => { ED.text = ta.value; clearTimeout(trT); trT = setTimeout(syncRows, 650); });
+  const pz = $('#pairZh'), pid = $('#pairId');
+  if (pz || pid) {
+    const upd = () => { if (pz) ED.pairZh = pz.value; if (pid) ED.pairId = pid.value; renderPairPreview(); };
+    if (pz) pz.addEventListener('input', upd);
+    if (pid) pid.addEventListener('input', upd);
+    renderPairPreview();
+  }
   $('#renameForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     try { await api.updateDeck({ id: d.id, zh: $('#rdz').value, idn: $('#rdi').value, color: ED.renameColor || d.color }); ED.renameColor = null; await reloadContent(); toast('Nama kategori disimpan.'); renderCards(); }
@@ -1693,8 +1802,8 @@ async function syncRows() {
         const part = missing.slice(i, i + 60);
         const r = await api.translate(part);
         part.forEach((line, k) => { const it = r.items[k]; if (it) ED.cache[line] = { ...it, line }; });
-        ED.note = !r.ai && r.items.some((x) => x.from === 'manual') ? 'Terjemahan otomatis (AI) belum aktif. Kata di luar kamus perlu diisi artinya.'
-          : r.aiError ? 'Terjemahan otomatis sedang gangguan. Isi arti yang kosong secara manual.' : '';
+        ED.note = r.items.some((x) => x.from === 'manual' && (!x.h || !x.m)) ? 'Beberapa kata belum ketemu terjemahannya — isi/periksa manual di kolomnya.'
+          : r.gError ? 'Google Translate sedang gangguan untuk sebagian kata. Periksa arti yang kosong.' : '';
       }
     } catch (e) { ED.note = e.message; }
   }
@@ -1704,6 +1813,7 @@ async function syncRows() {
   $('#bulkNote').textContent = ED.note || '';
   const sb = document.querySelector('[data-act="savebulk"]');
   sb.disabled = !ED.rows.length; sb.innerHTML = `${ic('check')} Simpan ${ED.rows.length || ''} kartu`;
+  const pv = document.querySelector('[data-act="previewbulk"]'); if (pv) pv.disabled = !ED.rows.length;
 }
 async function saveBulk() {
   const bad = ED.rows.findIndex((r) => !r.h || !r.m);
@@ -1772,8 +1882,10 @@ async function renderTeach() {
   if (!TTABS.some(([k]) => k === S.ttab)) S.ttab = 'live';
   const pend = pendingCount();
   $('#view').innerHTML = `<div class="page-head"><div><p class="eyebrow">Panel guru</p><h1 class="h1">Halo, ${esc(ME.display_name)}</h1><p class="sub">Pengaturan dan kartu yang kamu ubah langsung berlaku untuk semua murid.</p></div></div>
+    <div id="cfReminder" class="cfbar" hidden></div>
     <div class="tabs" role="tablist">${TTABS.map(([k, i, l]) => `<button role="tab" data-ttab="${k}" aria-selected="${S.ttab === k}">${ic(i)} ${l}${k === 'approve' && pend ? `<span class="n">${pend}</span>` : ''}</button>`).join('')}</div><div id="tview"><p class="note">Memuat…</p></div>`;
   armed = null;
+  loadCfReminder();
   const tab = S.ttab, draw = () => ({ live: tLive, students: tStudents, scores: tScores, progress: tProgress, time: tTime, approve: tApprove, stories: tStories, cloze: tCloze, settings: tSettings })[tab]();
   if (['settings', 'approve', 'stories', 'cloze'].includes(tab)) { draw(); return; }
   try { STUDENTS = await api.students(); } catch (e) { toast(e.message); }
@@ -1831,6 +1943,7 @@ async function tLive() {
   });
   const draw = async () => {
     if (S.view !== 'teach' || S.ttab !== 'live') { stopLive(); return; }
+    if (document.hidden) return; // hemat request Cloudflare: jangan polling saat tab tak aktif
     let d; try { d = await api.live(); } catch (_) { return; }
     const v = $('#liveArea'); if (!v || S.ttab !== 'live' || S.view !== 'teach') return;
     const now = d.now, nm = (id) => deckOf(id)?.zh || id;
@@ -2124,7 +2237,18 @@ function tSettings() {
   <form class="panel stack" id="pwForm" style="margin-top:20px;max-width:560px" novalidate><h2 class="h3">Ganti password guru</h2>
     <div class="formgrid"><label class="field" for="po">Password lama<input id="po" type="password" autocomplete="current-password" maxlength="128"></label>
     <label class="field" for="pn">Password baru (min. 10)<input id="pn" type="password" autocomplete="new-password" maxlength="128"></label></div>
-    <div><button class="btn secondary" type="submit">${ic('key')} Ganti password</button></div><p class="note" id="pwnote"></p></form>`;
+    <div><button class="btn secondary" type="submit">${ic('key')} Ganti password</button></div><p class="note" id="pwnote"></p></form>
+  <div class="panel stack" id="cfPanel" style="margin-top:20px"><h2 class="h3">${ic('snow')} Cloudflare & Tagihan</h2>
+    <div class="cf-safe"><b>${ic('check')} Di paket Free, kamu tidak bisa ditagih.</b> Kalau limit harian terlampaui, aplikasi cuma berhenti sementara (error) sampai reset tengah malam UTC — <b>bukan</b> ditagih. Tagihan hanya muncul kalau kamu sendiri meng-upgrade ke "Workers Paid".</div>
+    <div id="cfUsage"><p class="note">Memuat pemakaian hari ini…</p></div>
+    <details class="cf-guide"><summary>Checklist biar dijamin gratis</summary>
+      <ul class="cf-list">
+        <li>Tetap di paket <b>Free</b>. Jangan klik "Upgrade to Workers Paid".</li>
+        <li>Boleh pasang kartu/metode bayar untuk verifikasi domain — itu tidak menagih Workers/Pages/D1 selama kamu tidak upgrade.</li>
+        <li>Batas harian Free: ±100.000 request Worker, 100.000 tulis D1, 5 juta baca D1, 5 GB penyimpanan. Lewat batas = berhenti sampai tengah malam UTC, lalu jalan lagi.</li>
+        <li>Tutup tab "Pantau langsung" kalau tidak dipakai — aplikasi sudah otomatis berhenti polling saat tab tak aktif.</li>
+        <li>Workers AI (opsional) punya jatah gratis harian; kalau habis, fitur AI berhenti sementara, tetap tidak ditagih.</li>
+      </ul></details></div>`;
   $('#acctForm').addEventListener('submit', async (e) => {
     e.preventDefault(); const n = $('#acctnote'); const nm = $('#gname').value.trim(); const ph = $('#gadmin').value.replace(/[^0-9+]/g, '').slice(0, 20);
     if (!nm) { n.textContent = 'Nama tidak boleh kosong.'; return; }
@@ -2141,6 +2265,45 @@ function tSettings() {
     try { await api.changePassword($('#po').value, $('#pn').value); n.textContent = 'Password diganti. Perangkat lain otomatis keluar.'; $('#po').value = ''; $('#pn').value = ''; }
     catch (err) { n.textContent = err.message; }
   });
+  loadCfUsage();
+}
+// Bar pengingat kuota Cloudflare — selalu tampil di atas panel guru
+let CF_CACHE = null, CF_AT = 0;
+async function loadCfReminder() {
+  const bar = document.getElementById('cfReminder'); if (!bar) return;
+  let u = CF_CACHE;
+  if (!u || Date.now() - CF_AT > 60000) { try { u = await api.usage(); CF_CACHE = u; CF_AT = Date.now(); } catch (_) { return; } }
+  if (!document.getElementById('cfReminder')) return;
+  const pReq = Math.min(100, Math.round((u.estReq / u.limits.reqDay) * 100));
+  const pWrite = Math.min(100, Math.round((u.estWrite / u.limits.writeDay) * 100));
+  const pct = Math.max(pReq, pWrite);
+  const lvl = pct >= 85 ? 'bad' : pct >= 60 ? 'warn' : 'ok';
+  const msg = pct >= 85 ? 'Kuota harian hampir penuh — tutup tab yang tak dipakai. Walau penuh, kamu tetap tidak ditagih (berhenti sampai tengah malam UTC).'
+    : pct >= 60 ? 'Pemakaian mulai tinggi. Tetap aman — di paket Free tidak ada tagihan.'
+    : 'Aman. Paket Free, tidak ada tagihan.';
+  bar.className = `cfbar ${lvl}`;
+  bar.hidden = false;
+  bar.innerHTML = `<div class="cfbar-top"><span class="cfbar-ttl">${ic('snow')} Kuota Cloudflare hari ini</span><span class="cfbar-pct">${pct}%</span></div>
+    <div class="cfbar-track"><i style="width:${pct}%"></i></div>
+    <div class="cfbar-msg">${msg} <button class="cfbar-link" data-ttab="settings">Detail</button></div>`;
+}
+function cfMeter(label, val, max) {
+  const pct = Math.min(100, Math.round((val / max) * 100));
+  const lvl = pct >= 85 ? 'bad' : pct >= 60 ? 'warn' : 'ok';
+  return `<div class="cf-m"><div class="cf-ml"><span>${label}</span><span>${val.toLocaleString('id-ID')} / ${max.toLocaleString('id-ID')} <b>(${pct}%)</b></span></div>
+    <div class="cf-bar"><i class="${lvl}" style="width:${pct}%"></i></div></div>`;
+}
+async function loadCfUsage() {
+  const box = document.getElementById('cfUsage'); if (!box) return;
+  let u; try { u = await api.usage(); } catch (_) { box.innerHTML = '<p class="note">Tidak bisa memuat pemakaian sekarang.</p>'; return; }
+  if (!document.getElementById('cfUsage')) return;
+  const L = u.limits;
+  const near = u.estReq >= L.reqDay * 0.6 || u.estWrite >= L.writeDay * 0.6;
+  box.innerHTML = `<p class="note" style="margin:0 0 8px">Perkiraan kasar hari ini (sejak 00:00 UTC) — angka pasti ada di dashboard Cloudflare.</p>
+    ${cfMeter('Request Workers', u.estReq, L.reqDay)}
+    ${cfMeter('Tulis D1 (database)', u.estWrite, L.writeDay)}
+    <div class="cf-stats">${u.answers.toLocaleString('id-ID')} jawaban · ${u.runs} sesi · ${u.logins} login · ${u.cards} kartu baru · ${u.students} murid aktif · ${u.totalCards.toLocaleString('id-ID')}/20.000 total kartu</div>
+    ${near ? '<div class="cf-warn">⚠️ Pemakaian mulai tinggi. Tutup tab yang tidak dipakai & kurangi sesi serentak. Walau terlampaui, kamu tetap tidak ditagih — aplikasi hanya berhenti sampai tengah malam UTC.</div>' : ''}`;
 }
 
 /* ================= event klik ================= */
@@ -2337,6 +2500,10 @@ document.addEventListener('click', async (e) => {
   else if (a === 'submitdeck') { if (deckOf(ED.deck)?.status !== 'private') return; try { await api.submitDeck(ED.deck); await reloadContent(); toast('Terkirim. Kategori tampil untuk teman setelah guru menyetujuinya.'); renderCards(); } catch (err) { toast(err.message); } }
   else if (a === 'hints') { S.hints = !S.hints; savePrefs(); b.setAttribute('aria-checked', S.hints); $('#rows').innerHTML = rowsHTML(); }
   else if (a === 'savebulk') saveBulk();
+  else if (a === 'previewbulk') openBulkPreview();
+  else if (a === 'automode') { if (ED.addMode !== 'auto') { ED.addMode = 'auto'; renderCards(); } }
+  else if (a === 'pairmode') { if (ED.addMode !== 'pair') { ED.addMode = 'pair'; renderCards(); } }
+  else if (a === 'savepair') savePair();
 });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { closeEmoji(); closeAiSheet(); closeWordSheet(); closeGuide(); const dp = document.getElementById('deckPicker'); if (dp) dp.remove(); }
@@ -2375,7 +2542,7 @@ async function refreshContent() {
   if (!ME || ['study', 'done', 'cards'].includes(S.view)) return;
   try { await reloadContent(); shell(); if (S.view === 'learn') renderLearn(); } catch (_) { /* coba lagi nanti */ }
 }
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { checkVersion(); refreshContent(); } });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { checkVersion(); refreshContent(); if (S.view === 'teach' && S.ttab === 'live' && LIVE_DRAW) LIVE_DRAW(); } });
 setInterval(() => { checkVersion(); refreshContent(); }, 5 * 60 * 1000);
 
 /* ================= web app (bisa dipasang di HP) ================= */

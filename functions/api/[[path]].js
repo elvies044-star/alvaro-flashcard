@@ -1157,6 +1157,25 @@ export async function onRequest(ctx) {
           online: !!(s.live_runs && s.last_seen && t - s.last_seen <= 60e3) })) });
     }
 
+    if (path === '/t/usage' && method === 'GET') {
+      needTeacher();
+      const t = now();
+      const d = new Date(t);
+      const dayStart = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+      const one = async (sql, ...bn) => (await db.prepare(sql).bind(...bn).first('n')) || 0;
+      const answers = await one('SELECT COUNT(*) AS n FROM answers WHERE created_at >= ?1', dayStart);
+      const runs = await one('SELECT COUNT(*) AS n FROM runs WHERE started_at >= ?1', dayStart);
+      const logins = await one('SELECT COUNT(*) AS n FROM login_attempts WHERE ts >= ?1', dayStart);
+      const cards = await one('SELECT COUNT(*) AS n FROM cards WHERE created_at >= ?1 AND builtin = 0', dayStart);
+      const totalCards = await one('SELECT COUNT(*) AS n FROM cards');
+      const students = await one("SELECT COUNT(*) AS n FROM users WHERE role = 'student' AND active = 1");
+      // Perkiraan KASAR; angka pasti hanya ada di dashboard Cloudflare.
+      const estReq = answers * 2 + runs * 6 + logins * 2 + students * 40 + 300;
+      const estWrite = answers + runs * 5 + cards + logins;
+      return json({ now: t, dayStart, answers, runs, logins, cards, totalCards, students, estReq, estWrite,
+        limits: { reqDay: 100000, writeDay: 100000, readDay: 5000000, storageMB: 5120 } });
+    }
+
     fail(404, 'Tidak ditemukan.');
   } catch (e) {
     if (e instanceof HttpError) return json({ error: e.message }, e.status);

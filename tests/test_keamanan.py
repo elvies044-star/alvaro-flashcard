@@ -92,6 +92,8 @@ st, runs, _ = T.req('GET', '/api/t/runs?days=30'); check('Guru melihat skor semu
 st, ct, _ = T.req('GET', '/api/t/card-time?days=30'); check('Grafik waktu per kartu', st == 200 and ct[0]['card_h'] == '香蕉' and ct[0]['avg_ms'] == 600000, ct)
 st, dt, _ = T.req('GET', '/api/t/deck-time?days=30&class=3A'); check('Grafik per kelas', st == 200 and len(dt) == 1)
 check('Filter kelas lain kosong', T.req('GET', '/api/t/deck-time?days=30&class=3B')[1] == [])
+st, _usg, _ = T.req('GET', '/api/t/usage'); check('Pemakaian Cloudflare: guru lihat limit harian', st == 200 and _usg['limits']['reqDay'] == 100000 and 'estReq' in _usg, _usg)
+check('Pemakaian Cloudflare: non-guru ditolak', X.req('GET', '/api/t/usage')[0] in (401, 403))
 check('Guru sembunyikan kategori', T.req('POST', '/api/t/settings', {'hidden_decks': ['hewan']})[0] == 200)
 check('Murid tak menerima kategori tersembunyi', not any(d['id'] == 'hewan' for d in S1.req('GET', '/api/content')[1]['decks']))
 check('Murid tak bisa mulai kategori tersembunyi', S1.req('POST', '/api/run/start', {'decks': ['hewan'], 'mode': 'pic'})[0] == 400)
@@ -114,6 +116,9 @@ check('Profil murid menunjukkan izin', S3.req('GET', '/api/me')[1].get('can_crea
 st, tr, _ = S3.req('POST', '/api/translate', {'lines': ['我', '骄傲', 'kucing', '<b>x</b>']})
 check('Terjemahan: kamus + pinyin otomatis', st == 200 and tr['items'][1]['p'] == "jiāo'ào" and tr['items'][1]['m'] == 'sombong' and tr['items'][2]['h'] == '猫' and tr['items'][0]['p'] == 'wǒ', tr)
 check('Terjemahan membersihkan HTML', '<' not in json.dumps(tr))
+# kata HSK di luar 568 bawaan harus tetap terterjemah offline (tanpa internet)
+_hskt = S3.req('POST', '/api/translate', {'lines': ['医院', '旅游', '裤子']})[1]['items']
+check('Terjemahan: kata HSK terterjemah offline', _hskt[0]['m'] == 'rumah sakit' and _hskt[0]['from'] == 'kamus' and _hskt[1]['m'] == 'berwisata' and _hskt[2]['en'] == 'trousers', _hskt)
 st, nd, _ = S3.req('POST', '/api/deck', {'zh': '我的词', 'idn': 'Kata saya'}); did = nd.get('id')
 check('Murid berizin buat kategori (pribadi)', st == 200 and did)
 check('Murid tambah kartu ke kategorinya', S3.req('POST', '/api/cards/bulk', {'deck_id': did, 'cards': [{'h': '我', 'p': 'wǒ', 'm': 'saya'}, {'h': '你', 'p': 'nǐ', 'm': 'kamu'}]})[1].get('added') == 2)

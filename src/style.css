@@ -289,6 +289,66 @@ code { font: 600 13px ui-monospace, SFMono-Regular, Menlo, monospace; background
 .rost .rs { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; text-align: right; }
 .rost .rs small { font-size: 11px; color: var(--muted); white-space: nowrap; }
 .rost.on .rs small { color: var(--good); }
+/* Preview penuh kartu baru */
+.overlay.pv .box { width: min(920px, 100%); text-align: left; }
+.pvgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 4px; }
+.pvcard { display: grid; grid-template-rows: 1fr 1fr; gap: 8px; }
+.pvface { border: 1px solid var(--line); border-radius: 16px; padding: 12px 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 4px; min-height: 92px; }
+.pvfront { background: var(--surface); }
+.pvback { background: var(--brand-soft); }
+.pvpic { font-size: 30px; line-height: 1; margin-bottom: 2px; }
+.pvpic img { width: 40px; height: 40px; object-fit: cover; border-radius: 8px; }
+.pvhz { font-size: 30px; font-weight: 800; line-height: 1.05; }
+.pvpy { font-size: 13px; font-weight: 700; display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; }
+.pvm { font-size: 17px; font-weight: 800; }
+.pven { font-size: 12px; color: var(--muted); font-style: italic; }
+.pvmw { font-size: 12px; font-weight: 700; color: var(--brand); }
+/* Mode berpasangan (tali penghubung) */
+.pairin { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.pairin textarea { min-height: 140px; font-size: 16px; line-height: 1.9; }
+.pairprevwrap { margin-top: 14px; }
+.pairhdr { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.pairgrid { display: flex; flex-direction: column; gap: 8px; }
+.prow { display: grid; grid-template-columns: 1fr 72px 1fr; align-items: stretch; gap: 0; }
+.prow .pcell { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 8px 10px; min-height: 52px; }
+.prow .pcl { background: var(--surface); border: 1px solid var(--line); border-radius: 14px 0 0 14px; border-right: 0; align-items: flex-end; text-align: right; }
+.prow .pcr { background: var(--brand-soft); border: 1px solid var(--line); border-radius: 0 14px 14px 0; border-left: 0; align-items: flex-start; text-align: left; font-weight: 700; }
+.prow .pcc { position: relative; padding: 0; }
+.prow .ph { font-size: 20px; font-weight: 800; line-height: 1.15; }
+.prow .ppy { font-size: 12px; color: var(--muted); font-weight: 700; }
+.prow .pmiss { font-size: 12px; color: var(--muted); font-style: italic; }
+.rope { width: 100%; height: 100%; position: absolute; inset: 0; }
+.rope path { fill: none; stroke: var(--good); stroke-width: 3; stroke-linecap: round; }
+.prow .knot { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; border-radius: 50%; background: var(--good); transform: translate(-50%, -50%); box-shadow: 0 0 0 3px var(--good-soft); }
+.prow.bad .pcl, .prow.bad .pcr { background: var(--surface-2); }
+.prow.bad .rope path { stroke: var(--line-2); stroke-dasharray: 5 5; }
+.prow.bad .knot { background: var(--line-2); box-shadow: none; }
+@media (max-width: 560px) { .pairin { grid-template-columns: 1fr; } .prow { grid-template-columns: 1fr 48px 1fr; } .prow .ph { font-size: 18px; } }
+/* Panel Cloudflare & Tagihan */
+.cf-safe { background: var(--good-soft); color: var(--ink); border: 1px solid var(--good); border-radius: 14px; padding: 12px 14px; font-size: 14px; line-height: 1.5; }
+.cf-safe b { color: var(--good); }
+.cf-m { margin-top: 10px; }
+.cf-ml { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; gap: 10px; }
+.cf-bar { height: 10px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.cf-bar i { display: block; height: 100%; border-radius: 999px; background: var(--good); transition: width .3s; }
+.cf-bar i.warn { background: var(--warn); } .cf-bar i.bad { background: var(--bad); }
+.cf-stats { margin-top: 10px; font-size: 13px; color: var(--muted); }
+.cf-warn { margin-top: 10px; background: var(--warn-soft); color: var(--ink); border: 1px solid var(--warn); border-radius: 12px; padding: 10px 12px; font-size: 13px; line-height: 1.5; }
+.cf-guide { margin-top: 12px; } .cf-guide summary { cursor: pointer; font-weight: 700; font-size: 14px; }
+.cf-list { margin: 10px 0 0; padding-left: 20px; font-size: 13px; line-height: 1.6; color: var(--muted); }
+.cf-list li { margin-bottom: 5px; } .cf-list b { color: var(--ink); }
+/* Bar pengingat kuota Cloudflare (atas panel guru) */
+.cfbar { border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px; margin: 0 0 14px; background: var(--surface); }
+.cfbar.ok { border-color: var(--good); background: var(--good-soft); }
+.cfbar.warn { border-color: var(--warn); background: var(--warn-soft); }
+.cfbar.bad { border-color: var(--bad); background: var(--bad-soft); }
+.cfbar-top { display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+.cfbar-pct { font-variant-numeric: tabular-nums; }
+.cfbar-track { height: 8px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.cfbar-track i { display: block; height: 100%; border-radius: 999px; background: var(--good); transition: width .3s; }
+.cfbar.warn .cfbar-track i { background: var(--warn); } .cfbar.bad .cfbar-track i { background: var(--bad); }
+.cfbar-msg { margin-top: 6px; font-size: 12px; color: var(--muted); line-height: 1.5; }
+.cfbar-link { background: none; border: 0; color: var(--brand); font-weight: 700; cursor: pointer; padding: 0 2px; font-size: 12px; text-decoration: underline; }
 .lv .who { display: flex; align-items: center; gap: 10px; }
 .lv .who .avatar { width: 38px; height: 38px; border-radius: 12px; font-size: 16px; }
 .lv .who b { display: block; font-size: 15px; }
@@ -406,7 +466,7 @@ code { font: 600 13px ui-monospace, SFMono-Regular, Menlo, monospace; background
 .pill.new { background: var(--bad); color: #fff; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pill.priv { color: #b9a0f0; } }
 .sec-title { display: flex; align-items: center; gap: 8px; margin: 6px 0 10px; font-size: 13px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
-.decks + .sec-title { margin-top: 22px; }
+.decks + .sec-title, .stories + .sec-title, .lessons + .sec-title, .frozen-cards + .sec-title, .hsk-open + .sec-title { margin-top: 30px; padding-top: 22px; border-top: 1px solid var(--line); }
 
 /* ===== lanjutkan sesi ===== */
 .resume { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 14px 16px; margin-bottom: 16px; border-radius: 18px; border: 1px solid color-mix(in srgb, var(--brand) 40%, var(--line)); background: var(--brand-soft); }

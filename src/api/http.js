@@ -85,6 +85,7 @@ export const api = {
   saveSettings: (s) => call('POST', '/t/settings', s),
   approve: (id, approve) => call('POST', '/t/approve', { id, approve }),
   live: () => call('GET', '/t/live'),
+  usage: () => call('GET', '/t/usage'),
   endRun: (p) => call('POST', '/t/end-run', p),
   deliverMine: (deck_id, to) => call('POST', '/deliver', { deck_id, to }),
   classmates: () => call('GET', '/classmates'),

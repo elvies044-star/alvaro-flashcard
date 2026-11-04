@@ -2,6 +2,7 @@
 // Urutan: kamus bawaan (568 kartu) → AI Cloudflare (jika dipasang) → pinyin offline.
 import { pinyin } from 'pinyin-pro';
 import builtin from '../src/data/builtin.json';
+import hsk from '../src/data/hsk.json';
 import { BASIC } from './basic_dict.js';
 import { EN } from './en_dict.js';
 
@@ -13,6 +14,13 @@ for (const c of builtin.cards) {
   if (!BY_H.has(c.h)) BY_H.set(c.h, c);
   const k = c.m.toLowerCase().trim();
   if (!BY_M.has(k)) BY_M.set(k, c);
+}
+// 1998 kata HSK 3.0 — sudah punya arti Indonesia + English → terjemah offline andal
+for (const c of hsk.cards) {
+  if (!c.h || !c.m) continue;
+  if (!BY_H.has(c.h)) BY_H.set(c.h, { h: c.h, p: c.p || '', m: c.m, mw: c.mw || '', pic: c.pic || '' });
+  const ref = BY_H.get(c.h);
+  for (const part of String(c.m).split('/').map((x) => x.trim().toLowerCase())) if (part && !BY_M.has(part)) BY_M.set(part, ref);
 }
 // kamus dasar: dipakai bila kata tidak ada di 568 kartu bawaan
 for (const line of BASIC.trim().split('\n')) {
@@ -29,6 +37,12 @@ for (const line of EN.trim().split('\n')) {
   const [h, e] = line.split('|'); if (!h || !e) continue;
   EN_H.set(h, e);
   for (const part of e.split('/').map((x) => x.replace(/\(.*?\)/g, '').trim().toLowerCase())) if (part && !BY_E.has(part)) BY_E.set(part, h);
+}
+// English dari kartu HSK
+for (const c of hsk.cards) {
+  if (!c.h || !c.en) continue;
+  if (!EN_H.has(c.h)) EN_H.set(c.h, c.en);
+  for (const part of String(c.en).split('/').map((x) => x.replace(/\(.*?\)/g, '').trim().toLowerCase())) if (part && !BY_E.has(part)) BY_E.set(part, c.h);
 }
 export const enOf = (h) => EN_H.get(h) || '';
 
@@ -64,6 +78,61 @@ const SCHEMA = {
   },
   required: ['items'],
 };
+
+// Google Translate (endpoint gratis "gtx", tanpa API key). Dipakai di runtime Worker;
+// selalu dibungkus try/catch + timeout supaya kalau gagal jatuh ke manual, bukan error.
+async function gtrans(text, sl, tl) {
+  const q = String(text || '').trim(); if (!q) return '';
+  const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=t&q=${encodeURIComponent(q)}`;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 6000);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' } });
+    if (!res.ok) return '';
+    const data = await res.json();
+    if (!Array.isArray(data) || !Array.isArray(data[0])) return '';
+    return data[0].map((seg) => (seg && seg[0]) || '').join('').trim();
+  } catch (_) { return ''; } finally { clearTimeout(timer); }
+}
+
+// Terjemahkan daftar entri lewat Google Translate (paralel, dibatasi concurrency).
+async function googleFill(items, cleanMeaning, cleanHanzi) {
+  let used = false, err = false;
+  const CONC = 6;
+  for (let i = 0; i < items.length; i += CONC) {
+    const batch = items.slice(i, i + CONC);
+    await Promise.all(batch.map(async (it) => {
+      try {
+        if (it.src === 'zh') {
+          const idn = cleanMeaning(await gtrans(it.h, 'auto', 'id')); // auto: jangkau hanzi tradisional & kalimat
+          if (idn) { it.m = idn; it.from = 'google'; used = true; }
+          if (!it.en) it.en = enOf(it.h) || cleanMeaning(await gtrans(it.h, 'auto', 'en'));
+        } else {
+          const h = cleanHanzi(await gtrans(it.m, 'auto', 'zh-CN'));
+          if (h) {
+            it.h = h; it.from = 'google'; used = true;
+            it.en = enOf(h) || cleanMeaning(await gtrans(it.m, 'auto', 'en'));
+          }
+        }
+      } catch (_) { err = true; }
+    }));
+  }
+  return { used, err };
+}
+
+// Kalimat/gabungan: rangkai arti per kata dari kamus (offline, tanpa internet).
+// shortcut: hanya hanzi sederhana yang ada di kamus; tradisional butuh Google (online).
+function glossZh(h) {
+  const chars = [...h]; const out = []; let i = 0;
+  while (i < chars.length) {
+    let hit = '';
+    for (let L = Math.min(4, chars.length - i); L >= 1; L--) {
+      const d = BY_H.get(chars.slice(i, i + L).join('')); if (d) { hit = d.m; i += L; break; }
+    }
+    if (hit) out.push(hit); else i++;
+  }
+  return out.join(', ');
+}
 
 // Mengurai jawaban AI apa pun bentuknya (objek, string JSON, atau teks berisi JSON)
 export function parseAi(res) {
@@ -107,7 +176,19 @@ export async function translateLines(env, lines) {
     if (d) Object.assign(it, { h: d.h, p: d.p || '', m: it.src === 'zh' || viaEn ? d.m : it.m, mw: d.mw, pic: d.pic, from: 'kamus' });
     if (it.h) it.en = enOf(it.h);
   }
-  // 2) AI untuk yang belum ketemu
+  // 2) Google Translate untuk kata di luar kamus (penerjemahan otomatis utama)
+  const needG = items.filter((it) => !it.from);
+  let gUsed = false, gError = false;
+  if (needG.length && env.GOOGLE_TRANSLATE !== 'off') {
+    const g = await googleFill(needG, cleanMeaning, cleanHanzi);
+    gUsed = g.used; gError = g.err;
+  }
+  // 2b) kalimat/gabungan di luar kamus: rangkai arti per kata (offline) kalau masih kosong
+  for (const it of items) {
+    if (it.from || it.src !== 'zh' || [...it.h].length < 2) continue;
+    const g = cleanMeaning(glossZh(it.h)); if (g) { it.m = g; it.en = it.en || enOf(it.h); it.from = 'kamus'; }
+  }
+  // 3) AI untuk yang masih belum ketemu (cadangan, jika dipasang)
   const need = items.filter((it) => !it.from);
   let aiUsed = false, aiError = false;
   if (need.length && env.AI) {
@@ -129,7 +210,7 @@ export async function translateLines(env, lines) {
       aiUsed = true;
     } catch (_) { aiError = true; }
   }
-  // 3) pinyin offline untuk semua yang punya hanzi
+  // 4) pinyin offline untuk semua yang punya hanzi
   for (const it of items) { if (it.h && !it.p) it.p = toPinyin(it.h); if (!it.from) it.from = 'manual'; }
-  return { items: items.map(({ i, src, ...rest }) => rest), ai: !!env.AI, aiUsed, aiError };
+  return { items: items.map(({ i, src, ...rest }) => rest), ai: !!env.AI, aiUsed, aiError, google: env.GOOGLE_TRANSLATE !== 'off', gUsed, gError };
 }
