@@ -690,6 +690,7 @@ code { font: 600 13px ui-monospace, SFMono-Regular, Menlo, monospace; background
 /* ===== HSK buka pelajaran + pilih bab ===== */
 .deck.hsk.open { outline: 3px solid #fff; outline-offset: -3px; }
 .hsk-open { margin: 4px 0 8px; }
+.deck.hsk.pgroup .hsk-big { font-size: 30px; line-height: 1.1; overflow-wrap: anywhere; }
 .hsk-open-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 10px 0 12px; }
 .hsk-open-bar b { font-size: 15px; }
 .babpick .box { max-height: calc(100dvh - 60px); overflow: auto; }
