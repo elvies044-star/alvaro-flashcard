@@ -8,7 +8,7 @@ import LESSONS from './data/lessons.json';
 import { partGroups } from './partGroups.js';
 
 const APP = 'Alvaro Mandarin Flashcard Tamer';
-const APP_VERSION = '2026.11.09-glow';
+const APP_VERSION = '2026.11.09-unduh';
 const BUILD = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev';
 
 /* ================= helpers ================= */
@@ -305,6 +305,7 @@ const GROUP_ICON = {
 function groupCard(g) {
   const open = GROUP_OPEN === g.key, n = g.parts.reduce((a, d) => a + d.cards.length, 0);
   return `<button class="deck hsk pgroup ${open ? 'open' : ''}" data-pgroup="${esc(g.key)}" aria-expanded="${open}" style="--dc:${g.color}">
+    <span class="dl" role="button" tabindex="0" data-dlgroup="${esc(g.key)}" aria-label="Unduh semua part" title="Unduh semua part">${ic('download')}</span>
     ${g.icon ? `<svg class="pg-glow" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="${GROUP_ICON[g.icon]}"/></svg>` : ''}
     <div class="hsk-badge"><span class="h3o">${g.parts.length} part</span></div>
     <div class="hsk-big">${esc(g.zh)}</div>
@@ -476,8 +477,8 @@ function closeBabPick() { const el = document.getElementById('babPick'); if (el)
 /* ---- unduh tabel kosakata (semua deck) ---- */
 let HSK_OPEN = 0;
 let GROUP_OPEN = '';
-function downloadTable(deckId) {
-  const d = deckOf(deckId); if (!d || !d.cards.length) { toast('Kategori ini kosong.'); return; }
+function downloadTable(d) {
+  if (!d || !d.cards.length) { toast('Kategori ini kosong.'); return; }
   const rows = d.cards.map((c, i) => `<tr><td>${i + 1}</td><td class="h">${esc(c.h)}</td><td>${esc(c.p || '')}</td><td>${esc(c.m || '')}</td><td>${esc(c.en || '')}</td><td>${esc(c.mw || '')}</td></tr>`).join('');
   const title = `${d.zh}${d.idn ? ' — ' + d.idn : ''}`;
   const html = `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>
@@ -2336,7 +2337,7 @@ function leaveStudy() {
 let endArmed = 0, LAST_TAP = { id: null, t: 0 };
 document.addEventListener('click', async (e) => {
   if (!e.target.closest('#emojiPop') && !e.target.closest('[data-emo]')) closeEmoji();
-  const b = e.target.closest('[data-pgroup],[data-pgroupstudy],[data-bucket],[data-transreveal],[data-startsel],[data-lesson],[data-saytext],[data-addunknown],[data-clearunknown],[data-clzbulk],[data-clzqhelp],[data-unselect],[data-clearsel],[data-typecheck],[data-clzsave],[data-clzdel],[data-freezecard],[data-freezedeck],[data-unfreezedeck],[data-unfreezecard],[data-clozecheck],[data-clozemc],[data-clozepick],[data-stedit],[data-stdel],[data-stnew],[data-story],[data-backlearn],[data-togpy],[data-sayall],[data-saysent],[data-trsent],[data-word],[data-pincard],[data-sayresp],[data-studypinned],[data-guide],[data-profile],[data-like],[data-studypost],[data-backfeed],[data-onb],[data-onbans],[data-sheetq],[data-aitip],[data-dl],[data-hsk],[data-studyhsk],[data-babpick],[data-babgo],[data-vis],[data-pstu],[data-lkind],[data-part],[data-pickstu],[data-mkind],[data-warn],[data-chatto],[data-endrun],[data-endall],[data-nav],[data-pick],[data-act],[data-mode],[data-rate],[data-t],[data-ttab],[data-sact],[data-stu],[data-cfgmode],[data-cfgtog],[data-cfgdeck],[data-edeck],[data-etab],[data-ncolor],[data-rcolor],[data-emo],[data-pick-emo],[data-rm],[data-approve]');
+  const b = e.target.closest('[data-dlgroup],[data-pgroup],[data-pgroupstudy],[data-bucket],[data-transreveal],[data-startsel],[data-lesson],[data-saytext],[data-addunknown],[data-clearunknown],[data-clzbulk],[data-clzqhelp],[data-unselect],[data-clearsel],[data-typecheck],[data-clzsave],[data-clzdel],[data-freezecard],[data-freezedeck],[data-unfreezedeck],[data-unfreezecard],[data-clozecheck],[data-clozemc],[data-clozepick],[data-stedit],[data-stdel],[data-stnew],[data-story],[data-backlearn],[data-togpy],[data-sayall],[data-saysent],[data-trsent],[data-word],[data-pincard],[data-sayresp],[data-studypinned],[data-guide],[data-profile],[data-like],[data-studypost],[data-backfeed],[data-onb],[data-onbans],[data-sheetq],[data-aitip],[data-dl],[data-hsk],[data-studyhsk],[data-babpick],[data-babgo],[data-vis],[data-pstu],[data-lkind],[data-part],[data-pickstu],[data-mkind],[data-warn],[data-chatto],[data-endrun],[data-endall],[data-nav],[data-pick],[data-act],[data-mode],[data-rate],[data-t],[data-ttab],[data-sact],[data-stu],[data-cfgmode],[data-cfgtog],[data-cfgdeck],[data-edeck],[data-etab],[data-ncolor],[data-rcolor],[data-emo],[data-pick-emo],[data-rm],[data-approve]');
   if (!b) { const fc = e.target.closest('#fc'); if (fc && Q && Q.cur && Q.cur.answered) flip(); return; }
   const ds = b.dataset;
   if (ds.nav) { leaveStudy(); go(ds.nav); return; }
@@ -2414,7 +2415,13 @@ document.addEventListener('click', async (e) => {
   if (ds.like) { toggleLike(ds.like, b); return; }
   if (ds.studypost) { studyPost(ds.studypost); return; }
   if (ds.aitip !== undefined) { aiSend(ds.aitip); return; }
-  if (ds.dl !== undefined) { e.preventDefault(); e.stopPropagation(); downloadTable(ds.dl); return; }
+  if (ds.dl !== undefined) { e.preventDefault(); e.stopPropagation(); downloadTable(deckOf(ds.dl)); return; }
+  if (ds.dlgroup !== undefined) {
+    e.preventDefault(); e.stopPropagation();
+    const g = partGroups(studyDecks()).find((x) => x.key === ds.dlgroup);
+    if (g) downloadTable({ zh: g.zh, idn: g.idn, color: g.color, cards: g.parts.flatMap((d) => d.cards) });
+    return;
+  }
   if (ds.pgroup !== undefined) { GROUP_OPEN = GROUP_OPEN === ds.pgroup ? '' : ds.pgroup; renderLearn(); if (GROUP_OPEN) setTimeout(() => { const o = document.querySelector('.hsk-open'); if (o) o.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60); return; }
   if (ds.pgroupstudy !== undefined) { const g = partGroups(studyDecks()).find((x) => x.key === ds.pgroupstudy); if (g) { S.sel = g.parts.map((d) => d.id); S.split.on = false; S.kind = 'card'; savePrefs(); startStudy(); } return; }
   if (ds.hsk !== undefined) { const lv = +ds.hsk; HSK_OPEN = HSK_OPEN === lv ? 0 : lv; renderLearn(); if (HSK_OPEN) setTimeout(() => { const o = document.querySelector('.hsk-open'); if (o) o.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60); return; }
