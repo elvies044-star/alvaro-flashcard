@@ -12,4 +12,9 @@ assert.equal(partGroups([deck('a', 'novice part 1')]).length, 0); // satu part t
 assert.equal(partGroups([deck('a', 'n part 1', 'x'), deck('b', 'n part 2', 'y')]).length, 0); // arti beda
 assert.equal(partGroups([deck('a', 'tocfl novice', 'alvaro ec part 2')]).length, 0); // "part" di arti diabaikan
 assert.equal(partGroups([deck('a', 'n part 1', 'x', { hskLevel: 1 }), deck('b', 'n part 2', 'x', { speak: true })]).length, 0);
+
+const words = partGroups([deck('kk10', '动词'), deck('kk2', '动词'), deck('ks1', '形容词'), deck('kkx', 'lain'), deck('kk', 'lain')]);
+assert.deepEqual(words.map((w) => w.key), ['kk']); // ks hanya satu part, kkx dan kk bukan part
+assert.deepEqual(words[0].parts.map((d) => d.id), ['kk2', 'kk10']);
+assert.equal(words[0].icon, 'barbell');
 console.log('ok');
