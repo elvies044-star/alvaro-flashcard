@@ -8,7 +8,7 @@ import LESSONS from './data/lessons.json';
 import { partGroups } from './partGroups.js';
 
 const APP = 'Alvaro Mandarin Flashcard Tamer';
-const APP_VERSION = '2026.11.09-part';
+const APP_VERSION = '2026.11.09-glow';
 const BUILD = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev';
 
 /* ================= helpers ================= */
@@ -297,9 +297,15 @@ function frozenDeckCard(d) {
     <div class="meta">${d.cards.length} kartu · tidak dipakai untuk belajar</div>
     <button class="btn sm" data-unfreezedeck="${esc(d.id)}">${ic('snow')} Pecahkan (cairkan)</button></div>`;
 }
+const GROUP_ICON = {
+  barbell: 'M.5 10.5h2v3h-2zM3 7h2.5v10H3zM6 5h3v14H6zM9 10.5h6v3H9zM15 5h3v14h-3zM18.5 7H21v10h-2.5zM21.5 10.5h2v3h-2z',
+  heart: 'M12 21s-8.5-5.3-10.4-10.6C.4 6.7 2.7 3.5 6.3 3.5c2.3 0 4.3 1.2 5.7 3.3 1.4-2.1 3.4-3.3 5.7-3.3 3.6 0 5.9 3.2 4.7 6.9C20.5 15.7 12 21 12 21z',
+  pin: 'M12 1.5c-4.7 0-8.5 3.8-8.5 8.5 0 6.2 8.5 12.5 8.5 12.5s8.5-6.3 8.5-12.5c0-4.7-3.8-8.5-8.5-8.5zm0 11.7a3.2 3.2 0 1 1 0-6.4 3.2 3.2 0 0 1 0 6.4z',
+};
 function groupCard(g) {
   const open = GROUP_OPEN === g.key, n = g.parts.reduce((a, d) => a + d.cards.length, 0);
   return `<button class="deck hsk pgroup ${open ? 'open' : ''}" data-pgroup="${esc(g.key)}" aria-expanded="${open}" style="--dc:${g.color}">
+    ${g.icon ? `<svg class="pg-glow" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="${GROUP_ICON[g.icon]}"/></svg>` : ''}
     <div class="hsk-badge"><span class="h3o">${g.parts.length} part</span></div>
     <div class="hsk-big">${esc(g.zh)}</div>
     <div class="id">${n} kosakata · ${esc(g.idn)}</div>

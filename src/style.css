@@ -691,6 +691,9 @@ code { font: 600 13px ui-monospace, SFMono-Regular, Menlo, monospace; background
 .deck.hsk.open { outline: 3px solid #fff; outline-offset: -3px; }
 .hsk-open { margin: 4px 0 8px; }
 .deck.hsk.pgroup .hsk-big { font-size: 30px; line-height: 1.1; overflow-wrap: anywhere; }
+.deck.hsk .pg-glow { position: absolute; top: 18px; right: 18px; width: 58px; height: 58px; color: #fff; z-index: 2; filter: drop-shadow(0 0 4px #fff) drop-shadow(0 0 14px #fff) drop-shadow(0 0 26px rgba(255,255,255,.75)); animation: pgGlow 2.2s ease-in-out infinite alternate; }
+@keyframes pgGlow { from { opacity: .82; transform: scale(.97); } to { opacity: 1; transform: scale(1.04); } }
+@media (prefers-reduced-motion: reduce) { .deck.hsk .pg-glow { animation: none; } }
 .hsk-open-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 10px 0 12px; }
 .hsk-open-bar b { font-size: 15px; }
 .babpick .box { max-height: calc(100dvh - 60px); overflow: auto; }
