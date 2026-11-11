@@ -6,9 +6,10 @@ import { hbars, lineChart } from './charts.js';
 import { pinyin as pyPro } from 'pinyin-pro';
 import LESSONS from './data/lessons.json';
 import { partGroups } from './partGroups.js';
+import { SHELVES, shelfOf, storyArt } from './storyArt.js';
 
 const APP = 'Alvaro Mandarin Flashcard Tamer';
-const APP_VERSION = '2026.11.09-unduh';
+const APP_VERSION = '2026.11.09-rak';
 const BUILD = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev';
 
 /* ================= helpers ================= */
@@ -415,7 +416,7 @@ function renderLearn() {
     ${groups.length ? `<div class="sec-title">${ic('book2')} Paket kartu</div><div class="decks hsk-row">${groups.map(groupCard).join('')}</div>
       ${openGroup ? `<div class="hsk-open"><div class="hsk-open-bar"><b>${esc(openGroup.zh)} · ${openGroup.parts.length} part</b><span class="spacer"></span><button class="btn sm" data-pgroupstudy="${esc(openGroup.key)}">${ic('play')} Belajar semua</button><button class="chip" data-pgroup="${esc(openGroup.key)}">${ic('x')} Tutup</button></div><div class="decks">${openGroup.parts.map(deckCard).join('')}</div></div>` : ''}` : ''}
     ${speakDecks.length ? `<div class="sec-title">${ic('speak')} Percakapan harian</div><div class="decks">${speakDecks.map(deckCard).join('')}</div>` : ''}
-    ${STORIES && STORIES.length ? `<div class="sec-title">${ic('book2')} Cerita</div><div class="stories">${STORIES.map(storyTile).join('')}</div>` : ''}
+    ${STORIES && STORIES.length ? `<div class="sec-title">${ic('book2')} Cerita</div><div class="shelves">${SHELVES.map(storyShelf).join('')}</div>` : ''}
     ${LESSONS && LESSONS.lessons.length ? `<div class="sec-title">${ic('book2')} Materi</div><div class="lessons">${LESSONS.lessons.map(lessonTile).join('')}</div>` : ''}
     ${!isTeacher() || priv.length ? `<div class="sec-title">${ic('key')} Pribadi${priv.length ? ' · ' + priv.length : ''}</div><div class="decks">${!isTeacher() ? `<button class="deck custom" data-act="custom" aria-label="Buat kartu sendiri"><span class="plus">${ic('plus')}</span><b>Custom</b><span>Buat kartu sendiri</span></button>` : ''}${priv.map(deckCard).join('')}</div>${rest.length ? '<div class="sec-title">Kategori kelas</div>' : ''}` : ''}
     <div class="decks">${rest.map(deckCard).join('') || (priv.length ? '' : '<div class="panel empty"><b>Belum ada kategori</b>Gurumu belum menampilkan kategori untukmu.</div>')}</div>
@@ -1320,12 +1321,16 @@ function closeGuide() { const el = document.getElementById('guideSheet'); if (el
 const STORY_LVL = { 1: 'Pemula', 2: 'HSK 2', 3: 'HSK 3', 4: 'HSK 4', 5: 'HSK 5', 6: 'HSK 6' };
 const lvlName = (n) => STORY_LVL[n] || ('Level ' + n);
 const STORY_COLORS = { 1: '#0ea5a4', 2: '#8b5cf6', 3: '#2f6df0', 4: '#e8513f', 5: '#f08a24', 6: '#db2777' };
-function storyTile(s) {
-  const col = STORY_COLORS[s.level] || '#1f3fbf';
-  return `<button class="story-tile" data-story="${esc(s.id)}" style="--sc:${col}">
-    <span class="story-lvl">${esc(lvlName(s.level))}</span>
-    <span class="story-title han">${esc(s.title)}</span>
-    <span class="story-meta">${ic('book2')} ${s.len} karakter${s.author ? ` · oleh ${esc(s.author)}` : ''}</span></button>`;
+function storyBook(s) {
+  const by = s.author ? ` · oleh ${esc(s.author)}` : '';
+  return `<button class="book" data-story="${esc(s.id)}" title="${esc(s.title)} · ${esc(lvlName(s.level))}${by}">
+    ${storyArt(s, 'cover')}
+    <span class="book-text"><span class="book-lvl">${esc(lvlName(s.level))}</span><span class="book-title han">${esc(s.title)}</span><span class="book-len">${s.len} karakter</span></span></button>`;
+}
+function storyShelf(shelf, i) {
+  const books = STORIES.filter((s) => shelfOf(s.level) === i);
+  return `<section class="shelf" style="--sh:${shelf.color}"><h3 class="shelf-name">${esc(shelf.name)}<span>${books.length} buku</span></h3>
+    <div class="shelf-row">${books.map(storyBook).join('') || '<p class="shelf-empty">Belum ada buku di rak ini</p>'}</div><div class="shelf-plank"></div></section>`;
 }
 let LOWPY = false; // tampilkan pinyin ber-warna
 async function openStory(id) {
@@ -1371,6 +1376,7 @@ function renderStory() {
       <button class="chip ${LOWPY ? 'on' : ''}" data-togpy aria-pressed="${LOWPY}">拼 Pinyin</button>
       <button class="chip" data-sayall>${ic('sound')} Dengar semua</button></div>
     ${UNKNOWN.size ? `<div class="unknown-bar">${ic('snow')} <b>${UNKNOWN.size}</b> kata ditandai belum tahu${canCreate() ? ` <button class="btn sm" data-addunknown>${ic('plus')} Masukkan ke deck…</button>` : ''}<button class="chip sm" data-clearunknown>${ic('x')} Bersihkan</button></div>` : ''}
+    <div class="reader-art">${storyArt(s, 'banner')}</div>
     <div class="reader-head"><span class="story-lvl" style="--sc:${col}">${esc(lvlName(s.level))}</span><h1 class="h1 han">${esc(s.title)}</h1></div>
     <div class="reader-body">${sents.map(sentHTML).join('')}</div>
     <p class="note" style="text-align:center;margin-top:12px">Ketuk kata untuk arti, audio, tandai "belum tahu", atau tambah ke deck. Ikon 🌐 untuk terjemahan kalimat.</p>
